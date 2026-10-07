@@ -1,0 +1,46 @@
+# Week 1: Postgres (with pgvector) and the API image. The worker, scheduler and demo UI are
+# defined now and switched on with `--profile full` as they are implemented.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: memory
+      POSTGRES_PASSWORD: memory
+      POSTGRES_DB: memory
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+
+  api:
+    build: .
+    env_file: .env
+    depends_on: [db]
+    command: ["uvicorn", "agent_memory.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports: ["8000:8000"]
+    profiles: ["full"]
+
+  worker:
+    build: .
+    env_file: .env
+    depends_on: [db]
+    command: ["python", "-m", "agent_memory.pipeline.sync_worker"]
+    profiles: ["full"]
+
+  scheduler:
+    build: .
+    env_file: .env
+    depends_on: [db]
+    command: ["python", "-m", "agent_memory.scheduler"]
+    profiles: ["full"]
+
+  ui:
+    build: .
+    env_file: .env
+    depends_on: [api]
+    command: ["streamlit", "run", "demo/app.py", "--server.port", "8501"]
+    ports: ["8501:8501"]
+    profiles: ["full"]
+
+volumes:
+  pgdata:

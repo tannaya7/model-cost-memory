@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "model-cost-memory"
+version = "0.0.1"
+description = "Long-term memory of an AI system's own performance: the cheapest model that passes each job, and regressions after model upgrades."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Tannaya Supriya" }, { name = "Rajeshwaree Parida" }]
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic>=2",
+    "sqlalchemy>=2",
+    "asyncpg",
+    "alembic",
+    "pgvector",
+    "sentence-transformers",
+    "scipy",
+    "apscheduler",
+    "cachetools",
+    "httpx",
+    "anthropic",
+    "openai",
+    "docker",
+]
+
+[project.optional-dependencies]
+graph = ["neo4j"]
+demo = ["streamlit"]
+dev = ["pytest", "pytest-asyncio", "hypothesis", "ruff"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
