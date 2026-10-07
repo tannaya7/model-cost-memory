@@ -45,6 +45,7 @@ slows answers.
 freshness            R(t) = e^(-t / S),  S = importance × 30 × version_factor
                      version_factor = 1.00 current, 0.25 superseded (fades ~4× faster)
 weighted pass rate   Σ(R × passed) / Σ R
+cost per run         usage × catalog price (input, output incl. thinking, cache read, cache write)
 cost per success     mean cost / weighted pass rate
 recommendation       lowest cost per success among models within 2 points of the best
                      pass rate, never RETIRED; INSUFFICIENT_EVIDENCE below the floor

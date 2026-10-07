@@ -34,8 +34,10 @@ CREATE TABLE runs (
     model_version     TEXT NOT NULL,                -- provider-resolved; what decay is keyed to
     prompt_version    TEXT,                         -- optional template version (Should)
     tokens_in         INT NOT NULL DEFAULT 0,
-    tokens_out        INT NOT NULL DEFAULT 0,
-    cost_usd          NUMERIC(12,6) NOT NULL DEFAULT 0,
+    tokens_out        INT NOT NULL DEFAULT 0,      -- includes thinking tokens (billed as output)
+    cache_read_tokens  INT NOT NULL DEFAULT 0,     -- priced lower than normal input
+    cache_write_tokens INT NOT NULL DEFAULT 0,     -- priced higher than normal input
+    cost_usd          NUMERIC(12,6) NOT NULL DEFAULT 0,  -- usage × catalog price (3.13)
     latency_ms        INT,
     output            TEXT,
     tool_calls        JSONB,                        -- optional; names + ids only by default (Could)
