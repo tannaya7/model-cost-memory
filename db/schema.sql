@@ -1,5 +1,8 @@
 -- Model & Cost Memory: database schema (PostgreSQL 16+)
 -- Source of truth: docs/ARCHITECTURE.md. Migrations (Alembic) will be generated from this in Week 2.
+-- This file runs ONLY when the database volume is empty (first start). Editing it later changes
+-- nothing on an existing database; from Week 2 on, Alembic migrations are the only way to change
+-- the schema. Development uses Neon: apply this file to an empty database with `psql`.
 -- Requires: CREATE EXTENSION IF NOT EXISTS pgcrypto;  (gen_random_uuid)
 --           CREATE EXTENSION IF NOT EXISTS vector;    (pgvector, once approved)
 
@@ -25,9 +28,10 @@ CREATE TABLE jobs (
 );
 
 CREATE TABLE runs (
-    run_id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    run_id            UUID PRIMARY KEY,                  -- supplied by the SDK, so a retried send
+                                                         -- hits the same row (INSERT ... ON CONFLICT DO NOTHING)
     job_id            UUID NOT NULL REFERENCES jobs(job_id),
-    project_id        TEXT NOT NULL,
+    project_id        TEXT NOT NULL REFERENCES projects(project_id),
     prompt            TEXT NOT NULL,
     prompt_hash       TEXT NOT NULL,                -- dedupe + cache key
     model             TEXT NOT NULL,
@@ -56,6 +60,7 @@ CREATE TABLE runs (
     invalid_at        TIMESTAMPTZ
 );
 CREATE INDEX idx_runs_job_model ON runs(job_id, model, model_version);
+CREATE INDEX idx_runs_job_created ON runs(job_id, created_at DESC);   -- "recent runs for this job"
 CREATE INDEX idx_runs_prompt_hash ON runs(prompt_hash);
 -- with pgvector (1.7): embedding vector(384) on runs, HNSW index, filtered by project_id
 
@@ -88,9 +93,16 @@ CREATE TABLE outbox (
                    CHECK (status IN ('PENDING','PROCESSING','DONE','FAILED')),
     retry_count  INT NOT NULL DEFAULT 0,
     last_error   TEXT,
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    claimed_at   TIMESTAMPTZ,                       -- set when a worker takes the row
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now() -- every status change
 );
 CREATE INDEX idx_outbox_pending ON outbox(status, created_at) WHERE status = 'PENDING';
+-- A worker that crashes leaves its rows PROCESSING; the scheduler returns rows claimed more than
+-- N minutes ago to PENDING.
+CREATE INDEX idx_outbox_stuck ON outbox(claimed_at) WHERE status = 'PROCESSING';
+-- The outbox is a queue, not evidence: the scheduler deletes DONE rows after a retention window.
+CREATE INDEX idx_outbox_done ON outbox(updated_at) WHERE status = 'DONE';
 
 CREATE TABLE model_catalog (
     model          TEXT NOT NULL,
