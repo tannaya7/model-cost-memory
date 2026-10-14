@@ -13,6 +13,7 @@ CREATE TABLE projects (
     project_id    TEXT PRIMARY KEY,
     api_key_hash  TEXT NOT NULL,                    -- the key itself is shown once, never stored
     webhook_url   TEXT,                             -- regression alerts; optional
+    store_tool_arguments BOOLEAN NOT NULL DEFAULT false,  -- opt in to keeping tool-call arguments
     retest_monthly_cap_usd NUMERIC(8,2) NOT NULL DEFAULT 10,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -57,6 +58,7 @@ CREATE TABLE runs (
     importance_score  REAL NOT NULL DEFAULT 1.0,
     stability         REAL NOT NULL DEFAULT 1.0,    -- days; 3.4
     embedding         vector(384),                  -- prompt embedding, written by the sync worker
+    embedding_model   TEXT,                         -- which embedder produced it (vectors are only comparable within one)
     state             TEXT NOT NULL DEFAULT 'CAPTURED'
                         CHECK (state IN ('CAPTURED','CHECKED','INDEXED',
                                          'CONSOLIDATED','ARCHIVED','INGESTION_FAILED')),
@@ -67,6 +69,7 @@ CREATE INDEX idx_runs_job_model ON runs(job_id, model, model_version);
 CREATE INDEX idx_runs_job_created ON runs(job_id, created_at DESC);   -- "recent runs for this job"
 CREATE INDEX idx_runs_prompt_hash ON runs(prompt_hash);
 CREATE INDEX idx_runs_embedding ON runs USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX idx_runs_embedding_cache ON runs(project_id, prompt_hash, embedding_model) WHERE embedding IS NOT NULL;
 
 CREATE TABLE recommendations (
     recommendation_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),

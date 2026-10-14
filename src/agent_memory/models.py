@@ -45,6 +45,7 @@ class Project(Base):
     project_id: Mapped[str] = mapped_column(Text, primary_key=True)
     api_key_hash: Mapped[str] = mapped_column(Text)  # the key itself is shown once, never stored
     webhook_url: Mapped[str | None] = mapped_column(Text)
+    store_tool_arguments: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))  # opt-in
     retest_monthly_cap_usd: Mapped[Decimal] = mapped_column(
         Numeric(8, 2), server_default=text("10")
     )
@@ -87,6 +88,10 @@ class Run(Base):
             "idx_runs_embedding", "embedding", postgresql_using="hnsw",
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
+        Index(
+            "idx_runs_embedding_cache", "project_id", "prompt_hash", "embedding_model",
+            postgresql_where=text("embedding IS NOT NULL"),
+        ),
     )
 
     # Supplied by the SDK, so a retried send hits the same row (INSERT ... ON CONFLICT DO NOTHING).
@@ -113,6 +118,7 @@ class Run(Base):
     importance_score: Mapped[float] = mapped_column(REAL, server_default=text("1.0"))
     stability: Mapped[float] = mapped_column(REAL, server_default=text("1.0"))  # days
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM))  # set by the sync worker
+    embedding_model: Mapped[str | None] = mapped_column(Text)  # which embedder wrote it
     state: Mapped[str] = mapped_column(Text, server_default=text("'CAPTURED'"))
     created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
     invalid_at: Mapped[datetime | None] = mapped_column(Timestamp)
