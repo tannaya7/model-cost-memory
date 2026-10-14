@@ -13,7 +13,7 @@ dependencies = [
     "fastapi",
     "uvicorn[standard]",
     "pydantic>=2",
-    "sqlalchemy>=2",
+    "sqlalchemy[asyncio]>=2",
     "asyncpg",
     "alembic",
     "pgvector",
@@ -28,7 +28,7 @@ dependencies = [
 [project.optional-dependencies]
 embeddings = ["sentence-transformers"]   # ~2 GB with PyTorch: installed in the sync worker image only
 sandbox = ["docker"]                     # test-command sandbox runner only; see TIP section 7
-dev = ["pytest", "pytest-asyncio", "hypothesis", "ruff"]
+dev = ["pytest", "pytest-asyncio", "hypothesis", "ruff", "pgserver"]   # pgserver: embedded Postgres for local tests
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -36,6 +36,8 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 line-length = 100
