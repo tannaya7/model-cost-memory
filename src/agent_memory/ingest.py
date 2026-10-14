@@ -2,7 +2,8 @@
 
 A run and its outbox row are written in one transaction, so there is never a recorded run without
 the receipt the sync worker needs, and never a receipt without its run. The caller commits.
-Outcomes are resolved server-side (Week 4); until then every run is stored `UNKNOWN`.
+The outcome (PASS, FAIL or UNKNOWN, with a reason) is resolved here by the job's checker; it is never
+accepted from the client. A run the checker cannot decide stays UNKNOWN until it is labelled later.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .checks import Outcome, check_run
 from .costing import Price, compute_cost
 from .models import CatalogEntry, Job, OutboxRow, Project, Run
 from .schemas import JobCreate, RunCreate
@@ -26,6 +28,14 @@ class UnknownJob(LookupError):
 
 class DuplicateJob(ValueError):
     """A job with this name already exists in this project."""
+
+
+class UnknownRun(LookupError):
+    """No run with this id in this project."""
+
+
+class AlreadyResolved(ValueError):
+    """The run already has a PASS or FAIL outcome."""
 
 
 def prompt_hash(prompt: str) -> str:
@@ -77,6 +87,9 @@ async def record_run(session: AsyncSession, project: Project, body: RunCreate) -
     else:
         cost = Decimal(str(body.cost_usd)) if body.cost_usd is not None else Decimal(0)
 
+    result = check_run(job.check_kind, job.check_config, body.output, body.expected)
+    state = "CAPTURED" if result.outcome is Outcome.UNKNOWN else "CHECKED"
+
     digest = prompt_hash(body.prompt)
     inserted = (
         await session.execute(
@@ -87,6 +100,7 @@ async def record_run(session: AsyncSession, project: Project, body: RunCreate) -
                 prompt_version=body.prompt_version, tokens_in=body.tokens_in, tokens_out=body.tokens_out,
                 cache_read_tokens=body.cache_read_tokens, cache_write_tokens=body.cache_write_tokens,
                 cost_usd=cost, latency_ms=body.latency_ms, output=body.output, tool_calls=body.tool_calls,
+                outcome=result.outcome.value, outcome_reason=result.reason, state=state,
             )
             .on_conflict_do_nothing(index_elements=["run_id"])
             .returning(Run.run_id)
@@ -96,3 +110,21 @@ async def record_run(session: AsyncSession, project: Project, body: RunCreate) -
         return False
     session.add(OutboxRow(run_id=body.run_id, op="UPSERT", payload={"run_id": str(body.run_id), "prompt_hash": digest}))
     return True
+
+
+async def label_run(
+    session: AsyncSession, project: Project, run_id, outcome: str, reason: str | None
+) -> Run:
+    """Resolve an UNKNOWN run with a PASS or FAIL supplied later."""
+    run = (
+        await session.execute(select(Run).where(Run.run_id == run_id, Run.project_id == project.project_id))
+    ).scalar_one_or_none()
+    if run is None:
+        raise UnknownRun(str(run_id))
+    if run.outcome != Outcome.UNKNOWN.value:
+        raise AlreadyResolved(str(run_id))
+    run.outcome = outcome
+    run.outcome_reason = f"labelled {outcome}" + (f": {reason}" if reason else "")
+    if run.state == "CAPTURED":
+        run.state = "CHECKED"
+    return run

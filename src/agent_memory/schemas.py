@@ -138,6 +138,10 @@ class RunCreate(Model):
     latency_ms: int | None = Field(default=None, ge=0, le=3_600_000)
     output: str | None = None
     tool_calls: list[dict] | None = Field(default=None, max_length=100)
+    expected: dict | None = Field(
+        default=None,
+        description="The correct values for an ANSWER_KEY job, used to check this run and not stored",
+    )
 
     @field_validator("prompt", "output")
     @classmethod
@@ -145,6 +149,21 @@ class RunCreate(Model):
         if value is not None and len(value.encode("utf8")) > MAX_TEXT_BYTES:
             raise ValueError("must be at most 256 KB")
         return value
+
+
+class RunDetail(RunOut):
+    """One run in full, for the detail panel."""
+
+    prompt: str
+    output: str | None
+    tool_calls: list[dict] | None
+
+
+class LabelCreate(Model):
+    """A late outcome for a run that was stored UNKNOWN."""
+
+    outcome: Literal["PASS", "FAIL"]
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class RunAccepted(Model):

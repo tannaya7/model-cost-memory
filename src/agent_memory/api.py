@@ -21,7 +21,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import __version__, ingest
 from .db import dispose_engine, get_session
 from .models import Job, Project, Run
-from .schemas import Health, JobCreate, JobOut, RunAccepted, RunCreate, RunOut, RunPage
+from .schemas import (
+    Health,
+    JobCreate,
+    JobOut,
+    LabelCreate,
+    RunAccepted,
+    RunCreate,
+    RunDetail,
+    RunOut,
+    RunPage,
+)
 from .security import extract_key, hash_key
 
 PREVIEW_CHARS = 200
@@ -87,6 +97,26 @@ async def list_jobs(
     ]
 
 
+def _run_fields(r: Run, job_name: str) -> dict:
+    return dict(
+        run_id=r.run_id, job_id=r.job_id, job=job_name, model=r.model, model_version=r.model_version,
+        prompt_version=r.prompt_version, tokens_in=r.tokens_in, tokens_out=r.tokens_out,
+        cache_read_tokens=r.cache_read_tokens, cache_write_tokens=r.cache_write_tokens,
+        cost_usd=float(r.cost_usd), latency_ms=r.latency_ms, outcome=r.outcome,
+        outcome_reason=r.outcome_reason, run_kind=r.run_kind, state=r.state, created_at=r.created_at,
+        prompt_preview=r.prompt[:PREVIEW_CHARS],
+        output_preview=r.output[:PREVIEW_CHARS] if r.output is not None else None,
+    )
+
+
+def _run_out(r: Run, job_name: str) -> RunOut:
+    return RunOut(**_run_fields(r, job_name))
+
+
+async def _job_name(session: AsyncSession, job_id) -> str:
+    return (await session.execute(select(Job.name).where(Job.job_id == job_id))).scalar_one()
+
+
 def _encode_cursor(created_at: datetime, run_id) -> str:
     return base64.urlsafe_b64encode(f"{created_at.isoformat()}|{run_id}".encode()).decode()
 
@@ -128,18 +158,7 @@ async def list_runs(
         query = query.where(tuple_(Run.created_at, Run.run_id) < tuple_(stamp, run_id))
     rows = (await session.execute(query)).all()
     page, more = rows[:limit], len(rows) > limit
-    items = [
-        RunOut(
-            run_id=r.run_id, job_id=r.job_id, job=job_name, model=r.model, model_version=r.model_version,
-            prompt_version=r.prompt_version, tokens_in=r.tokens_in, tokens_out=r.tokens_out,
-            cache_read_tokens=r.cache_read_tokens, cache_write_tokens=r.cache_write_tokens,
-            cost_usd=float(r.cost_usd), latency_ms=r.latency_ms, outcome=r.outcome,
-            outcome_reason=r.outcome_reason, run_kind=r.run_kind, state=r.state, created_at=r.created_at,
-            prompt_preview=r.prompt[:PREVIEW_CHARS],
-            output_preview=r.output[:PREVIEW_CHARS] if r.output is not None else None,
-        )
-        for r, job_name in page
-    ]
+    items = [_run_out(r, job_name) for r, job_name in page]
     next_cursor = _encode_cursor(page[-1][0].created_at, page[-1][0].run_id) if more else None
     return RunPage(items=items, next_cursor=next_cursor)
 
@@ -175,3 +194,39 @@ async def record_run_endpoint(
         raise HTTPException(404, f"Unknown job '{body.job}'. Create it first with POST /v1/jobs") from exc
     await session.commit()
     return RunAccepted(run_id=body.run_id, status="accepted" if stored else "duplicate")
+
+
+@app.get("/v1/runs/{run_id}", response_model=RunDetail, tags=["runs"])
+async def get_run(
+    run_id: uuid.UUID,
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> RunDetail:
+    """One run in full: the whole prompt and output, and why it passed or failed."""
+    run = (
+        await session.execute(select(Run).where(Run.run_id == run_id, Run.project_id == project.project_id))
+    ).scalar_one_or_none()
+    if run is None:
+        raise HTTPException(404, "Run not found")
+    return RunDetail(
+        **_run_fields(run, await _job_name(session, run.job_id)),
+        prompt=run.prompt, output=run.output, tool_calls=run.tool_calls,
+    )
+
+
+@app.post("/v1/runs/{run_id}/label", response_model=RunOut, tags=["runs"])
+async def label_run_endpoint(
+    run_id: uuid.UUID,
+    body: LabelCreate,
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> RunOut:
+    """Supply the outcome for a run that was stored UNKNOWN (a late label)."""
+    try:
+        run = await ingest.label_run(session, project, run_id, body.outcome, body.reason)
+    except ingest.UnknownRun as exc:
+        raise HTTPException(404, "Run not found") from exc
+    except ingest.AlreadyResolved as exc:
+        raise HTTPException(409, "This run already has an outcome") from exc
+    await session.commit()
+    return _run_out(run, await _job_name(session, run.job_id))
