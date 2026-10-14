@@ -18,10 +18,10 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from sqlalchemy import func, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import __version__
+from . import __version__, ingest
 from .db import dispose_engine, get_session
 from .models import Job, Project, Run
-from .schemas import Health, JobOut, RunOut, RunPage
+from .schemas import Health, JobCreate, JobOut, RunAccepted, RunCreate, RunOut, RunPage
 from .security import extract_key, hash_key
 
 PREVIEW_CHARS = 200
@@ -142,3 +142,36 @@ async def list_runs(
     ]
     next_cursor = _encode_cursor(page[-1][0].created_at, page[-1][0].run_id) if more else None
     return RunPage(items=items, next_cursor=next_cursor)
+
+
+@app.post("/v1/jobs", response_model=JobOut, status_code=201, tags=["jobs"])
+async def create_job_endpoint(
+    body: JobCreate,
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> JobOut:
+    """Define a job and how a correct answer is recognised."""
+    try:
+        job = await ingest.create_job(session, project, body)
+    except ingest.DuplicateJob as exc:
+        raise HTTPException(409, f"A job named '{body.name}' already exists") from exc
+    await session.commit()
+    return JobOut(
+        job_id=job.job_id, name=job.name, description=job.description, check_kind=job.check_kind,
+        check_config=job.check_config, retest_consent=job.retest_consent, run_count=0, runs_by_state={},
+    )
+
+
+@app.post("/v1/runs", response_model=RunAccepted, status_code=202, tags=["runs"])
+async def record_run_endpoint(
+    body: RunCreate,
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> RunAccepted:
+    """Record one model call. Safe to retry: the same `run_id` is only ever stored once."""
+    try:
+        stored = await ingest.record_run(session, project, body)
+    except ingest.UnknownJob as exc:
+        raise HTTPException(404, f"Unknown job '{body.job}'. Create it first with POST /v1/jobs") from exc
+    await session.commit()
+    return RunAccepted(run_id=body.run_id, status="accepted" if stored else "duplicate")
