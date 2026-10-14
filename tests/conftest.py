@@ -8,6 +8,7 @@ database is never wiped by a test run.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
@@ -22,6 +23,10 @@ from agent_memory.api import app
 from agent_memory.db import get_session
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# The embedded Postgres library logs from an exit hook, after pytest has closed its capture stream, which
+# prints a harmless "Logging error" at the very end of every run. Its own logs are not needed in test output.
+logging.getLogger("pgserver").propagate = False
 TABLES = ["alerts", "outbox", "recommendations", "runs", "model_catalog", "jobs", "projects"]
 
 
