@@ -1,0 +1,568 @@
+{
+  "components": {
+    "schemas": {
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Health": {
+        "properties": {
+          "status": {
+            "const": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Health",
+        "type": "object"
+      },
+      "JobOut": {
+        "properties": {
+          "check_config": {
+            "additionalProperties": true,
+            "title": "Check Config",
+            "type": "object"
+          },
+          "check_kind": {
+            "enum": [
+              "ANSWER_KEY",
+              "TEST_COMMAND",
+              "SCHEMA",
+              "LATE_LABEL"
+            ],
+            "title": "Check Kind",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "retest_consent": {
+            "title": "Retest Consent",
+            "type": "boolean"
+          },
+          "run_count": {
+            "description": "All runs recorded for this job",
+            "title": "Run Count",
+            "type": "integer"
+          },
+          "runs_by_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Run counts per state, for example {'INDEXED': 40}",
+            "title": "Runs By State",
+            "type": "object"
+          }
+        },
+        "required": [
+          "job_id",
+          "name",
+          "description",
+          "check_kind",
+          "check_config",
+          "retest_consent",
+          "run_count"
+        ],
+        "title": "JobOut",
+        "type": "object"
+      },
+      "RunOut": {
+        "description": "One recorded run, as a table row. Full prompt and output come from the run detail.",
+        "properties": {
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cache_write_tokens": {
+            "title": "Cache Write Tokens",
+            "type": "integer"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "job": {
+            "description": "The job's name",
+            "title": "Job",
+            "type": "string"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "UNKNOWN"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "outcome_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Reason"
+          },
+          "output_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "First 200 characters of the output",
+            "title": "Output Preview"
+          },
+          "prompt_preview": {
+            "description": "First 200 characters of the prompt",
+            "title": "Prompt Preview",
+            "type": "string"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_kind": {
+            "enum": [
+              "PRODUCTION",
+              "SHADOW",
+              "RETEST"
+            ],
+            "title": "Run Kind",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "CAPTURED",
+              "CHECKED",
+              "INDEXED",
+              "CONSOLIDATED",
+              "ARCHIVED",
+              "INGESTION_FAILED"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tokens_in": {
+            "title": "Tokens In",
+            "type": "integer"
+          },
+          "tokens_out": {
+            "title": "Tokens Out",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "run_id",
+          "job_id",
+          "job",
+          "model",
+          "model_version",
+          "prompt_version",
+          "tokens_in",
+          "tokens_out",
+          "cache_read_tokens",
+          "cache_write_tokens",
+          "cost_usd",
+          "latency_ms",
+          "outcome",
+          "outcome_reason",
+          "run_kind",
+          "state",
+          "created_at",
+          "prompt_preview",
+          "output_preview"
+        ],
+        "title": "RunOut",
+        "type": "object"
+      },
+      "RunPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as ?cursor= to get the next page; null on the last page",
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "RunPage",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Model & Cost Memory API",
+    "version": "0.0.1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/healthz": {
+      "get": {
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthz",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/v1/jobs": {
+      "get": {
+        "description": "Every job in the project, with how many runs it has, in total and per state.",
+        "operationId": "list_jobs_v1_jobs_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobOut"
+                  },
+                  "title": "Response List Jobs V1 Jobs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Jobs",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/runs": {
+      "get": {
+        "description": "Recorded runs, newest first, one page at a time (pass `next_cursor` as `cursor`).",
+        "operationId": "list_runs_v1_runs_get",
+        "parameters": [
+          {
+            "description": "Job name",
+            "in": "query",
+            "name": "job",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Job name",
+              "title": "Job"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            }
+          },
+          {
+            "in": "query",
+            "name": "outcome",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(PASS|FAIL|UNKNOWN)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Outcome"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runs",
+        "tags": [
+          "runs"
+        ]
+      }
+    }
+  }
+}
