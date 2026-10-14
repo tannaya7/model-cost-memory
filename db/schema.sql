@@ -20,6 +20,7 @@ CREATE TABLE jobs (
     job_id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id    TEXT NOT NULL REFERENCES projects(project_id),
     name          TEXT NOT NULL,                    -- 'invoice-extract'
+    description   TEXT,                             -- shown in the job list
     check_kind    TEXT NOT NULL CHECK (check_kind IN
                     ('ANSWER_KEY','TEST_COMMAND','SCHEMA','LATE_LABEL')),
     check_config  JSONB NOT NULL,
@@ -47,6 +48,7 @@ CREATE TABLE runs (
     tool_calls        JSONB,                        -- optional; names + ids only by default (Could)
     outcome           TEXT NOT NULL DEFAULT 'UNKNOWN'
                         CHECK (outcome IN ('PASS','FAIL','UNKNOWN')),
+    outcome_reason    TEXT,                         -- why it passed, failed or is unknown
     run_kind          TEXT NOT NULL DEFAULT 'PRODUCTION'
                         CHECK (run_kind IN ('PRODUCTION','SHADOW','RETEST')),
     memory_type       TEXT NOT NULL DEFAULT 'EPISODIC'   -- one run
