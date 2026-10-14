@@ -18,6 +18,7 @@ dependencies = [
     "alembic",
     "pgvector",
     "scipy",
+    "jsonschema",
     "apscheduler",
     "cachetools",
     "httpx",
