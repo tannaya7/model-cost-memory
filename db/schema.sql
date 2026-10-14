@@ -3,8 +3,11 @@
 -- This file runs ONLY when the database volume is empty (first start). Editing it later changes
 -- nothing on an existing database; from Week 2 on, Alembic migrations are the only way to change
 -- the schema. Development uses Neon: apply this file to an empty database with `psql`.
--- gen_random_uuid() is built in from PostgreSQL 13, so no extension is needed for the base tables.
+-- gen_random_uuid() is built in from PostgreSQL 13, so the base tables need no extension. Similar-run
+-- search uses pgvector (CREATE EXTENSION vector), available on Neon and in the pgvector/pgvector image.
 --           CREATE EXTENSION IF NOT EXISTS vector;    (pgvector, once approved)
+
+CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE projects (
     project_id    TEXT PRIMARY KEY,
@@ -53,6 +56,7 @@ CREATE TABLE runs (
                         CHECK (memory_type IN ('EPISODIC','SEMANTIC')),
     importance_score  REAL NOT NULL DEFAULT 1.0,
     stability         REAL NOT NULL DEFAULT 1.0,    -- days; 3.4
+    embedding         vector(384),                  -- prompt embedding, written by the sync worker
     state             TEXT NOT NULL DEFAULT 'CAPTURED'
                         CHECK (state IN ('CAPTURED','CHECKED','INDEXED',
                                          'CONSOLIDATED','ARCHIVED','INGESTION_FAILED')),
@@ -62,7 +66,7 @@ CREATE TABLE runs (
 CREATE INDEX idx_runs_job_model ON runs(job_id, model, model_version);
 CREATE INDEX idx_runs_job_created ON runs(job_id, created_at DESC);   -- "recent runs for this job"
 CREATE INDEX idx_runs_prompt_hash ON runs(prompt_hash);
--- with pgvector (1.7): embedding vector(384) on runs, HNSW index, filtered by project_id
+CREATE INDEX idx_runs_embedding ON runs USING hnsw (embedding vector_cosine_ops);
 
 CREATE TABLE recommendations (
     recommendation_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),

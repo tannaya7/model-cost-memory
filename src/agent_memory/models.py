@@ -11,6 +11,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     ARRAY,
     Boolean,
@@ -28,6 +29,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+EMBEDDING_DIM = 384  # all-MiniLM-L6-v2
 NOW = text("now()")
 NEW_UUID = text("gen_random_uuid()")
 Timestamp = TIMESTAMP(timezone=True)
@@ -81,6 +83,10 @@ class Run(Base):
         Index("idx_runs_job_model", "job_id", "model", "model_version"),
         Index("idx_runs_job_created", "job_id", text("created_at DESC")),
         Index("idx_runs_prompt_hash", "prompt_hash"),
+        Index(
+            "idx_runs_embedding", "embedding", postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
     )
 
     # Supplied by the SDK, so a retried send hits the same row (INSERT ... ON CONFLICT DO NOTHING).
@@ -106,6 +112,7 @@ class Run(Base):
     memory_type: Mapped[str] = mapped_column(Text, server_default=text("'EPISODIC'"))
     importance_score: Mapped[float] = mapped_column(REAL, server_default=text("1.0"))
     stability: Mapped[float] = mapped_column(REAL, server_default=text("1.0"))  # days
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM))  # set by the sync worker
     state: Mapped[str] = mapped_column(Text, server_default=text("'CAPTURED'"))
     created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
     invalid_at: Mapped[datetime | None] = mapped_column(Timestamp)

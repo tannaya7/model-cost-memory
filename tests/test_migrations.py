@@ -99,3 +99,24 @@ async def test_the_database_rejects_bad_values(session):
     session.add(Job(project_id="demo", name="j", check_kind="NOT_A_KIND", check_config={}))
     with pytest.raises(IntegrityError):
         await session.commit()
+
+
+async def test_runs_can_store_a_384_dimension_embedding_and_the_hnsw_index_exists(session):
+    from agent_memory.models import EMBEDDING_DIM
+
+    session.add(Project(project_id="demo", api_key_hash="x"))
+    await session.flush()
+    job = Job(project_id="demo", name="j", check_kind="LATE_LABEL", check_config={})
+    session.add(job)
+    await session.flush()
+    run_id = uuid.uuid4()
+    vector = [0.0] * EMBEDDING_DIM
+    vector[0] = 1.0
+    session.add(Run(run_id=run_id, job_id=job.job_id, project_id="demo", prompt="p", prompt_hash="h",
+                    model="m", model_version="v", embedding=vector))
+    await session.commit()
+    session.expunge_all()
+    assert list((await session.get(Run, run_id)).embedding)[:2] == [1.0, 0.0]
+    index = (await session.execute(text(
+        "SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_runs_embedding'"))).scalar_one()
+    assert "hnsw" in index and "vector_cosine_ops" in index
