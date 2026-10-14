@@ -25,7 +25,7 @@ def normalize(name: str) -> str:
     """Lower-case, trimmed, without a provider prefix ("acme/model-a" -> "model-a")."""
     cleaned = name.strip().lower()
     if "/" in cleaned:
-        cleaned = cleaned.rsplit("/", 1)[1]
+        cleaned = cleaned.rsplit("/", 1)[1].strip()
     return cleaned
 
 

@@ -50,3 +50,10 @@ def test_family_is_idempotent_and_never_longer(name):
     once = family(name)
     assert family(once) == once
     assert len(once) <= len(normalize(name))
+
+
+@pytest.mark.parametrize("name", ["/ 0", "acme/ model-a", " acme / model-a-2026-09-15 ", "a/  "])
+def test_whitespace_around_a_provider_prefix_is_removed_once_and_for_all(name):
+    """Found by the property test: stripping must happen after the prefix is dropped, or family() is not idempotent."""
+    assert family(family(name)) == family(name)
+    assert normalize(name) == normalize(name).strip()
