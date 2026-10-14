@@ -6,6 +6,7 @@ Produces, in contract/:
   openapi.json          the OpenAPI schema FastAPI publishes (the frontend generates its types from it)
   samples/jobs.json     an example GET /v1/jobs response
   samples/runs.json     an example GET /v1/runs response
+  samples/models.json   an example GET /v1/models response
 
 The samples are built from the response models themselves, so they cannot drift from the schema.
 A test fails when the committed files are out of date; run this script and commit the result.
@@ -15,7 +16,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 CONTRACT = Path(__file__).resolve().parents[1] / "contract"
@@ -23,7 +24,7 @@ CONTRACT = Path(__file__).resolve().parents[1] / "contract"
 
 def build() -> dict[str, str]:
     from agent_memory.api import app
-    from agent_memory.schemas import JobOut, RunOut, RunPage
+    from agent_memory.schemas import JobOut, ModelOut, ModelPage, RunOut, RunPage
 
     invoice, ticket = uuid.UUID(int=0x1001), uuid.UUID(int=0x1002)
     jobs = [
@@ -54,6 +55,22 @@ def build() -> dict[str, str]:
         next_cursor="MjAyNi0xMC0xNFQwOToyNzowMCswMDowMHwwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDIwMDM=",
     )
 
+    seen_at = datetime(2026, 9, 1, tzinfo=UTC)
+    models = ModelPage(
+        items=[
+            ModelOut(model="acme-large-2026-06-01", model_version="acme-large-2026-06-01", provider="acme",
+                     status="ACTIVE", shutdown_date=None, price_in_per_mtok=3.0, price_out_per_mtok=15.0,
+                     source="SYNC", first_seen_at=seen_at, used_by_project=True),
+            ModelOut(model="acme-old-2025-01-01", model_version="acme-old-2025-01-01", provider="acme",
+                     status="DEPRECATED", shutdown_date=date(2026, 12, 1), price_in_per_mtok=10.0,
+                     price_out_per_mtok=30.0, source="SYNC", first_seen_at=seen_at, used_by_project=True),
+            ModelOut(model="local-llm:3b", model_version="local-llm:3b", provider="ollama", status="ACTIVE",
+                     shutdown_date=None, price_in_per_mtok=0.0, price_out_per_mtok=0.0, source="MANUAL",
+                     first_seen_at=seen_at, used_by_project=False),
+        ],
+        next_cursor=None,
+    )
+
     def dump(obj) -> str:
         return json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
@@ -61,6 +78,7 @@ def build() -> dict[str, str]:
         "openapi.json": dump(app.openapi()),
         "samples/jobs.json": dump([j.model_dump(mode="json") for j in jobs]),
         "samples/runs.json": dump(runs.model_dump(mode="json")),
+        "samples/models.json": dump(models.model_dump(mode="json")),
     }
 
 

@@ -180,6 +180,132 @@
         "title": "LabelCreate",
         "type": "object"
       },
+      "ModelOut": {
+        "description": "One model in the catalog.",
+        "properties": {
+          "first_seen_at": {
+            "format": "date-time",
+            "title": "First Seen At",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "price_in_per_mtok": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "US dollars per million input tokens",
+            "title": "Price In Per Mtok"
+          },
+          "price_out_per_mtok": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "US dollars per million output tokens",
+            "title": "Price Out Per Mtok"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "shutdown_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Announced shutdown, set while DEPRECATED",
+            "title": "Shutdown Date"
+          },
+          "source": {
+            "description": "MANUAL rows are overrides the daily sync never changes",
+            "enum": [
+              "SYNC",
+              "MANUAL"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "description": "RETIRED models are never recommended",
+            "enum": [
+              "ACTIVE",
+              "DEPRECATED",
+              "RETIRED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "used_by_project": {
+            "description": "This project has recorded runs on this model",
+            "title": "Used By Project",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "model",
+          "model_version",
+          "provider",
+          "status",
+          "shutdown_date",
+          "price_in_per_mtok",
+          "price_out_per_mtok",
+          "source",
+          "first_seen_at",
+          "used_by_project"
+        ],
+        "title": "ModelOut",
+        "type": "object"
+      },
+      "ModelPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModelOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as ?cursor= for the next page; null on the last page",
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "ModelPage",
+        "type": "object"
+      },
       "RunAccepted": {
         "properties": {
           "run_id": {
@@ -940,6 +1066,148 @@
         "summary": "Create Job Endpoint",
         "tags": [
           "jobs"
+        ]
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "description": "The model catalog: price, status and shutdown date, so a retirement is seen before it bites.",
+        "operationId": "list_models_v1_models_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(ACTIVE|DEPRECATED|RETIRED)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "description": "Only models this project has recorded runs on",
+            "in": "query",
+            "name": "used",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only models this project has recorded runs on",
+              "title": "Used",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Substring of the model name",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Substring of the model name",
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Models",
+        "tags": [
+          "models"
         ]
       }
     },

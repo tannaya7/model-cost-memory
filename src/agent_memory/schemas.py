@@ -8,7 +8,7 @@ Money is returned as a JSON number in US dollars; timestamps are ISO 8601 in UTC
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from jsonschema import Draft202012Validator
@@ -27,6 +27,9 @@ class Model(BaseModel):
 
 class Health(Model):
     status: Literal["ok"]
+
+
+ModelStatus = Literal["ACTIVE", "DEPRECATED", "RETIRED"]
 
 
 class JobCreate(Model):
@@ -164,6 +167,26 @@ class LabelCreate(Model):
 
     outcome: Literal["PASS", "FAIL"]
     reason: str | None = Field(default=None, max_length=500)
+
+
+class ModelOut(Model):
+    """One model in the catalog."""
+
+    model: str
+    model_version: str
+    provider: str
+    status: ModelStatus = Field(description="RETIRED models are never recommended")
+    shutdown_date: date | None = Field(description="Announced shutdown, set while DEPRECATED")
+    price_in_per_mtok: float | None = Field(description="US dollars per million input tokens")
+    price_out_per_mtok: float | None = Field(description="US dollars per million output tokens")
+    source: Literal["SYNC", "MANUAL"] = Field(description="MANUAL rows are overrides the daily sync never changes")
+    first_seen_at: datetime
+    used_by_project: bool = Field(description="This project has recorded runs on this model")
+
+
+class ModelPage(Model):
+    items: list[ModelOut]
+    next_cursor: str | None = Field(description="Pass as ?cursor= for the next page; null on the last page")
 
 
 class RunAccepted(Model):

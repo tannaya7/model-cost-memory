@@ -20,6 +20,7 @@ from .checks import Outcome, check_run
 from .costing import Price, compute_cost
 from .models import CatalogEntry, Job, OutboxRow, Project, Run
 from .schemas import JobCreate, RunCreate
+from .versions import normalize
 
 
 class UnknownJob(LookupError):
@@ -58,19 +59,24 @@ async def create_job(session: AsyncSession, project: Project, body: JobCreate) -
 
 
 async def find_price(session: AsyncSession, model: str, model_version: str) -> Price | None:
-    """The catalog price for this model, preferring the exact version, or None when unpriced."""
-    row = (
+    """The catalog price for this call, or None when unpriced.
+
+    Tries the provider-resolved version first (usually the full dated name), then the model that was
+    asked for (the alias), after normalising both.
+    """
+    candidates = [normalize(model_version), normalize(model)]
+    rows = (
         await session.execute(
-            select(CatalogEntry)
-            .where(CatalogEntry.model == model, CatalogEntry.price_in_per_mtok.is_not(None),
-                   CatalogEntry.price_out_per_mtok.is_not(None))
-            .order_by((CatalogEntry.model_version == model_version).desc(), CatalogEntry.first_seen_at.desc())
-            .limit(1)
+            select(CatalogEntry).where(
+                CatalogEntry.model.in_(candidates), CatalogEntry.price_in_per_mtok.is_not(None),
+                CatalogEntry.price_out_per_mtok.is_not(None),
+            )
         )
-    ).scalar_one_or_none()
-    if row is None:
+    ).scalars().all()
+    if not rows:
         return None
-    return Price.from_input_output(row.price_in_per_mtok, row.price_out_per_mtok)
+    best = min(rows, key=lambda r: (candidates.index(r.model), -r.first_seen_at.timestamp()))
+    return Price.from_input_output(best.price_in_per_mtok, best.price_out_per_mtok)
 
 
 async def record_run(session: AsyncSession, project: Project, body: RunCreate) -> bool:

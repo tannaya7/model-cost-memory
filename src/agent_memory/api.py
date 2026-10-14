@@ -20,12 +20,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import __version__, ingest
 from .db import dispose_engine, get_session
-from .models import Job, Project, Run
+from .models import CatalogEntry, Job, Project, Run
 from .schemas import (
     Health,
     JobCreate,
     JobOut,
     LabelCreate,
+    ModelOut,
+    ModelPage,
     RunAccepted,
     RunCreate,
     RunDetail,
@@ -33,6 +35,7 @@ from .schemas import (
     RunPage,
 )
 from .security import extract_key, hash_key
+from .versions import normalize
 
 PREVIEW_CHARS = 200
 
@@ -230,3 +233,52 @@ async def label_run_endpoint(
         raise HTTPException(409, "This run already has an outcome") from exc
     await session.commit()
     return _run_out(run, await _job_name(session, run.job_id))
+
+
+@app.get("/v1/models", response_model=ModelPage, tags=["models"])
+async def list_models(
+    status: str | None = Query(default=None, pattern="^(ACTIVE|DEPRECATED|RETIRED)$"),
+    used: bool = Query(default=False, description="Only models this project has recorded runs on"),
+    q: str | None = Query(default=None, max_length=100, description="Substring of the model name"),
+    limit: int = Query(default=100, ge=1, le=500),
+    cursor: str | None = None,
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> ModelPage:
+    """The model catalog: price, status and shutdown date, so a retirement is seen before it bites."""
+    seen = (
+        await session.execute(
+            select(Run.model, Run.model_version).where(Run.project_id == project.project_id).distinct()
+        )
+    ).all()
+    used_names = {normalize(n) for pair in seen for n in pair}
+
+    query = select(CatalogEntry).order_by(CatalogEntry.model, CatalogEntry.model_version).limit(limit + 1)
+    if status:
+        query = query.where(CatalogEntry.status == status)
+    if q:
+        query = query.where(CatalogEntry.model.contains(q.lower(), autoescape=True))
+    if used:
+        query = query.where(CatalogEntry.model.in_(used_names or {""}))
+    if cursor:
+        try:
+            last_model, last_version = base64.urlsafe_b64decode(cursor.encode()).decode().split("|", 1)
+        except (ValueError, binascii.Error) as exc:
+            raise HTTPException(422, "Invalid cursor") from exc
+        query = query.where(tuple_(CatalogEntry.model, CatalogEntry.model_version) > tuple_(last_model, last_version))
+    rows = (await session.execute(query)).scalars().all()
+    page, more = rows[:limit], len(rows) > limit
+    items = [
+        ModelOut(
+            model=m.model, model_version=m.model_version, provider=m.provider, status=m.status,
+            shutdown_date=m.shutdown_date,
+            price_in_per_mtok=float(m.price_in_per_mtok) if m.price_in_per_mtok is not None else None,
+            price_out_per_mtok=float(m.price_out_per_mtok) if m.price_out_per_mtok is not None else None,
+            source=m.source, first_seen_at=m.first_seen_at, used_by_project=m.model in used_names,
+        )
+        for m in page
+    ]
+    next_cursor = None
+    if more:
+        next_cursor = base64.urlsafe_b64encode(f"{page[-1].model}|{page[-1].model_version}".encode()).decode()
+    return ModelPage(items=items, next_cursor=next_cursor)
