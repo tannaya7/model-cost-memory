@@ -34,19 +34,24 @@ documented; logic is implemented week by week.
 |---|---|
 | 1–4 | Record and check: data model, SDK and ingest API, outcome checkers with sandbox |
 | 5–8 | Score and recommend: similar-run search, decay, model catalog, recommendations, history. **Public deployment from Week 7** |
-| 9–12 | Detect, prove and ship: regression alerts, re-test runner, lineage graph, staleness experiment, demo |
+| 9–12 | Detect, prove and ship: regression alerts, re-test runner, staleness experiment, demo |
 
 ## Getting started
 
 ```bash
-cp .env.example .env
-docker compose up -d db          # Postgres with pgvector; db/schema.sql is applied on first start
+cp .env.example .env             # then set DATABASE_URL to your Neon connection string
 pip install -e ".[dev]"
+psql "$DATABASE_URL" -f db/schema.sql   # until Alembic arrives in Week 2
 pytest
 ```
 
-The API, worker, scheduler and demo UI are already defined in `docker-compose.yml` under the
-`full` profile and are switched on as they are implemented.
+Development uses a free hosted PostgreSQL (Neon, with pgvector), so no Docker is needed on a laptop.
+Docker is used on the server only.
+
+The API, worker and scheduler are already defined in `docker-compose.yml` under the `full`
+profile and are switched on as they are implemented. The web app lives in `frontend/` and is added
+in Weeks 2–3 (see `docs/`). `db/schema.sql` runs only on an empty database; from Week 2, Alembic migrations
+change the schema.
 
 ## Team
 
