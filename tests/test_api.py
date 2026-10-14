@@ -3,30 +3,12 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
-import httpx
 import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from agent_memory.api import app
-from agent_memory.db import get_session
 from agent_memory.models import Job, Project, Run
 from agent_memory.security import generate_key, hash_key
 
 T0 = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
-
-
-@pytest.fixture
-async def client(engine):
-    sessions = async_sessionmaker(engine, expire_on_commit=False)
-
-    async def override():
-        async with sessions() as s:
-            yield s
-
-    app.dependency_overrides[get_session] = override
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
-        yield c
-    app.dependency_overrides.clear()
 
 
 @pytest.fixture

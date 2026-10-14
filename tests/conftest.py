@@ -11,11 +11,15 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import httpx
 import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from agent_memory.api import app
+from agent_memory.db import get_session
 
 ROOT = Path(__file__).resolve().parents[1]
 TABLES = ["alerts", "outbox", "recommendations", "runs", "model_catalog", "jobs", "projects"]
@@ -67,3 +71,17 @@ async def engine(migrated_url: str):
 async def session(engine) -> AsyncSession:
     async with async_sessionmaker(engine, expire_on_commit=False)() as s:
         yield s
+
+
+@pytest.fixture
+async def client(engine):
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def override():
+        async with sessions() as s:
+            yield s
+
+    app.dependency_overrides[get_session] = override
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
+        yield c
+    app.dependency_overrides.clear()
