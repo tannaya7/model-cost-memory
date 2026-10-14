@@ -17,19 +17,17 @@ dependencies = [
     "asyncpg",
     "alembic",
     "pgvector",
-    "sentence-transformers",
     "scipy",
     "apscheduler",
     "cachetools",
     "httpx",
     "anthropic",
     "openai",
-    "docker",
 ]
 
 [project.optional-dependencies]
-graph = ["neo4j"]
-demo = ["streamlit"]
+embeddings = ["sentence-transformers"]   # ~2 GB with PyTorch: installed in the sync worker image only
+sandbox = ["docker"]                     # test-command sandbox runner only; see TIP section 7
 dev = ["pytest", "pytest-asyncio", "hypothesis", "ruff"]
 
 [tool.setuptools.packages.find]
@@ -42,3 +40,7 @@ pythonpath = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+# Pinned so a new ruff release cannot start failing CI: syntax errors, import errors, pyflakes.
+select = ["E4", "E9", "F"]
