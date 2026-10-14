@@ -78,7 +78,8 @@ async def recompute(
 
     runs = (
         await session.execute(
-            select(Run.run_id, Run.job_id, Run.model, Run.model_version, Run.outcome, Run.cost_usd, Run.created_at, Run.state)
+            select(Run.run_id, Run.job_id, Run.project_id, Run.model, Run.model_version, Run.outcome, Run.cost_usd,
+                   Run.created_at, Run.state)
             .where(Run.state != "ARCHIVED")
         )
     ).all()
@@ -97,6 +98,13 @@ async def recompute(
         stats.scored += 1
         stats.superseded += superseded
         stats.archived += archive
+        if archive:
+            log.info(
+                "run archived",
+                extra={"run_id": str(run.run_id), "job_id": str(run.job_id), "project_id": run.project_id,
+                       "from_state": run.state, "to_state": "ARCHIVED", "weight": round(weight, 4),
+                       "age_days": round(age_days(run.created_at, now), 1), "superseded": superseded},
+            )
 
     table = Run.__table__
     statement = (

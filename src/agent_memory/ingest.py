@@ -9,6 +9,7 @@ accepted from the client. A run the checker cannot decide stays UNKNOWN until it
 from __future__ import annotations
 
 import hashlib
+import logging
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -21,6 +22,9 @@ from .costing import Price, compute_cost
 from .models import CatalogEntry, Job, OutboxRow, Project, Run
 from .schemas import JobCreate, RunCreate
 from .versions import normalize
+
+
+log = logging.getLogger("agent_memory.ingest")
 
 
 class UnknownJob(LookupError):
@@ -113,7 +117,15 @@ async def record_run(session: AsyncSession, project: Project, body: RunCreate) -
         )
     ).scalar_one_or_none()
     if inserted is None:
+        log.info("duplicate run ignored", extra={"run_id": str(body.run_id), "job_id": str(job.job_id),
+                                                 "project_id": project.project_id})
         return False
+    log.info(
+        "run recorded",
+        extra={"run_id": str(body.run_id), "job_id": str(job.job_id), "project_id": project.project_id,
+               "model": body.model, "model_version": body.model_version, "outcome": result.outcome.value,
+               "from_state": None, "to_state": state, "cost_usd": float(cost)},
+    )
     session.add(OutboxRow(run_id=body.run_id, op="UPSERT", payload={"run_id": str(body.run_id), "prompt_hash": digest}))
     return True
 
@@ -129,8 +141,12 @@ async def label_run(
         raise UnknownRun(str(run_id))
     if run.outcome != Outcome.UNKNOWN.value:
         raise AlreadyResolved(str(run_id))
+    before = run.state
     run.outcome = outcome
     run.outcome_reason = f"labelled {outcome}" + (f": {reason}" if reason else "")
     if run.state == "CAPTURED":
         run.state = "CHECKED"
+    log.info("run labelled", extra={"run_id": str(run.run_id), "job_id": str(run.job_id),
+                                    "project_id": project.project_id, "outcome": outcome,
+                                    "from_state": before, "to_state": run.state})
     return run

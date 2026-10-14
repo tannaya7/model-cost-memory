@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from .catalog.sync import fetch_price_list, sync_catalog
 from .config import Settings, get_settings, load_dotenv_file
+from .logging_config import configure_logging
 from .pipeline.decay import recompute
 from .pipeline.janitor import run_janitor
 
@@ -69,7 +70,7 @@ async def _main() -> None:
     from .db import dispose_engine, session_factory
 
     load_dotenv_file()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    configure_logging()
     scheduler = build_scheduler(session_factory())
     scheduler.start()
     log.info("scheduler started with jobs: %s", [j.id for j in scheduler.get_jobs()])
