@@ -26,6 +26,8 @@ from typing import Any
 
 import httpx
 
+from .privacy import sanitize_tool_calls
+
 log = logging.getLogger("agent_memory.recorder")
 
 DEFAULT_API_URL = "http://127.0.0.1:8000"
@@ -141,11 +143,13 @@ def _int(value: Any) -> int:
     return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0
 
 
-def read_response(response: Any) -> dict[str, Any]:
+def read_response(response: Any, *, include_arguments: bool = False) -> dict[str, Any]:
     """Pull model, usage and output out of an Anthropic- or OpenAI-shaped response (object or dict).
 
     `tokens_in` is uncached input only: OpenAI counts cached tokens inside `prompt_tokens`, so they
     are subtracted here to keep cost exact (docs/ARCHITECTURE.md, cost calculation).
+
+    Tool calls are reduced to their names and ids; arguments are included only when `include_arguments`.
     """
     out: dict[str, Any] = {"model_version": _get(response, "model")}
 
@@ -171,6 +175,20 @@ def read_response(response: Any) -> dict[str, Any]:
         text = _get(choices[0], "message", "content")
         if isinstance(text, str):
             out["output"] = text
+
+    calls: list[dict[str, Any]] = []
+    if isinstance(content, list):  # Anthropic: tool_use blocks
+        calls += [
+            {"id": _get(b, "id"), "name": _get(b, "name"), "arguments": _get(b, "input")}
+            for b in content if _get(b, "type") == "tool_use"
+        ]
+    if isinstance(choices, list) and choices:  # OpenAI: message.tool_calls
+        calls += [
+            {"id": _get(c, "id"), "name": _get(c, "function", "name"), "arguments": _get(c, "function", "arguments")}
+            for c in (_get(choices[0], "message", "tool_calls") or [])
+        ]
+    if calls:
+        out["tool_calls"] = sanitize_tool_calls(calls, keep_arguments=include_arguments)
     return out
 
 
@@ -183,9 +201,11 @@ class RunRecorder:
         *,
         prompt_version: str | None = None,
         sender: Sender | None = None,
+        send_tool_arguments: bool = False,
     ) -> None:
         self.job = job
         self.prompt_version = prompt_version
+        self.send_tool_arguments = send_tool_arguments  # off by default: arguments can hold sensitive data
         self._sender = sender
         self._started = 0.0
         self._payload: dict[str, Any] | None = None
@@ -212,8 +232,10 @@ class RunRecorder:
         tokens_out, cache_read_tokens, cache_write_tokens, cost_usd, output, tool_calls, latency_ms.
         """
         try:
-            data = read_response(response) if response is not None else {}
+            data = read_response(response, include_arguments=self.send_tool_arguments) if response is not None else {}
             data.update({k: v for k, v in explicit.items() if v is not None})
+            if "tool_calls" in data:  # an explicitly passed list gets the same rule as one read from a response
+                data["tool_calls"] = sanitize_tool_calls(data["tool_calls"], keep_arguments=self.send_tool_arguments)
             resolved = model_version or data.pop("model_version", None) or model or "unknown"
             data["model_version"] = resolved
             self._payload = {

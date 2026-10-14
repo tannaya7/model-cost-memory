@@ -24,6 +24,7 @@ async def create_project(
     *,
     webhook_url: str | None = None,
     retest_monthly_cap_usd: Decimal | float = 10,
+    store_tool_arguments: bool = False,
 ) -> tuple[Project, str]:
     """Create a project and return it with its key. The key is returned once and never stored."""
     if not PROJECT_ID.match(project_id):
@@ -31,7 +32,7 @@ async def create_project(
     key = generate_key()
     project = Project(
         project_id=project_id, api_key_hash=hash_key(key), webhook_url=webhook_url,
-        retest_monthly_cap_usd=Decimal(str(retest_monthly_cap_usd)),
+        retest_monthly_cap_usd=Decimal(str(retest_monthly_cap_usd)), store_tool_arguments=store_tool_arguments,
     )
     session.add(project)
     try:
