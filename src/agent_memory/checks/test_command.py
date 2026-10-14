@@ -1,1 +1,1 @@
-"""Runs the job's tests against AI-written code, inside the sandbox. Implemented in Week 4."""
+"""Runs the job's tests against AI-written code, inside the sandbox. A LATER job type, not in v1."""
