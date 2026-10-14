@@ -7,6 +7,10 @@ ARG INSTALL_TARGET="."
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
+# Alembic runs inside this image on the server: `docker compose run --rm api alembic upgrade head`
+COPY alembic.ini ./
+COPY migrations ./migrations
+COPY scripts ./scripts
 RUN pip install --no-cache-dir "${INSTALL_TARGET}"
 
 # Run as an unprivileged user, never root.

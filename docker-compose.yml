@@ -1,11 +1,13 @@
-# For the SERVER only: laptops use a free hosted Neon database and need no Docker (docs/Technical_
-# Implementation_Plan.md section 10). Postgres (with pgvector) and the API image; the worker and
-# scheduler are defined now and switched on with `--profile full` as they are implemented. The web app is a static build served
-# by Caddy (docs/Technical_Implementation_Plan.md 3.14 and 10); Caddy joins this file in Week 7.
+# For the SERVER only: laptops use a free hosted Neon database and need no Docker (see
+# deploy/README.md). Postgres (with pgvector) always runs; the rest sits behind `--profile full`:
+#   api       the FastAPI app
+#   worker    the outbox sync worker (the only image with the embedding model library)
+#   scheduler maintenance jobs (outbox janitor today; decay, catalog sync, alerts later)
+#   caddy     HTTPS, the built web app (frontend/dist) and a reverse proxy to the API
 
 x-app-env: &app-env
   # Inside the compose network the database is `db`, not localhost, and local Ollama is on the host.
-  DATABASE_URL: postgresql+asyncpg://memory:memory@db:5432/memory
+  DATABASE_URL: postgresql+asyncpg://memory:${POSTGRES_PASSWORD:-memory}@db:5432/memory
   OLLAMA_BASE_URL: http://host.docker.internal:11434/v1
 
 services:
@@ -13,19 +15,18 @@ services:
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: memory
-      POSTGRES_PASSWORD: memory
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-memory}   # set a strong one in .env on the server
       POSTGRES_DB: memory
     # Reachable from this machine only, never from the network.
     ports: ["127.0.0.1:5432:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # Applied only when the volume is empty. Schema changes after Week 2 go through Alembic.
-      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U memory -d memory"]
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   api:
     build: .
@@ -36,6 +37,7 @@ services:
     command: ["uvicorn", "agent_memory.api:app", "--host", "0.0.0.0", "--port", "8000"]
     ports: ["127.0.0.1:8000:8000"]
     profiles: ["full"]
+    restart: unless-stopped
 
   worker:
     build:
@@ -48,6 +50,7 @@ services:
       db: { condition: service_healthy }
     command: ["python", "-m", "agent_memory.pipeline.sync_worker"]
     profiles: ["full"]
+    restart: unless-stopped
 
   scheduler:
     build: .
@@ -57,6 +60,23 @@ services:
       db: { condition: service_healthy }
     command: ["python", "-m", "agent_memory.scheduler"]
     profiles: ["full"]
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env (the domain name pointing at this server)}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./frontend/dist:/srv/frontend:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api]
+    profiles: ["full"]
+    restart: unless-stopped
 
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:
