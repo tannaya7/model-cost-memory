@@ -17,7 +17,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from . import catalog, checks, db, engine, ingest, simulate, trace
+from . import catalog, db, engine, ingest, simulate, trace
 
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 _stop = threading.Event()

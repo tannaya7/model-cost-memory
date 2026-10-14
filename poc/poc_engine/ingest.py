@@ -91,7 +91,7 @@ def record_run(payload: dict, *, trace_it: bool = True, created_at: str | None =
 
 # ---------------------------------------------------------------------------------------------
 # Sync worker: drains the outbox in the background (the real one also writes embeddings to
-# pgvector and lineage to Neo4j). Postgres would claim rows with SELECT … FOR UPDATE SKIP LOCKED;
+# pgvector and lineage links kept in Postgres). Postgres would claim rows with SELECT … FOR UPDATE SKIP LOCKED;
 # SQLite has one writer at a time, so a single worker thread is enough here.
 
 def drain_outbox(limit: int = 500) -> int:
@@ -105,7 +105,7 @@ def drain_outbox(limit: int = 500) -> int:
     for row in pending:
         if row["trace"]:
             trace.log("worker", "Sync worker claimed the outbox row, indexed the run → state INDEXED "
-                      "(real system: prompt embedding to pgvector + lineage to Neo4j)", row["run_id"])
+                      "(real system: prompt embedding to pgvector + lineage links in Postgres)", row["run_id"])
     return len(pending)
 
 

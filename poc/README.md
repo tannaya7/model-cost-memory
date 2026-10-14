@@ -92,7 +92,7 @@ curl -H "X-API-Key: demo-key" -X POST http://127.0.0.1:8000/v1/maintenance/run
 |---|---|
 | PostgreSQL + `pgvector` | SQLite file `poc.db` (same tables, smaller) |
 | Similar-run search with embeddings | Not included (the worker only marks runs INDEXED) |
-| Neo4j lineage graph | Not included |
+| Lineage queries (recursive SQL) | Not included |
 | Test commands in a Docker sandbox | Answer-key and schema checks only |
 | Real providers and Ollama | Simulated models with realistic accuracy, tokens and prices |
 | Scheduler on a timer, webhook over HTTP | A button; webhook delivery is logged, not sent |
