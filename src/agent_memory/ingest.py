@@ -9,6 +9,7 @@ accepted from the client. A run the checker cannot decide stays UNKNOWN until it
 from __future__ import annotations
 
 import hashlib
+import logging
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -19,8 +20,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .checks import Outcome, check_run
 from .costing import Price, compute_cost
 from .models import CatalogEntry, Job, OutboxRow, Project, Run
+from .privacy import sanitize_tool_calls
 from .schemas import JobCreate, RunCreate
 from .versions import normalize
+
+
+log = logging.getLogger("agent_memory.ingest")
 
 
 class UnknownJob(LookupError):
@@ -105,7 +110,8 @@ async def record_run(session: AsyncSession, project: Project, body: RunCreate) -
                 prompt_hash=digest, model=body.model, model_version=body.model_version,
                 prompt_version=body.prompt_version, tokens_in=body.tokens_in, tokens_out=body.tokens_out,
                 cache_read_tokens=body.cache_read_tokens, cache_write_tokens=body.cache_write_tokens,
-                cost_usd=cost, latency_ms=body.latency_ms, output=body.output, tool_calls=body.tool_calls,
+                cost_usd=cost, latency_ms=body.latency_ms, output=body.output,
+                tool_calls=sanitize_tool_calls(body.tool_calls, keep_arguments=project.store_tool_arguments),
                 outcome=result.outcome.value, outcome_reason=result.reason, state=state,
             )
             .on_conflict_do_nothing(index_elements=["run_id"])
@@ -113,7 +119,15 @@ async def record_run(session: AsyncSession, project: Project, body: RunCreate) -
         )
     ).scalar_one_or_none()
     if inserted is None:
+        log.info("duplicate run ignored", extra={"run_id": str(body.run_id), "job_id": str(job.job_id),
+                                                 "project_id": project.project_id})
         return False
+    log.info(
+        "run recorded",
+        extra={"run_id": str(body.run_id), "job_id": str(job.job_id), "project_id": project.project_id,
+               "model": body.model, "model_version": body.model_version, "outcome": result.outcome.value,
+               "from_state": None, "to_state": state, "cost_usd": float(cost)},
+    )
     session.add(OutboxRow(run_id=body.run_id, op="UPSERT", payload={"run_id": str(body.run_id), "prompt_hash": digest}))
     return True
 
@@ -129,8 +143,12 @@ async def label_run(
         raise UnknownRun(str(run_id))
     if run.outcome != Outcome.UNKNOWN.value:
         raise AlreadyResolved(str(run_id))
+    before = run.state
     run.outcome = outcome
     run.outcome_reason = f"labelled {outcome}" + (f": {reason}" if reason else "")
     if run.state == "CAPTURED":
         run.state = "CHECKED"
+    log.info("run labelled", extra={"run_id": str(run.run_id), "job_id": str(run.job_id),
+                                    "project_id": project.project_id, "outcome": outcome,
+                                    "from_state": before, "to_state": run.state})
     return run

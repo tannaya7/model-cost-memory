@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ..config import Settings, get_settings, load_dotenv_file
 from ..embeddings import Embedder, get_embedder
+from ..logging_config import bind, configure_logging
 from ..models import OutboxRow, Run
 from ..storage.vector_store import PgVectorClient
 
@@ -58,12 +59,14 @@ class Stats:
     done: int = 0
     retried: int = 0
     failed: int = 0
+    cached: int = 0  # runs whose vector was reused instead of embedded again
 
     def __iadd__(self, other: Stats) -> Stats:
         self.claimed += other.claimed
         self.done += other.done
         self.retried += other.retried
         self.failed += other.failed
+        self.cached += other.cached
         return self
 
 
@@ -112,46 +115,78 @@ async def run_once(
             return stats
 
         run_ids = [rid for _, rid, _, _ in claimed if rid is not None]
-        prompts = {
-            r.run_id: r.prompt
-            for r in (await session.execute(select(Run.run_id, Run.prompt).where(Run.run_id.in_(run_ids)))).all()
-        }
+        rows = (
+            await session.execute(
+                select(Run.run_id, Run.job_id, Run.project_id, Run.prompt, Run.prompt_hash, Run.state)
+                .where(Run.run_id.in_(run_ids))
+            )
+        ).all()
+        prompts = {r.run_id: r.prompt for r in rows}
+        meta = {r.run_id: {"run_id": str(r.run_id), "job_id": str(r.job_id), "project_id": r.project_id} for r in rows}
+        states = {r.run_id: r.state for r in rows}
         upserts = [(oid, rid) for oid, rid, op, _ in claimed if op == "UPSERT" and rid in prompts]
         vectors: dict[uuid.UUID, list[float]] = {}
+        store = PgVectorClient(session)
+
+        # Persistent cache: reuse a vector this embedder already stored for the same prompt in the same project.
+        by_project: dict[str, set[str]] = {}
+        run_hash = {r.run_id: (r.project_id, r.prompt_hash) for r in rows}
+        for _, rid in upserts:
+            by_project.setdefault(run_hash[rid][0], set()).add(run_hash[rid][1])
+        stored: dict[tuple[str, str], list[float]] = {}
+        for project_id, hashes in by_project.items():
+            for prompt_hash, vec in (await store.cached_vectors(project_id, sorted(hashes), embedder.name)).items():
+                stored[(project_id, prompt_hash)] = vec
+        reused = {rid: stored[run_hash[rid]] for _, rid in upserts if run_hash[rid] in stored}
+        vectors.update(reused)
+        stats.cached = len(reused)
+        to_embed = [(oid, rid) for oid, rid in upserts if rid not in reused]
+
         batch_error: str | None = None
-        if upserts:
+        if to_embed:
             try:
-                embedded = await asyncio.to_thread(embedder.embed, [prompts[rid] for _, rid in upserts])
-                vectors = {rid: vec for (_, rid), vec in zip(upserts, embedded, strict=True)}
+                embedded = await asyncio.to_thread(embedder.embed, [prompts[rid] for _, rid in to_embed])
+                vectors.update({rid: vec for (_, rid), vec in zip(to_embed, embedded, strict=True)})
             except Exception as exc:  # the whole batch is retried; nothing was written
-                log.warning("embedding failed for a batch of %d: %s", len(upserts), exc)
+                log.warning("embedding failed for a batch of %d: %s", len(to_embed), exc)
                 batch_error = f"embedding failed: {exc}"
 
-        store = PgVectorClient(session)
-        for outbox_id, run_id, op, _ in claimed:
-            try:
-                if run_id is None or (op == "UPSERT" and run_id not in prompts):
-                    raise LookupError("the run no longer exists")
-                if op == "UPSERT":
-                    if batch_error:
-                        raise RuntimeError(batch_error)
-                    await store.upsert(run_id, vectors[run_id])
+        for outbox_id, run_id, op, retry_count in claimed:
+            with bind(**meta.get(run_id, {"run_id": str(run_id)}), outbox_id=str(outbox_id)):
+                try:
+                    if run_id is None or (op == "UPSERT" and run_id not in prompts):
+                        raise LookupError("the run no longer exists")
+                    if op == "UPSERT":
+                        if batch_error:
+                            raise RuntimeError(batch_error)
+                        await store.upsert(run_id, vectors[run_id], model=embedder.name)
+                        before = states[run_id]
+                        after = "INDEXED" if before in ("CAPTURED", "CHECKED") else before
+                        await session.execute(
+                            update(Run).where(Run.run_id == run_id, Run.state.in_(("CAPTURED", "CHECKED"))).values(state="INDEXED")
+                        )
+                        log.info("run indexed", extra={"embedder": embedder.name, "from_state": before, "to_state": after,
+                                                       "embedding_reused": run_id in reused})
+                    else:  # INVALIDATE: the run should no longer be searchable
+                        await store.delete(run_id)
+                        log.info("run removed from similar-run search")
                     await session.execute(
-                        update(Run).where(Run.run_id == run_id, Run.state.in_(("CAPTURED", "CHECKED"))).values(state="INDEXED")
+                        update(OutboxRow).where(OutboxRow.outbox_id == outbox_id).values(status="DONE", last_error=None, updated_at=func.now())
                     )
-                else:  # INVALIDATE: the run should no longer be searchable
-                    await store.delete(run_id)
-                await session.execute(
-                    update(OutboxRow).where(OutboxRow.outbox_id == outbox_id).values(status="DONE", last_error=None, updated_at=func.now())
-                )
-                await session.commit()
-                stats.done += 1
-            except Exception as exc:
-                await session.rollback()
-                if await _fail_row(session, outbox_id, run_id, str(exc), settings.outbox_max_retries):
-                    stats.failed += 1
-                else:
-                    stats.retried += 1
+                    await session.commit()
+                    stats.done += 1
+                except Exception as exc:
+                    await session.rollback()
+                    gave_up = await _fail_row(session, outbox_id, run_id, str(exc), settings.outbox_max_retries)
+                    log.warning(
+                        "outbox row failed",
+                        extra={"error": str(exc)[:200], "attempt": retry_count + 1, "will_retry": not gave_up},
+                    )
+                    if gave_up:
+                        log.error("run marked INGESTION_FAILED", extra={"from_state": states.get(run_id), "to_state": "INGESTION_FAILED"})
+                        stats.failed += 1
+                    else:
+                        stats.retried += 1
     return stats
 
 
@@ -186,7 +221,7 @@ async def _main() -> None:
     from ..db import dispose_engine, session_factory
 
     load_dotenv_file()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    configure_logging()
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):

@@ -71,4 +71,52 @@ async def run_janitor(sessions: async_sessionmaker[AsyncSession], settings: Sett
         purged = await purge_done(session, days=settings.outbox_done_retention_days)
     if requeued or failed or purged:
         log.info("outbox janitor: %d requeued, %d failed, %d purged", requeued, failed, purged)
+    async with sessions() as session:
+        health = await outbox_health(session, stuck_minutes=settings.outbox_stuck_minutes)
+    if not health.healthy:
+        log.warning("outbox is not healthy", extra={
+            "pending": health.pending, "failed": health.failed, "stuck": health.stuck,
+            "oldest_pending_seconds": health.oldest_pending_seconds, "max_retry_count": health.max_retry_count})
     return JanitorStats(requeued=requeued, failed=failed, purged=purged)
+
+
+@dataclass
+class OutboxHealth:
+    pending: int
+    processing: int
+    done: int
+    failed: int
+    stuck: int  # PROCESSING for longer than the stuck timeout: a worker probably died
+    oldest_pending_seconds: float | None  # how long the waiting queue head has been waiting
+    max_retry_count: int  # the most-retried row that is still alive
+
+    @property
+    def healthy(self) -> bool:
+        """No failed or stuck rows, and nothing waiting for more than five minutes."""
+        return self.failed == 0 and self.stuck == 0 and (self.oldest_pending_seconds or 0.0) < 300
+
+
+async def outbox_health(session: AsyncSession, *, stuck_minutes: int = 10) -> OutboxHealth:
+    """Answer "is the sync worker healthy?" with one query over the outbox's status columns."""
+    row = (
+        await session.execute(
+            text(
+                """
+                SELECT count(*) FILTER (WHERE status = 'PENDING')    AS pending,
+                       count(*) FILTER (WHERE status = 'PROCESSING') AS processing,
+                       count(*) FILTER (WHERE status = 'DONE')       AS done,
+                       count(*) FILTER (WHERE status = 'FAILED')     AS failed,
+                       count(*) FILTER (WHERE status = 'PROCESSING'
+                                          AND claimed_at < now() - make_interval(mins => :minutes)) AS stuck,
+                       EXTRACT(EPOCH FROM now() - min(created_at) FILTER (WHERE status = 'PENDING')) AS oldest,
+                       COALESCE(max(retry_count) FILTER (WHERE status IN ('PENDING', 'PROCESSING')), 0) AS max_retry
+                FROM outbox
+                """
+            ),
+            {"minutes": stuck_minutes},
+        )
+    ).one()
+    return OutboxHealth(
+        pending=row.pending, processing=row.processing, done=row.done, failed=row.failed, stuck=row.stuck,
+        oldest_pending_seconds=float(row.oldest) if row.oldest is not None else None, max_retry_count=row.max_retry,
+    )

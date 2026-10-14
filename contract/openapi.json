@@ -469,6 +469,7 @@
                 "type": "null"
               }
             ],
+            "description": "Only each tool's name and call id are kept. Arguments are dropped unless the project has opted in to storing them, because they can hold sensitive data.",
             "title": "Tool Calls"
           }
         },

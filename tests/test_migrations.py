@@ -120,3 +120,18 @@ async def test_runs_can_store_a_384_dimension_embedding_and_the_hnsw_index_exist
     index = (await session.execute(text(
         "SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_runs_embedding'"))).scalar_one()
     assert "hnsw" in index and "vector_cosine_ops" in index
+
+
+async def test_migration_0003_adds_the_embedding_model_and_the_tool_privacy_setting(session):
+    cols = {
+        (t, c) for t, c in (await session.execute(text(
+            "SELECT table_name, column_name FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND column_name IN ('embedding_model', 'store_tool_arguments')"))).all()
+    }
+    assert cols == {("runs", "embedding_model"), ("projects", "store_tool_arguments")}
+    default = (await session.execute(text(
+        "SELECT column_default FROM information_schema.columns WHERE table_name = 'projects' "
+        "AND column_name = 'store_tool_arguments'"))).scalar_one()
+    assert default == "false"  # privacy by default: arguments are not kept unless a project opts in
+    index = (await session.execute(text("SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_runs_embedding_cache'"))).scalar_one()
+    assert "WHERE (embedding IS NOT NULL)" in index

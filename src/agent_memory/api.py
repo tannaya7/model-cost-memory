@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import __version__, ingest
 from .db import dispose_engine, get_session
+from .logging_config import configure_logging, set_context
 from .models import CatalogEntry, Job, Project, Run
 from .schemas import (
     Health,
@@ -42,6 +43,7 @@ PREVIEW_CHARS = 200
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    configure_logging()
     yield
     await dispose_engine()
 
@@ -63,6 +65,7 @@ async def current_project(
         ).scalar_one_or_none()
     if project is None:
         raise HTTPException(401, "Missing or invalid project key", headers={"WWW-Authenticate": "Bearer"})
+    set_context(project_id=project.project_id)  # every log line in this request now carries the project
     return project
 
 

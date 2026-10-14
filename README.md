@@ -79,6 +79,16 @@ python scripts/build_corpus.py
 python scripts/run_corpus.py --model llama3.2 --limit 50
 ```
 
+Logs are JSON lines carrying `run_id`, `job_id` and `project_id`, so one run can be followed end to end
+(`LOG_FORMAT=text` gives a readable form for a terminal). To check that the sync worker is healthy:
+
+```bash
+python scripts/outbox_status.py        # prints the queue counts; exits 1 if anything is failed, stuck or slow
+```
+
+Tool-call arguments can hold sensitive data, so only each tool's name and call id are kept. A project can opt in
+to keeping arguments with `create_project.py --store-tool-arguments`.
+
 Run the tests and lint:
 
 ```bash

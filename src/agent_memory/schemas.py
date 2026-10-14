@@ -140,7 +140,11 @@ class RunCreate(Model):
     )
     latency_ms: int | None = Field(default=None, ge=0, le=3_600_000)
     output: str | None = None
-    tool_calls: list[dict] | None = Field(default=None, max_length=100)
+    tool_calls: list[dict] | None = Field(
+        default=None, max_length=100,
+        description="Only each tool's name and call id are kept. Arguments are dropped unless the project has "
+                    "opted in to storing them, because they can hold sensitive data.",
+    )
     expected: dict | None = Field(
         default=None,
         description="The correct values for an ANSWER_KEY job, used to check this run and not stored",
