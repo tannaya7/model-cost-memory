@@ -3,10 +3,8 @@
 -- This file runs ONLY when the database volume is empty (first start). Editing it later changes
 -- nothing on an existing database; from Week 2 on, Alembic migrations are the only way to change
 -- the schema. Development uses Neon: apply this file to an empty database with `psql`.
--- Requires: CREATE EXTENSION IF NOT EXISTS pgcrypto;  (gen_random_uuid)
+-- gen_random_uuid() is built in from PostgreSQL 13, so no extension is needed for the base tables.
 --           CREATE EXTENSION IF NOT EXISTS vector;    (pgvector, once approved)
-
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE projects (
     project_id    TEXT PRIMARY KEY,
