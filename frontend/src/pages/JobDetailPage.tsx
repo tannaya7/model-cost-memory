@@ -1,14 +1,19 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../shared/components/PageHeader";
 import { QueryState } from "../shared/components/QueryState";
 import { ApiError } from "../shared/api/apiFetch";
 import { useRecommendation } from "../features/recommendations/hooks/useRecommendation";
 import { RecommendationCard } from "../features/recommendations/components/RecommendationCard";
 import { JobEvidenceSection } from "../features/recommendations/components/JobEvidenceSection";
+import { JobHistoryTimeline } from "../features/recommendations/components/JobHistoryTimeline";
+import { JobCompareTable } from "../features/recommendations/components/JobCompareTable";
 
 export default function JobDetailPage() {
   const { jobName } = useParams<{ jobName: string }>();
   const query = useRecommendation(jobName);
+  // Hooks must run before any early return (React rules of hooks).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") || "recommendation";
 
   if (query.isError && query.error instanceof ApiError && query.error.status === 404) {
     return (
@@ -44,6 +49,25 @@ export default function JobDetailPage() {
     );
   }
 
+
+  const handleTabChange = (tabId: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (tabId === "recommendation") {
+        next.delete("tab");
+      } else {
+        next.set("tab", tabId);
+      }
+      return next;
+    });
+  };
+
+  const tabs = [
+    { id: "recommendation", label: "Recommendation" },
+    { id: "history", label: "History" },
+    { id: "compare", label: "Compare" },
+  ];
+
   return (
     <>
       <PageHeader
@@ -69,18 +93,86 @@ export default function JobDetailPage() {
         }
       />
 
-      <QueryState
-        query={query}
-        emptyTitle="No recommendation available"
-        emptyHint="Record more runs for this job to generate a model recommendation."
-      >
-        {(recommendation) => (
-          <div className="space-y-6">
-            <RecommendationCard recommendation={recommendation} />
-            <JobEvidenceSection recommendation={recommendation} />
+      <div className="space-y-6">
+        {/* Accessible Tabs */}
+        <div
+          role="tablist"
+          aria-label="Job views"
+          className="flex border-b border-rule gap-2"
+        >
+          {tabs.map((tab) => {
+            const isSelected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                role="tab"
+                id={`tab-${tab.id}`}
+                aria-selected={isSelected}
+                aria-controls={`panel-${tab.id}`}
+                tabIndex={0}
+                onClick={() => handleTabChange(tab.id)}
+                className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent ${
+                  isSelected
+                    ? "border-accent text-accent font-semibold"
+                    : "border-transparent text-dim hover:border-rule hover:text-ink"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Tab Panels */}
+        {activeTab === "recommendation" && (
+          <div
+            role="tabpanel"
+            id="panel-recommendation"
+            aria-labelledby="tab-recommendation"
+          >
+            <QueryState
+              query={query}
+              emptyTitle="No recommendation available"
+              emptyHint="Record more runs for this job to generate a model recommendation."
+            >
+              {(recommendation) => (
+                <div className="space-y-6">
+                  <RecommendationCard recommendation={recommendation} />
+                  <JobEvidenceSection recommendation={recommendation} />
+                </div>
+              )}
+            </QueryState>
           </div>
         )}
-      </QueryState>
+
+        {activeTab === "history" && jobName && (
+          <div
+            role="tabpanel"
+            id="panel-history"
+            aria-labelledby="tab-history"
+          >
+            <JobHistoryTimeline jobName={jobName} />
+          </div>
+        )}
+
+        {activeTab === "compare" && (
+          <div
+            role="tabpanel"
+            id="panel-compare"
+            aria-labelledby="tab-compare"
+          >
+            <QueryState
+              query={query}
+              emptyTitle="No comparison data available"
+              emptyHint="Record runs across candidate models to see comparisons."
+            >
+              {(recommendation) => (
+                <JobCompareTable recommendation={recommendation} />
+              )}
+            </QueryState>
+          </div>
+        )}
+      </div>
     </>
   );
 }

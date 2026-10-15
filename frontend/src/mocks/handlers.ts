@@ -1,5 +1,5 @@
 import { delay, http, HttpResponse } from "msw";
-import type { Job, Model, Run, RunDetail, Recommendation, SpendInsight, RegressionAlert } from "../shared/api/types";
+import type { Job, Model, Run, RunDetail, Recommendation, SpendInsight, RegressionAlert, HistoryEntry } from "../shared/api/types";
 import initialJobs from "./jobs.sample.json";
 import sampleRunsData from "./runs.sample.json";
 import sampleModelsData from "./models.sample.json";
@@ -411,7 +411,7 @@ export const handlers = [
         ],
         forecast: {
           runs_per_month: 960,
-          monthly_saving_usd: 31.2,
+          monthly_saving_usd: 29.4,
           extra_failures_per_month: 8.6,
           note: "negative saving = costs more; negative extra failures = fewer failures",
         },
@@ -552,6 +552,7 @@ export const handlers = [
           failures: 5,
           recent_failing_runs: [],
         },
+        forecast: null,
       };
       return HttpResponse.json(rec);
     }
@@ -601,5 +602,97 @@ export const handlers = [
     }
 
     return HttpResponse.json([]);
+  }),
+
+  // GET /v1/jobs/:job/history
+  http.get("/v1/jobs/:job/history", async ({ request, params }) => {
+    await delay(350);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+
+    const jobName = decodeURIComponent(String(params.job));
+
+    if (jobName === "invoice-extract") {
+      const history: HistoryEntry[] = [
+        {
+          recommendation_id: "rec_ie_003",
+          job_id: "invoice-extract",
+          model: "mini",
+          model_version: "2026-09",
+          verdict: "DOWNGRADE",
+          weighted_pass_rate: 0.962,
+          cost_per_success: 0.0032,
+          n_runs: 820,
+          evidence_weight: 812.5,
+          n_source_runs: 820,
+          superseded_by_id: null,
+          supersession_reason: null,
+          valid_at: "2026-10-15T09:30:00Z",
+          invalid_at: null,
+        },
+        {
+          recommendation_id: "rec_ie_002",
+          job_id: "invoice-extract",
+          model: "max",
+          model_version: "2026-09",
+          verdict: "HOLD",
+          weighted_pass_rate: 0.909,
+          cost_per_success: 0.0382,
+          n_runs: 450,
+          evidence_weight: 430.2,
+          n_source_runs: 450,
+          superseded_by_id: "rec_ie_003",
+          supersession_reason: "REGRESSION",
+          valid_at: "2026-09-01T12:00:00Z",
+          invalid_at: "2026-10-15T09:30:00Z",
+        },
+        {
+          recommendation_id: "rec_ie_001",
+          job_id: "invoice-extract",
+          model: "max",
+          model_version: "2026-06",
+          verdict: "HOLD",
+          weighted_pass_rate: 0.975,
+          cost_per_success: 0.0356,
+          n_runs: 360,
+          evidence_weight: 350.0,
+          n_source_runs: 360,
+          superseded_by_id: "rec_ie_002",
+          supersession_reason: "MODEL_UPGRADE",
+          valid_at: "2026-06-15T08:00:00Z",
+          invalid_at: "2026-09-01T12:00:00Z",
+        },
+      ];
+      return HttpResponse.json(history);
+    }
+
+    if (jobName === "receipt-scan") {
+      const history: HistoryEntry[] = [
+        {
+          recommendation_id: "rec_rs_001",
+          job_id: "receipt-scan",
+          model: "mini",
+          model_version: "2026-09",
+          verdict: "HOLD",
+          weighted_pass_rate: 0.972,
+          cost_per_success: 0.0029,
+          n_runs: 180,
+          evidence_weight: 175.0,
+          n_source_runs: 180,
+          superseded_by_id: null,
+          supersession_reason: null,
+          valid_at: "2026-09-20T10:00:00Z",
+          invalid_at: null,
+        },
+      ];
+      return HttpResponse.json(history);
+    }
+
+    if (jobName === "ticket-classify") {
+      return HttpResponse.json([]);
+    }
+
+    return HttpResponse.json({ detail: "Job not found" }, { status: 404 });
   }),
 ];

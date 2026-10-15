@@ -75,3 +75,20 @@ export interface RegressionAlert {
   resolved_at: string | null;
   created_at: string;
 }
+
+export interface HistoryEntry {
+  recommendation_id: string;
+  job_id: string;
+  model: string;
+  model_version: string;
+  verdict: "HOLD" | "DOWNGRADE" | "SWITCH";
+  weighted_pass_rate: number | null;
+  cost_per_success: number | null;
+  n_runs: number;
+  evidence_weight: number;
+  n_source_runs: number;
+  superseded_by_id: string | null;
+  supersession_reason: "MODEL_UPGRADE" | "EVIDENCE_DECAYED" | "REGRESSION" | null;
+  valid_at: string;
+  invalid_at: string | null;
+}
