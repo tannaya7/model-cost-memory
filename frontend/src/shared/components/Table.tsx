@@ -11,10 +11,14 @@ export function Table<T>({
   columns,
   rows,
   rowKey,
+  rowClassName,
+  rowTitle,
 }: {
   columns: Column<T>[];
   rows: T[];
   rowKey: (row: T) => string;
+  rowClassName?: (row: T) => string;
+  rowTitle?: (row: T) => string | undefined;
 }) {
   return (
     <div className="overflow-x-auto rounded-card border border-rule bg-surface">
@@ -33,7 +37,11 @@ export function Table<T>({
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={rowKey(row)} className="border-b border-rule last:border-0">
+            <tr
+              key={rowKey(row)}
+              title={rowTitle ? rowTitle(row) : undefined}
+              className={`border-b border-rule last:border-0 ${rowClassName ? rowClassName(row) : ""}`}
+            >
               {columns.map((c) => (
                 <td key={c.key} className={`px-3 py-2 align-top ${c.className ?? ""}`}>
                   {c.render(row)}
