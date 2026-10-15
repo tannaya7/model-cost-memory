@@ -68,10 +68,23 @@ export interface SpendInsight {
   share: number;
 }
 
+export interface RegressionAlertDetail {
+  model: string;
+  old_version: string;
+  new_version: string;
+  old_pass_rate: number;
+  new_pass_rate: number;
+  n_old: number;
+  n_new: number;
+  p_value: number;
+  summary: string;
+}
+
 export interface RegressionAlert {
   alert_id: string;
-  kind: string;
-  detail: { model: string; summary: string };
+  job_id: string;
+  kind: "VERSION_REGRESSION";
+  detail: RegressionAlertDetail;
   resolved_at: string | null;
   created_at: string;
 }

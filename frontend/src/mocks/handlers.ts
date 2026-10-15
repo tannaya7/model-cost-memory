@@ -589,13 +589,39 @@ export const handlers = [
       const alerts: RegressionAlert[] = [
         {
           alert_id: "alert_reg_001",
-          kind: "REGRESSION",
+          job_id: "invoice-extract",
+          kind: "VERSION_REGRESSION",
           detail: {
             model: "max",
-            summary: "accuracy dropped by 6.2% on invoice extraction",
+            old_version: "2026-06",
+            new_version: "2026-09",
+            old_pass_rate: 0.975,
+            new_pass_rate: 0.909,
+            n_old: 360,
+            n_new: 450,
+            p_value: 0.0004,
+            summary: "max dropped from 97.5% to 90.9% when 2026-06 → 2026-09 (p=0.0004)",
           },
           resolved_at: null,
           created_at: "2026-10-15T09:00:00Z",
+        },
+        {
+          alert_id: "alert_reg_002",
+          job_id: "invoice-extract",
+          kind: "VERSION_REGRESSION",
+          detail: {
+            model: "turbo",
+            old_version: "2026-07",
+            new_version: "2026-08",
+            old_pass_rate: 0.960,
+            new_pass_rate: 0.885,
+            n_old: 200,
+            n_new: 210,
+            p_value: 0.0012,
+            summary: "turbo dropped from 96.0% to 88.5% when 2026-07 → 2026-08 (p=0.0012)",
+          },
+          resolved_at: "2026-09-18T14:00:00Z",
+          created_at: "2026-09-15T10:00:00Z",
         },
       ];
       return HttpResponse.json(alerts);
