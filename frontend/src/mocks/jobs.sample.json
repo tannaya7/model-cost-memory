@@ -13,8 +13,9 @@
     "job_id": "00000000-0000-0000-0000-000000001001",
     "name": "invoice-extract",
     "retest_consent": true,
-    "run_count": 961,
+    "run_count": 964,
     "runs_by_state": {
+      "CAPTURED": 3,
       "CHECKED": 21,
       "INDEXED": 940
     }
