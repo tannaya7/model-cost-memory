@@ -81,6 +81,13 @@ export function JobOverviewCard({
             </div>
           </div>
         </div>
+
+        {/* Savings forecast notice */}
+        {rec?.forecast && rec.forecast.monthly_saving_usd > 0 && (
+          <div className="text-xs font-semibold text-ok">
+            Could save ${rec.forecast.monthly_saving_usd.toFixed(2)}/month
+          </div>
+        )}
       </div>
 
       {/* Footer: Open alerts count & link */}

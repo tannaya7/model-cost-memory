@@ -131,26 +131,43 @@ export function RecommendationCard({
         </div>
       )}
 
-      {/* Forecast Note if applicable */}
+      {/* Savings Forecast Panel */}
       {forecast && (
-        <div className="rounded-md border border-rule bg-bg p-3 text-xs text-dim">
-          <span className="font-semibold text-ink">Estimated impact: </span>
-          {forecast.monthly_saving_usd >= 0 ? (
-            <span className="font-semibold text-ok">
-              ${forecast.monthly_saving_usd.toFixed(2)}/mo savings
-            </span>
-          ) : (
-            <span className="font-semibold text-warn">
-              costs ${Math.abs(forecast.monthly_saving_usd).toFixed(2)}/mo more
-            </span>
-          )}
-          {forecast.extra_failures_per_month !== 0 && (
-            <span>
-              {" "}
-              with {forecast.extra_failures_per_month > 0 ? "+" : ""}
-              {forecast.extra_failures_per_month} failures/mo.
-            </span>
-          )}
+        <div className="space-y-3 rounded-card border border-rule bg-bg p-4">
+          <div>
+            <div
+              className={`text-2xl font-bold tracking-tight ${
+                forecast.monthly_saving_usd >= 0 ? "text-ok" : "text-warn"
+              }`}
+            >
+              {forecast.monthly_saving_usd >= 0
+                ? `Save $${forecast.monthly_saving_usd.toFixed(2)} a month`
+                : `Costs $${Math.abs(forecast.monthly_saving_usd).toFixed(2)} more a month`}
+            </div>
+            <p className="mt-0.5 text-xs text-dim">
+              Based on {forecast.runs_per_month.toLocaleString()} runs in the last 30 days
+            </p>
+          </div>
+
+          <div className="text-xs font-medium">
+            {forecast.extra_failures_per_month > 0 && (
+              <span className="text-warn">
+                About {forecast.extra_failures_per_month} more failed runs a month
+              </span>
+            )}
+            {forecast.extra_failures_per_month < 0 && (
+              <span className="text-ok">
+                About {Math.abs(forecast.extra_failures_per_month)} fewer failed runs a month
+              </span>
+            )}
+            {forecast.extra_failures_per_month === 0 && (
+              <span className="text-dim">No change in failures</span>
+            )}
+          </div>
+
+          <p className="text-xs text-dim">
+            Estimate. Assumes next month looks like the last 30 days.
+          </p>
         </div>
       )}
 
