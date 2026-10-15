@@ -12,9 +12,35 @@ function maskKey(key: string): string {
 
 export function ProjectKeySettings() {
   const [currentKey, setCurrentKey] = useState<string>(() => getApiKey());
+  const [showKey, setShowKey] = useState<boolean>(false);
+  const [copied, setCopied] = useState<boolean>(false);
+  const [copyFailed, setCopyFailed] = useState<boolean>(false);
   const [inputKey, setInputKey] = useState<string>("");
   const [isChecking, setIsChecking] = useState<boolean>(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  async function handleCopy() {
+    setCopyFailed(false);
+    try {
+      await navigator.clipboard.writeText(currentKey);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback if clipboard API is restricted
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = currentKey;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch {
+        setCopyFailed(true);
+      }
+    }
+  }
 
   async function handleCheckAndSave(e: React.FormEvent) {
     e.preventDefault();
@@ -62,6 +88,7 @@ export function ProjectKeySettings() {
     setApiKey(demoKey);
     setCurrentKey(demoKey);
     setInputKey("");
+    setShowKey(false);
     queryClient.clear();
     setMessage({ type: "success", text: "Reset to demo key" });
   }
@@ -78,12 +105,40 @@ export function ProjectKeySettings() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-rule bg-bg p-3 text-sm">
-            <span className="text-dim">Key in use:</span>
-            <code className="rounded bg-surface px-2 py-0.5 font-mono text-xs font-semibold text-ink border border-rule">
-              {maskKey(currentKey)}
-            </code>
+          {/* Key in use with Mask, Show/Hide, and Copy */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-rule bg-bg p-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <span className="text-dim shrink-0">Key in use:</span>
+              <code className="rounded bg-surface px-2.5 py-1 font-mono text-xs font-semibold text-ink border border-rule break-all">
+                {showKey ? currentKey : maskKey(currentKey)}
+              </code>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                aria-label={showKey ? "Hide project key" : "Show project key"}
+                className="rounded-md border border-rule bg-surface px-2.5 py-1 text-xs font-medium text-dim hover:bg-bg hover:text-ink focus:outline-none focus:ring-1 focus:ring-accent transition-colors"
+              >
+                {showKey ? "Hide" : "Show"}
+              </button>
+              <button
+                type="button"
+                onClick={handleCopy}
+                aria-label="Copy project key"
+                className="rounded-md border border-rule bg-surface px-2.5 py-1 text-xs font-medium text-dim hover:bg-bg hover:text-ink focus:outline-none focus:ring-1 focus:ring-accent transition-colors"
+              >
+                {copied ? "Copied!" : "Copy"}
+              </button>
+            </div>
           </div>
+
+          {copyFailed && (
+            <p role="alert" className="text-xs text-bad">
+              Couldn't copy. Select the key and copy it by hand.
+            </p>
+          )}
 
           <form onSubmit={handleCheckAndSave} className="space-y-4 pt-2">
             <div>
