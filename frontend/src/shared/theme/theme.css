@@ -1,0 +1,50 @@
+/* The single place for every colour, font and spacing value.
+   Change the look of the whole app by editing only this file. */
+:root {
+  --color-bg: #f6f7fb;
+  --color-surface: #ffffff;
+  --color-ink: #11162b;
+  --color-dim: #5b6488;
+  --color-rule: #dfe3f0;
+  --color-accent: #3552c9;
+  --color-accent-soft: #e8ecfc;
+  --color-ok: #14733f;
+  --color-ok-soft: #e1f5ea;
+  --color-warn: #9a4a00;
+  --color-warn-soft: #fff1e2;
+  --color-bad: #b3261e;
+  --color-bad-soft: #fdeceb;
+  --color-skeleton: #e4e7f1;
+
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", Consolas, monospace;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  --radius: 0.75rem;
+  --sidebar-width: 15rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0c1020;
+    --color-surface: #141a33;
+    --color-ink: #edf0fb;
+    --color-dim: #9ba4c9;
+    --color-rule: #27315a;
+    --color-accent: #8ea4ff;
+    --color-accent-soft: #1c2550;
+    --color-ok: #6fdc9c;
+    --color-ok-soft: #12301f;
+    --color-warn: #ffc47a;
+    --color-warn-soft: #2a1d0c;
+    --color-bad: #ff9b94;
+    --color-bad-soft: #3a1513;
+    --color-skeleton: #232b4d;
+  }
+}

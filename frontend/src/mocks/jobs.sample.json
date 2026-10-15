@@ -1,0 +1,18 @@
+[
+  {
+    "id": "job_1",
+    "name": "Invoice extraction",
+    "description": "Pull vendor, date and total from invoice text",
+    "check_kind": "answer_key",
+    "retest_consent": true,
+    "created_at": "2026-10-01T09:00:00Z"
+  },
+  {
+    "id": "job_2",
+    "name": "Support ticket triage",
+    "description": "Label tickets by urgency and team",
+    "check_kind": "schema",
+    "retest_consent": false,
+    "created_at": "2026-10-05T11:30:00Z"
+  }
+]
