@@ -6,6 +6,7 @@ import { AppShell } from "./app/AppShell";
 const HomePage = lazy(() => import("./pages/HomePage"));
 const RunsPage = lazy(() => import("./pages/RunsPage"));
 const JobsPage = lazy(() => import("./pages/JobsPage"));
+const JobDetailPage = lazy(() => import("./pages/JobDetailPage"));
 const ModelsPage = lazy(() => import("./pages/ModelsPage"));
 const AlertsPage = lazy(() => import("./pages/AlertsPage"));
 const HistoryPage = lazy(() => import("./pages/HistoryPage"));
@@ -20,6 +21,7 @@ const router = createBrowserRouter([
       { path: "/", element: <HomePage /> },
       { path: "/runs", element: <RunsPage /> },
       { path: "/jobs", element: <JobsPage /> },
+      { path: "/jobs/:jobName", element: <JobDetailPage /> },
       { path: "/models", element: <ModelsPage /> },
       { path: "/alerts", element: <AlertsPage /> },
       { path: "/history", element: <HistoryPage /> },

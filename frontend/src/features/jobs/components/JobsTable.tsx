@@ -14,12 +14,22 @@ const columns: Column<Job>[] = [
     key: "name",
     header: "Name",
     render: (j) => (
-      <Link
-        to={`/runs?job=${encodeURIComponent(j.name)}`}
-        className="font-semibold text-accent hover:underline"
-      >
-        {j.name}
-      </Link>
+      <div>
+        <Link
+          to={`/jobs/${encodeURIComponent(j.name)}`}
+          className="font-semibold text-accent hover:underline"
+        >
+          {j.name}
+        </Link>
+        <div className="mt-0.5">
+          <Link
+            to={`/runs?job=${encodeURIComponent(j.name)}`}
+            className="text-xs text-dim hover:text-accent"
+          >
+            View runs →
+          </Link>
+        </div>
+      </div>
     ),
   },
   {
