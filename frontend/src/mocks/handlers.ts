@@ -1,7 +1,10 @@
 import { delay, http, HttpResponse } from "msw";
-import type { Job, Run, RunDetail } from "../shared/api/types";
+import type { Job, Model, Run, RunDetail } from "../shared/api/types";
 import initialJobs from "./jobs.sample.json";
 import sampleRunsData from "./runs.sample.json";
+import sampleModelsData from "./models.sample.json";
+
+const models: Model[] = [...(sampleModelsData.items as Model[])];
 
 function isAuthorized(request: Request): boolean {
   const apiKey = request.headers.get("x-api-key") || "";
@@ -276,5 +279,46 @@ export const handlers = [
     }
 
     return HttpResponse.json(run);
+  }),
+
+  // GET /v1/models
+  http.get("/v1/models", async ({ request }) => {
+    await delay(350);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+
+    const url = new URL(request.url);
+    const status = url.searchParams.get("status");
+    const usedParam = url.searchParams.get("used");
+    const q = url.searchParams.get("q");
+    const limitParam = url.searchParams.get("limit");
+    const cursorParam = url.searchParams.get("cursor");
+
+    let filtered = models;
+
+    if (status && status !== "ALL") {
+      filtered = filtered.filter((m) => m.status.toUpperCase() === status.toUpperCase());
+    }
+    if (usedParam === "true") {
+      filtered = filtered.filter((m) => m.used_by_project === true);
+    }
+    if (q) {
+      const qLower = q.toLowerCase();
+      filtered = filtered.filter((m) => m.model.toLowerCase().includes(qLower));
+    }
+
+    const limit = Math.min(500, Math.max(1, limitParam ? parseInt(limitParam, 10) : 100));
+    const offset = cursorParam ? parseInt(cursorParam, 10) : 0;
+    const safeOffset = isNaN(offset) || offset < 0 ? 0 : offset;
+
+    const pageItems = filtered.slice(safeOffset, safeOffset + limit);
+    const nextOffset = safeOffset + limit;
+    const nextCursor = nextOffset < filtered.length ? String(nextOffset) : null;
+
+    return HttpResponse.json({
+      items: pageItems,
+      next_cursor: nextCursor,
+    });
   }),
 ];
