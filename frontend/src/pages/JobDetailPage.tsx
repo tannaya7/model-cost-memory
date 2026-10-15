@@ -4,6 +4,7 @@ import { QueryState } from "../shared/components/QueryState";
 import { ApiError } from "../shared/api/apiFetch";
 import { useRecommendation } from "../features/recommendations/hooks/useRecommendation";
 import { RecommendationCard } from "../features/recommendations/components/RecommendationCard";
+import { JobEvidenceSection } from "../features/recommendations/components/JobEvidenceSection";
 
 export default function JobDetailPage() {
   const { jobName } = useParams<{ jobName: string }>();
@@ -76,6 +77,7 @@ export default function JobDetailPage() {
         {(recommendation) => (
           <div className="space-y-6">
             <RecommendationCard recommendation={recommendation} />
+            <JobEvidenceSection recommendation={recommendation} />
           </div>
         )}
       </QueryState>
