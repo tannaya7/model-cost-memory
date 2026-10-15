@@ -1,9 +1,8 @@
-// TEMPORARY: replaced by generated types (npm run gen:types) once Tannaya publishes the OpenAPI file.
-export interface Job {
-  id: string;
-  name: string;
-  description?: string;
-  check_kind?: "answer_key" | "schema";
-  retest_consent?: boolean;
-  created_at?: string;
-}
+import type { components } from "./generated";
+
+export type Job = components["schemas"]["JobOut"];
+export type JobCreate = components["schemas"]["JobCreate"];
+export type Run = components["schemas"]["RunOut"];
+export type RunDetail = components["schemas"]["RunDetail"];
+export type RunPage = components["schemas"]["RunPage"];
+export type CheckKind = components["schemas"]["JobCreate"]["check_kind"];

@@ -32,7 +32,9 @@ export class ApiError extends Error {
 /** Relative paths only (e.g. "/v1/jobs"), so the app works from the same origin as the API. */
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  headers.set("X-API-Key", getApiKey());
+  if (!headers.has("X-API-Key")) {
+    headers.set("X-API-Key", getApiKey());
+  }
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }

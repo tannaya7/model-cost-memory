@@ -1,5 +1,14 @@
-import { ComingSoon } from "../shared/components/ComingSoon";
+import { PageHeader } from "../shared/components/PageHeader";
+import { ProjectKeySettings } from "../features/settings/components/ProjectKeySettings";
 
 export default function SettingsPage() {
-  return <ComingSoon title="Settings" week="Week 3" />;
+  return (
+    <>
+      <PageHeader
+        title="Settings"
+        subtitle="Manage your project API key and configuration."
+      />
+      <ProjectKeySettings />
+    </>
+  );
 }

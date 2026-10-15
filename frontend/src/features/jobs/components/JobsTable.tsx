@@ -18,5 +18,6 @@ const columns: Column<Job>[] = [
 ];
 
 export function JobsTable({ jobs }: { jobs: Job[] }) {
-  return <Table columns={columns} rows={jobs} rowKey={(j) => j.id} />;
+  return <Table columns={columns} rows={jobs} rowKey={(j) => j.job_id} />;
 }
+

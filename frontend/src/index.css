@@ -10,6 +10,7 @@
   --color-rule: var(--color-rule);
   --color-accent: var(--color-accent);
   --color-accent-soft: var(--color-accent-soft);
+  --color-on-accent: var(--color-on-accent);
   --color-ok: var(--color-ok);
   --color-ok-soft: var(--color-ok-soft);
   --color-warn: var(--color-warn);

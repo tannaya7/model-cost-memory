@@ -8,6 +8,7 @@
   --color-rule: #dfe3f0;
   --color-accent: #3552c9;
   --color-accent-soft: #e8ecfc;
+  --color-on-accent: #ffffff;
   --color-ok: #14733f;
   --color-ok-soft: #e1f5ea;
   --color-warn: #9a4a00;
@@ -39,6 +40,7 @@
     --color-rule: #27315a;
     --color-accent: #8ea4ff;
     --color-accent-soft: #1c2550;
+    --color-on-accent: #0c1020;
     --color-ok: #6fdc9c;
     --color-ok-soft: #12301f;
     --color-warn: #ffc47a;
