@@ -4,6 +4,7 @@ import { AppShell } from "./app/AppShell";
 
 // Every page is lazy so each ships as its own chunk.
 const HomePage = lazy(() => import("./pages/HomePage"));
+const SpendPage = lazy(() => import("./pages/SpendPage"));
 const RunsPage = lazy(() => import("./pages/RunsPage"));
 const JobsPage = lazy(() => import("./pages/JobsPage"));
 const JobDetailPage = lazy(() => import("./pages/JobDetailPage"));
@@ -19,6 +20,7 @@ const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { path: "/", element: <HomePage /> },
+      { path: "/spend", element: <SpendPage /> },
       { path: "/runs", element: <RunsPage /> },
       { path: "/jobs", element: <JobsPage /> },
       { path: "/jobs/:jobName", element: <JobDetailPage /> },

@@ -5,6 +5,7 @@ import { Skeleton } from "../shared/components/Skeleton";
 
 export const NAV = [
   { to: "/", label: "Overview", end: true },
+  { to: "/spend", label: "Spend" },
   { to: "/runs", label: "Runs" },
   { to: "/jobs", label: "Jobs" },
   { to: "/models", label: "Models" },
