@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 import type { Job, SpendInsight } from "../../../shared/api/types";
 import { Card } from "../../../shared/components/Card";
 import { Badge } from "../../../shared/components/Badge";
@@ -10,9 +11,11 @@ import { getVerdictChip } from "../../recommendations/components/RecommendationC
 export function JobOverviewCard({
   job,
   spend,
+  index = 0,
 }: {
   job: Job;
   spend?: SpendInsight;
+  index?: number;
 }) {
   const recQuery = useRecommendation(job.name);
   const regQuery = useJobRegressions(job.name);
@@ -49,68 +52,75 @@ export function JobOverviewCard({
     regQuery.data?.filter((a) => a.resolved_at === null).length ?? 0;
 
   return (
-    <Card className="flex flex-col justify-between space-y-4">
-      <div className="space-y-3">
-        {/* Job Name & Verdict Chip */}
-        <div className="flex items-start justify-between gap-2">
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, delay: index * 0.06, ease: "easeOut" }}
+      className="h-full flex flex-col"
+    >
+      <Card className="flex flex-col justify-between space-y-4 h-full">
+        <div className="space-y-3">
+          {/* Job Name & Verdict Chip */}
+          <div className="flex items-start justify-between gap-2">
+            <Link
+              to={`/jobs/${encodeURIComponent(job.name)}`}
+              className="text-base font-bold text-ink hover:text-accent hover:underline"
+            >
+              {job.name}
+            </Link>
+            {rec ? (
+              <div>{getVerdictChip(rec.verdict)}</div>
+            ) : (
+              <Badge tone="neutral">No recommendation</Badge>
+            )}
+          </div>
+
+          {/* Current Model & Spend so far */}
+          <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
+            <div>
+              <span className="text-dim">Current model:</span>
+              <div className="font-mono font-semibold text-ink">
+                {rec?.current_model || "None"}
+              </div>
+            </div>
+            <div>
+              <span className="text-dim">Spend so far:</span>
+              <div className="font-mono font-semibold text-ink">
+                {spend !== undefined ? `$${spend.spend_usd.toFixed(2)}` : "—"}
+              </div>
+            </div>
+          </div>
+
+          {/* Savings forecast notice */}
+          {rec?.forecast && rec.forecast.monthly_saving_usd > 0 && (
+            <div className="text-xs font-semibold text-ok">
+              Could save ${rec.forecast.monthly_saving_usd.toFixed(2)}/month
+            </div>
+          )}
+        </div>
+
+        {/* Footer: Open alerts count & link */}
+        <div className="flex items-center justify-between border-t border-rule pt-3 text-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="text-dim">Alerts:</span>
+            {regQuery.isPending ? (
+              <Skeleton className="h-4 w-12" />
+            ) : openAlertsCount > 0 ? (
+              <Badge tone="bad">
+                {openAlertsCount} {openAlertsCount === 1 ? "alert" : "alerts"}
+              </Badge>
+            ) : (
+              <span className="text-dim">0 open</span>
+            )}
+          </div>
           <Link
             to={`/jobs/${encodeURIComponent(job.name)}`}
-            className="text-base font-bold text-ink hover:text-accent hover:underline"
+            className="font-medium text-accent hover:underline"
           >
-            {job.name}
+            View details →
           </Link>
-          {rec ? (
-            <div>{getVerdictChip(rec.verdict)}</div>
-          ) : (
-            <Badge tone="neutral">No recommendation</Badge>
-          )}
         </div>
-
-        {/* Current Model & Spend so far */}
-        <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
-          <div>
-            <span className="text-dim">Current model:</span>
-            <div className="font-mono font-semibold text-ink">
-              {rec?.current_model || "None"}
-            </div>
-          </div>
-          <div>
-            <span className="text-dim">Spend so far:</span>
-            <div className="font-mono font-semibold text-ink">
-              {spend !== undefined ? `$${spend.spend_usd.toFixed(2)}` : "—"}
-            </div>
-          </div>
-        </div>
-
-        {/* Savings forecast notice */}
-        {rec?.forecast && rec.forecast.monthly_saving_usd > 0 && (
-          <div className="text-xs font-semibold text-ok">
-            Could save ${rec.forecast.monthly_saving_usd.toFixed(2)}/month
-          </div>
-        )}
-      </div>
-
-      {/* Footer: Open alerts count & link */}
-      <div className="flex items-center justify-between border-t border-rule pt-3 text-xs">
-        <div className="flex items-center gap-1.5">
-          <span className="text-dim">Alerts:</span>
-          {regQuery.isPending ? (
-            <Skeleton className="h-4 w-12" />
-          ) : openAlertsCount > 0 ? (
-            <Badge tone="bad">
-              {openAlertsCount} {openAlertsCount === 1 ? "alert" : "alerts"}
-            </Badge>
-          ) : (
-            <span className="text-dim">0 open</span>
-          )}
-        </div>
-        <Link
-          to={`/jobs/${encodeURIComponent(job.name)}`}
-          className="font-medium text-accent hover:underline"
-        >
-          View details →
-        </Link>
-      </div>
-    </Card>
+      </Card>
+    </motion.div>
   );
 }

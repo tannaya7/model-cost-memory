@@ -84,11 +84,12 @@ export default function HomePage() {
 
       {jobsQuery.data && jobsQuery.data.length > 0 && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {jobsQuery.data.map((job) => (
+          {jobsQuery.data.map((job, idx) => (
             <JobOverviewCard
               key={job.job_id}
               job={job}
               spend={spendMap.get(job.name)}
+              index={idx}
             />
           ))}
         </div>

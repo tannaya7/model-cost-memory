@@ -1,6 +1,7 @@
 import type { Recommendation, Verdict } from "../../../shared/api/types";
 import { Badge } from "../../../shared/components/Badge";
 import { Card } from "../../../shared/components/Card";
+import { CountUp } from "../../../shared/motion/CountUp";
 
 export function getVerdictChip(verdict: Verdict) {
   switch (verdict) {
@@ -81,15 +82,25 @@ export function RecommendationCard({
               <div>
                 <div className="text-xs text-dim">Pass rate</div>
                 <div className="font-mono text-lg font-bold text-ink">
-                  {(comparison.recommended.weighted_pass_rate * 100).toFixed(1)}%
+                  <CountUp
+                    value={comparison.recommended.weighted_pass_rate * 100}
+                    decimals={1}
+                    suffix="%"
+                  />
                 </div>
               </div>
               <div>
                 <div className="text-xs text-dim">Cost / success</div>
                 <div className="font-mono text-lg font-bold text-ink">
-                  {comparison.recommended.cost_per_success_usd !== null
-                    ? `$${comparison.recommended.cost_per_success_usd.toFixed(4)}`
-                    : "-"}
+                  {comparison.recommended.cost_per_success_usd !== null ? (
+                    <CountUp
+                      value={comparison.recommended.cost_per_success_usd}
+                      decimals={4}
+                      prefix="$"
+                    />
+                  ) : (
+                    "-"
+                  )}
                 </div>
               </div>
             </div>
@@ -110,15 +121,25 @@ export function RecommendationCard({
                 <div>
                   <div className="text-xs text-dim">Pass rate</div>
                   <div className="font-mono text-lg font-bold text-ink">
-                    {(comparison.current.weighted_pass_rate * 100).toFixed(1)}%
+                    <CountUp
+                      value={comparison.current.weighted_pass_rate * 100}
+                      decimals={1}
+                      suffix="%"
+                    />
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-dim">Cost / success</div>
                   <div className="font-mono text-lg font-bold text-ink">
-                    {comparison.current.cost_per_success_usd !== null
-                      ? `$${comparison.current.cost_per_success_usd.toFixed(4)}`
-                      : "-"}
+                    {comparison.current.cost_per_success_usd !== null ? (
+                      <CountUp
+                        value={comparison.current.cost_per_success_usd}
+                        decimals={4}
+                        prefix="$"
+                      />
+                    ) : (
+                      "-"
+                    )}
                   </div>
                 </div>
               </div>
@@ -140,9 +161,27 @@ export function RecommendationCard({
                 forecast.monthly_saving_usd >= 0 ? "text-ok" : "text-warn"
               }`}
             >
-              {forecast.monthly_saving_usd >= 0
-                ? `Save $${forecast.monthly_saving_usd.toFixed(2)} a month`
-                : `Costs $${Math.abs(forecast.monthly_saving_usd).toFixed(2)} more a month`}
+              {forecast.monthly_saving_usd >= 0 ? (
+                <>
+                  Save{" "}
+                  <CountUp
+                    value={forecast.monthly_saving_usd}
+                    decimals={2}
+                    prefix="$"
+                  />{" "}
+                  a month
+                </>
+              ) : (
+                <>
+                  Costs{" "}
+                  <CountUp
+                    value={Math.abs(forecast.monthly_saving_usd)}
+                    decimals={2}
+                    prefix="$"
+                  />{" "}
+                  more a month
+                </>
+              )}
             </div>
             <p className="mt-0.5 text-xs text-dim">
               Based on {forecast.runs_per_month.toLocaleString()} runs in the last 30 days
