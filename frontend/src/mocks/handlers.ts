@@ -1,5 +1,18 @@
 import { delay, http, HttpResponse } from "msw";
-import type { Job, Model, Run, RunDetail, Recommendation, SpendInsight, RegressionAlert, HistoryEntry, RetestStatus, RetestLimits } from "../shared/api/types";
+import type {
+  Job,
+  Model,
+  Run,
+  RunDetail,
+  Recommendation,
+  SpendInsight,
+  RegressionAlert,
+  HistoryEntry,
+  RetestStatus,
+  RetestLimits,
+  User,
+  Project,
+} from "../shared/api/types";
 import initialJobs from "./jobs.sample.json";
 import sampleRunsData from "./runs.sample.json";
 import sampleModelsData from "./models.sample.json";
@@ -13,6 +26,44 @@ function isAuthorized(request: Request): boolean {
   const key = apiKey || bearerKey;
   return key === "demo-key" || key.startsWith("mcm_");
 }
+
+function isMockSignedIn(): boolean {
+  try {
+    return localStorage.getItem("mcm_mock_signed_in") === "true";
+  } catch {
+    return false;
+  }
+}
+
+function generateApiKey(): string {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let suffix = "";
+  for (let i = 0; i < 24; i++) {
+    suffix += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `mcm_live_${suffix}`;
+}
+
+const projects: Project[] = [
+  {
+    project_id: "00000000-0000-0000-0000-000000000001",
+    name: "production",
+    webhook_url: "https://alerts.example.com/webhook",
+    retest_monthly_cap_usd: 10,
+    retest_allowed: true,
+    key_prefix: "mcm_live_prod",
+    created_at: "2026-09-01T00:00:00Z",
+  },
+  {
+    project_id: "00000000-0000-0000-0000-000000000002",
+    name: "staging",
+    webhook_url: null,
+    retest_monthly_cap_usd: 50,
+    retest_allowed: false,
+    key_prefix: "mcm_live_stag",
+    created_at: "2026-09-15T00:00:00Z",
+  },
+];
 
 // In-memory jobs list seeded from jobs.sample.json
 const jobs: Job[] = [...(initialJobs as Job[])];
@@ -856,5 +907,152 @@ export const handlers = [
     }
 
     return HttpResponse.json(record);
+  }),
+
+  // GET /v1/me
+  http.get("/v1/me", async () => {
+    await delay(350);
+    if (!isMockSignedIn()) {
+      return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
+    }
+    const user: User = {
+      user_id: "usr_demo_1001",
+      email: "mahi@example.com",
+      name: "Mahi Demo",
+      picture_url: null,
+    };
+    return HttpResponse.json(user);
+  }),
+
+  // POST /auth/logout
+  http.post("/auth/logout", async () => {
+    await delay(350);
+    try {
+      localStorage.removeItem("mcm_mock_signed_in");
+    } catch {
+      /* storage unavailable: ignore */
+    }
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // GET /v1/projects
+  http.get("/v1/projects", async () => {
+    await delay(350);
+    if (!isMockSignedIn()) {
+      return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
+    }
+    return HttpResponse.json(projects);
+  }),
+
+  // GET /v1/projects/:project_id
+  http.get("/v1/projects/:project_id", async ({ params }) => {
+    await delay(350);
+    if (!isMockSignedIn()) {
+      return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
+    }
+    const id = String(params.project_id);
+    const project = projects.find((p) => p.project_id === id);
+    if (!project) {
+      return HttpResponse.json({ detail: "Project not found" }, { status: 404 });
+    }
+    return HttpResponse.json(project);
+  }),
+
+  // POST /v1/projects
+  http.post("/v1/projects", async ({ request }) => {
+    await delay(350);
+    if (!isMockSignedIn()) {
+      return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
+    }
+    const body = (await request.json().catch(() => ({}))) as { name?: string };
+    const name = (body.name || "").trim();
+    if (name.length < 1 || name.length > 60) {
+      return HttpResponse.json(
+        { detail: "Name must be between 1 and 60 characters" },
+        { status: 422 },
+      );
+    }
+    const apiKey = generateApiKey();
+    const keyPrefix = apiKey.slice(0, 12);
+    const newProject: Project = {
+      project_id: crypto.randomUUID(),
+      name,
+      webhook_url: null,
+      retest_monthly_cap_usd: 10,
+      retest_allowed: true,
+      key_prefix: keyPrefix,
+      created_at: new Date().toISOString(),
+    };
+    projects.push(newProject);
+    return HttpResponse.json({ project: newProject, api_key: apiKey }, { status: 201 });
+  }),
+
+  // PATCH /v1/projects/:project_id
+  http.patch("/v1/projects/:project_id", async ({ request, params }) => {
+    await delay(350);
+    if (!isMockSignedIn()) {
+      return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
+    }
+    const id = String(params.project_id);
+    const project = projects.find((p) => p.project_id === id);
+    if (!project) {
+      return HttpResponse.json({ detail: "Project not found" }, { status: 404 });
+    }
+    const body = (await request.json().catch(() => ({}))) as {
+      name?: string;
+      webhook_url?: string | null;
+      retest_monthly_cap_usd?: number;
+      retest_allowed?: boolean;
+    };
+    if (body.name !== undefined) {
+      const name = body.name.trim();
+      if (name.length < 1 || name.length > 60) {
+        return HttpResponse.json(
+          { detail: "Name must be between 1 and 60 characters" },
+          { status: 422 },
+        );
+      }
+      project.name = name;
+    }
+    if (body.webhook_url !== undefined) {
+      const url = body.webhook_url ? body.webhook_url.trim() : null;
+      if (url && !url.startsWith("https://")) {
+        return HttpResponse.json(
+          { detail: "Webhook URL must start with https://" },
+          { status: 422 },
+        );
+      }
+      project.webhook_url = url || null;
+    }
+    if (body.retest_monthly_cap_usd !== undefined) {
+      const cap = Number(body.retest_monthly_cap_usd);
+      if (isNaN(cap) || cap < 0 || cap > 500) {
+        return HttpResponse.json(
+          { detail: "Monthly re-test cap must be between 0 and 500" },
+          { status: 422 },
+        );
+      }
+      project.retest_monthly_cap_usd = cap;
+    }
+    if (body.retest_allowed !== undefined) {
+      project.retest_allowed = Boolean(body.retest_allowed);
+    }
+    return HttpResponse.json(project);
+  }),
+
+  // POST /v1/projects/:project_id/key
+  http.post("/v1/projects/:project_id/key", async ({ params }) => {
+    await delay(350);
+    if (!isMockSignedIn()) {
+      return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
+    }
+    const id = String(params.project_id);
+    const project = projects.find((p) => p.project_id === id);
+    if (!project) {
+      return HttpResponse.json({ detail: "Project not found" }, { status: 404 });
+    }
+    const newApiKey = generateApiKey();
+    project.key_prefix = newApiKey.slice(0, 12);
+    return HttpResponse.json({ api_key: newApiKey });
   }),
 ];

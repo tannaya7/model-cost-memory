@@ -142,3 +142,40 @@ export interface RetestLimits {
   spent_this_month_usd: number;
   cap_remaining_usd: number;
 }
+
+export interface User {
+  user_id: string;
+  email: string;
+  name: string;
+  picture_url: string | null;
+}
+
+export interface Project {
+  project_id: string;
+  name: string;
+  webhook_url: string | null;
+  retest_monthly_cap_usd: number;
+  retest_allowed: boolean;
+  key_prefix: string;
+  created_at: string;
+}
+
+export interface ProjectCreateInput {
+  name: string;
+}
+
+export interface ProjectCreateResult {
+  project: Project;
+  api_key: string;
+}
+
+export interface ProjectPatchInput {
+  name?: string;
+  webhook_url?: string | null;
+  retest_monthly_cap_usd?: number;
+  retest_allowed?: boolean;
+}
+
+export interface ProjectKeyResult {
+  api_key: string;
+}
