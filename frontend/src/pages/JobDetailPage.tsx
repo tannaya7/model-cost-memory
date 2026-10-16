@@ -138,6 +138,24 @@ export default function JobDetailPage() {
               {(recommendation) => (
                 <div className="space-y-6">
                   <RecommendationCard recommendation={recommendation} />
+                  {recommendation.verdict === "INSUFFICIENT_EVIDENCE" && (
+                    <div className="rounded-card border border-accent/20 bg-accent-soft p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-ink">
+                          Need more data to evaluate models?
+                        </p>
+                        <p className="text-xs text-dim mt-0.5">
+                          Run a safe re-test using historical prompts to collect evidence on cheaper candidate models.
+                        </p>
+                      </div>
+                      <Link
+                        to={`/retest?job=${encodeURIComponent(recommendation.job)}`}
+                        className="shrink-0 rounded-md bg-accent px-4 py-2 text-xs font-semibold text-on-accent hover:opacity-90 transition-opacity"
+                      >
+                        Start a re-test →
+                      </Link>
+                    </div>
+                  )}
                   <JobEvidenceSection recommendation={recommendation} />
                 </div>
               )}

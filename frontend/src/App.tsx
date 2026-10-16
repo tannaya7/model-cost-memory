@@ -12,6 +12,7 @@ const ModelsPage = lazy(() => import("./pages/ModelsPage"));
 const AlertsPage = lazy(() => import("./pages/AlertsPage"));
 const HistoryPage = lazy(() => import("./pages/HistoryPage"));
 const RetestPage = lazy(() => import("./pages/RetestPage"));
+const RetestRunPage = lazy(() => import("./pages/RetestRunPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
@@ -28,6 +29,7 @@ const router = createBrowserRouter([
       { path: "/alerts", element: <AlertsPage /> },
       { path: "/history", element: <HistoryPage /> },
       { path: "/retest", element: <RetestPage /> },
+      { path: "/retest/:retestId", element: <RetestRunPage /> },
       { path: "/settings", element: <SettingsPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
