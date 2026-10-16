@@ -98,7 +98,7 @@ export default function JobDetailPage() {
         <div
           role="tablist"
           aria-label="Job views"
-          className="flex border-b border-rule gap-2"
+          className="flex border-b border-rule gap-2 overflow-x-auto"
         >
           {tabs.map((tab) => {
             const isSelected = activeTab === tab.id;
@@ -111,7 +111,7 @@ export default function JobDetailPage() {
                 aria-controls={`panel-${tab.id}`}
                 tabIndex={0}
                 onClick={() => handleTabChange(tab.id)}
-                className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent ${
+                className={`-mb-px min-h-[40px] border-b-2 px-4 py-2 text-sm font-medium transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent ${
                   isSelected
                     ? "border-accent text-accent font-semibold"
                     : "border-transparent text-dim hover:border-rule hover:text-ink"

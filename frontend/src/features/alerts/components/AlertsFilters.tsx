@@ -42,7 +42,7 @@ export function AlertsFilters({ counts }: AlertsFiltersProps) {
             type="button"
             aria-pressed={isActive}
             onClick={() => handleFilterClick(f.value)}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent ${
+            className={`min-h-[40px] inline-flex items-center rounded-md px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent ${
               isActive
                 ? "bg-accent-soft font-semibold text-accent"
                 : "border border-rule bg-surface text-dim hover:bg-bg hover:text-ink"

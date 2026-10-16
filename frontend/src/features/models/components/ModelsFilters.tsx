@@ -89,7 +89,7 @@ export function ModelsFilters() {
             placeholder="Search model name..."
             value={queryInput}
             onChange={(e) => setQueryInput(e.target.value)}
-            className="w-full rounded-md border border-rule bg-surface px-3 py-1.5 text-xs text-ink placeholder:text-dim focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            className="w-full min-h-[40px] rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink placeholder:text-dim focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           />
         </div>
 
@@ -106,7 +106,7 @@ export function ModelsFilters() {
                   key={option.value}
                   type="button"
                   onClick={() => handleStatusChange(option.value)}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                  className={`min-h-[40px] inline-flex items-center rounded-md px-3 py-2 text-xs font-medium transition-colors ${
                     isActive
                       ? "bg-accent text-on-accent"
                       : "border border-rule bg-surface text-dim hover:bg-bg hover:text-ink"
@@ -120,12 +120,12 @@ export function ModelsFilters() {
         </div>
 
         {/* "Only models I use" checkbox */}
-        <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-ink">
+        <label className="min-h-[40px] flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-ink">
           <input
             type="checkbox"
             checked={currentUsed}
             onChange={(e) => handleUsedChange(e.target.checked)}
-            className="rounded border-rule text-accent focus:ring-accent"
+            className="h-4 w-4 rounded border-rule text-accent focus:ring-accent"
           />
           <span>Only models I use</span>
         </label>

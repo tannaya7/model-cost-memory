@@ -32,7 +32,7 @@ export function RunsFilters() {
           id="job-filter"
           value={currentJob}
           onChange={(e) => setFilter("job", e.target.value)}
-          className="rounded-md border border-rule bg-surface px-2.5 py-1.5 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+          className="min-h-[40px] rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
         >
           <option value="">All jobs</option>
           {jobs?.map((j) => (
@@ -54,7 +54,7 @@ export function RunsFilters() {
           placeholder="Filter by model..."
           value={currentModel}
           onChange={(e) => setFilter("model", e.target.value)}
-          className="rounded-md border border-rule bg-surface px-2.5 py-1.5 text-sm text-ink placeholder:text-dim focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+          className="min-h-[40px] rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink placeholder:text-dim focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
         />
       </div>
 
@@ -67,7 +67,7 @@ export function RunsFilters() {
           id="outcome-filter"
           value={currentOutcome}
           onChange={(e) => setFilter("outcome", e.target.value)}
-          className="rounded-md border border-rule bg-surface px-2.5 py-1.5 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+          className="min-h-[40px] rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
         >
           <option value="ALL">All</option>
           <option value="PASS">PASS</option>
