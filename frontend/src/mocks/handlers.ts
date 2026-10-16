@@ -1,5 +1,5 @@
 import { delay, http, HttpResponse } from "msw";
-import type { Job, Model, Run, RunDetail, Recommendation, SpendInsight, RegressionAlert, HistoryEntry } from "../shared/api/types";
+import type { Job, Model, Run, RunDetail, Recommendation, SpendInsight, RegressionAlert, HistoryEntry, RetestStatus, RetestLimits } from "../shared/api/types";
 import initialJobs from "./jobs.sample.json";
 import sampleRunsData from "./runs.sample.json";
 import sampleModelsData from "./models.sample.json";
@@ -16,6 +16,7 @@ function isAuthorized(request: Request): boolean {
 
 // In-memory jobs list seeded from jobs.sample.json
 const jobs: Job[] = [...(initialJobs as Job[])];
+const retests = new Map<string, RetestStatus>();
 
 // Generate ~300 mock runs seeded with realistic data
 const outcomes: Array<"PASS" | "FAIL" | "UNKNOWN"> = [
@@ -720,5 +721,140 @@ export const handlers = [
     }
 
     return HttpResponse.json({ detail: "Job not found" }, { status: 404 });
+  }),
+
+  // GET /v1/retest/limits
+  http.get("/v1/retest/limits", async ({ request }) => {
+    await delay(350);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+    const limits: RetestLimits = {
+      monthly_cap_usd: 10.0,
+      spent_this_month_usd: 3.2,
+      cap_remaining_usd: 6.8,
+    };
+    return HttpResponse.json(limits);
+  }),
+
+  // POST /v1/jobs/:job/retest
+  http.post("/v1/jobs/:job/retest", async ({ request, params }) => {
+    await delay(350);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+
+    const jobName = decodeURIComponent(String(params.job));
+    const targetJob = jobs.find((j) => j.name === jobName);
+
+    if (targetJob && targetJob.retest_consent === false) {
+      return HttpResponse.json(
+        { detail: "Re-tests are switched off for this job" },
+        { status: 403 },
+      );
+    }
+
+    const body = (await request.json().catch(() => ({}))) as {
+      candidate_model?: string;
+      budget_usd?: number;
+    };
+
+    if (
+      !body.candidate_model ||
+      typeof body.budget_usd !== "number" ||
+      body.budget_usd <= 0 ||
+      body.budget_usd > 6.8
+    ) {
+      return HttpResponse.json(
+        {
+          detail:
+            "Budget must be greater than 0 and not exceed remaining cap of $6.80",
+        },
+        { status: 422 },
+      );
+    }
+
+    const retestId = crypto.randomUUID();
+    const newRetest: RetestStatus = {
+      retest_id: retestId,
+      job: jobName,
+      candidate_model: body.candidate_model,
+      status: "QUEUED",
+      budget_usd: body.budget_usd,
+      spent_usd: 0,
+      monthly_cap_usd: 10.0,
+      cap_remaining_usd: 6.8,
+      runs_planned: 40,
+      runs_done: 0,
+      passed: 0,
+      failed: 0,
+      pass_rate: null,
+      started_at: new Date().toISOString(),
+      finished_at: null,
+      message: null,
+    };
+
+    retests.set(retestId, newRetest);
+    return HttpResponse.json(newRetest, { status: 202 });
+  }),
+
+  // GET /v1/jobs/:job/retest/:retest_id
+  http.get("/v1/jobs/:job/retest/:retest_id", async ({ request, params }) => {
+    await delay(350);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+
+    const retestId = String(params.retest_id);
+    const record = retests.get(retestId);
+
+    if (!record) {
+      return HttpResponse.json({ detail: "Re-test not found" }, { status: 404 });
+    }
+
+    // Advance progress on each GET
+    if (record.status === "QUEUED") {
+      record.status = "RUNNING";
+    } else if (record.status === "RUNNING") {
+      const remainingBudget = record.budget_usd - record.spent_usd;
+      const maxAffordableRuns = Math.floor(remainingBudget / 0.04);
+
+      if (maxAffordableRuns <= 0) {
+        record.status = "STOPPED_BUDGET";
+        record.message = "Stopped: budget reached";
+        record.spent_usd = record.budget_usd;
+        record.finished_at = new Date().toISOString();
+      } else {
+        const runsRemaining = record.runs_planned - record.runs_done;
+        const runsToAdd = Math.min(6, runsRemaining, maxAffordableRuns);
+
+        const newPassed = Math.round(runsToAdd * 0.85);
+        const newFailed = runsToAdd - newPassed;
+
+        record.passed += newPassed;
+        record.failed += newFailed;
+        record.runs_done += runsToAdd;
+        record.spent_usd = Math.min(
+          record.budget_usd,
+          Number((record.spent_usd + runsToAdd * 0.04).toFixed(4)),
+        );
+        record.pass_rate =
+          record.runs_done > 0
+            ? Number((record.passed / record.runs_done).toFixed(4))
+            : null;
+
+        if (record.runs_done >= record.runs_planned) {
+          record.status = "DONE";
+          record.finished_at = new Date().toISOString();
+        } else if (record.spent_usd >= record.budget_usd || maxAffordableRuns < 6) {
+          record.status = "STOPPED_BUDGET";
+          record.message = "Stopped: budget reached";
+          record.spent_usd = record.budget_usd;
+          record.finished_at = new Date().toISOString();
+        }
+      }
+    }
+
+    return HttpResponse.json(record);
   }),
 ];

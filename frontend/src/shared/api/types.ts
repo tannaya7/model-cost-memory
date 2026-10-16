@@ -105,3 +105,40 @@ export interface HistoryEntry {
   valid_at: string;
   invalid_at: string | null;
 }
+
+export type RetestExecutionStatus =
+  | "QUEUED"
+  | "RUNNING"
+  | "DONE"
+  | "STOPPED_BUDGET"
+  | "FAILED";
+
+export interface RetestStatus {
+  retest_id: string;
+  job: string;
+  candidate_model: string;
+  status: RetestExecutionStatus;
+  budget_usd: number;
+  spent_usd: number;
+  monthly_cap_usd: number;
+  cap_remaining_usd: number;
+  runs_planned: number;
+  runs_done: number;
+  passed: number;
+  failed: number;
+  pass_rate: number | null;
+  started_at: string;
+  finished_at: string | null;
+  message: string | null;
+}
+
+export interface RetestCreateInput {
+  candidate_model: string;
+  budget_usd: number;
+}
+
+export interface RetestLimits {
+  monthly_cap_usd: number;
+  spent_this_month_usd: number;
+  cap_remaining_usd: number;
+}
