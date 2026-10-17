@@ -16,6 +16,12 @@ export default function SignInPage() {
       } catch {
         /* storage unavailable: ignore */
       }
+      try {
+        // Also a cookie, so the Vite fallback mock (which runs in Node) sees it.
+        document.cookie = "mcm_mock_signed_in=true; path=/; SameSite=Lax";
+      } catch {
+        /* storage unavailable: ignore */
+      }
       queryClient.clear();
       const next = searchParams.get("next") || "/";
       navigate(next, { replace: true });

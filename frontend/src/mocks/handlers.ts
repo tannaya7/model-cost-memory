@@ -27,7 +27,11 @@ function isAuthorized(request: Request): boolean {
   return key === "demo-key" || key.startsWith("mcm_");
 }
 
-function isMockSignedIn(): boolean {
+// The mock "signed in" flag lives in localStorage (in-browser mock) and in a cookie,
+// because the Vite fallback mock runs in Node and can only see the request's cookies.
+function isMockSignedIn(request?: Request): boolean {
+  const cookie = request?.headers.get("cookie") ?? "";
+  if (/(?:^|;\s*)mcm_mock_signed_in=true(?:;|$)/.test(cookie)) return true;
   try {
     return localStorage.getItem("mcm_mock_signed_in") === "true";
   } catch {
@@ -910,9 +914,9 @@ export const handlers = [
   }),
 
   // GET /v1/me
-  http.get("/v1/me", async () => {
+  http.get("/v1/me", async ({ request }) => {
     await delay(350);
-    if (!isMockSignedIn()) {
+    if (!isMockSignedIn(request)) {
       return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
     }
     const user: User = {
@@ -932,22 +936,29 @@ export const handlers = [
     } catch {
       /* storage unavailable: ignore */
     }
-    return new HttpResponse(null, { status: 204 });
+    if (typeof document !== "undefined") {
+      document.cookie = "mcm_mock_signed_in=; Max-Age=0; path=/";
+    }
+    // The Set-Cookie header clears the cookie when the Vite fallback mock answers.
+    return new HttpResponse(null, {
+      status: 204,
+      headers: { "Set-Cookie": "mcm_mock_signed_in=; Max-Age=0; Path=/" },
+    });
   }),
 
   // GET /v1/projects
-  http.get("/v1/projects", async () => {
+  http.get("/v1/projects", async ({ request }) => {
     await delay(350);
-    if (!isMockSignedIn()) {
+    if (!isMockSignedIn(request)) {
       return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
     }
     return HttpResponse.json(projects);
   }),
 
   // GET /v1/projects/:project_id
-  http.get("/v1/projects/:project_id", async ({ params }) => {
+  http.get("/v1/projects/:project_id", async ({ request, params }) => {
     await delay(350);
-    if (!isMockSignedIn()) {
+    if (!isMockSignedIn(request)) {
       return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
     }
     const id = String(params.project_id);
@@ -961,7 +972,7 @@ export const handlers = [
   // POST /v1/projects
   http.post("/v1/projects", async ({ request }) => {
     await delay(350);
-    if (!isMockSignedIn()) {
+    if (!isMockSignedIn(request)) {
       return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
     }
     const body = (await request.json().catch(() => ({}))) as { name?: string };
@@ -990,7 +1001,7 @@ export const handlers = [
   // PATCH /v1/projects/:project_id
   http.patch("/v1/projects/:project_id", async ({ request, params }) => {
     await delay(350);
-    if (!isMockSignedIn()) {
+    if (!isMockSignedIn(request)) {
       return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
     }
     const id = String(params.project_id);
@@ -1041,9 +1052,9 @@ export const handlers = [
   }),
 
   // POST /v1/projects/:project_id/key
-  http.post("/v1/projects/:project_id/key", async ({ params }) => {
+  http.post("/v1/projects/:project_id/key", async ({ request, params }) => {
     await delay(350);
-    if (!isMockSignedIn()) {
+    if (!isMockSignedIn(request)) {
       return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
     }
     const id = String(params.project_id);
