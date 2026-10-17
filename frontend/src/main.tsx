@@ -9,7 +9,12 @@ import "./index.css";
 async function start() {
   if (import.meta.env.DEV && import.meta.env.VITE_USE_MOCK === "true") {
     const { worker } = await import("./mocks/browser");
-    await worker.start();
+    try {
+      await worker.start();
+    } catch (err) {
+      // Still render the app, so each page shows a clear error instead of a blank screen.
+      console.error("[MSW] Mock server failed to start. Restart with: VITE_USE_MOCK=true npm run dev", err);
+    }
   }
   createRoot(document.getElementById("root")!).render(
     <StrictMode>

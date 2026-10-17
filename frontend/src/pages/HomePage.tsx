@@ -4,6 +4,7 @@ import { Card } from "../shared/components/Card";
 import { Skeleton } from "../shared/components/Skeleton";
 import { EmptyState } from "../shared/components/EmptyState";
 import { ErrorMessage } from "../shared/components/ErrorMessage";
+import { StaleDataNotice } from "../shared/components/StaleDataNotice";
 import { useJobs } from "../features/jobs/hooks/useJobs";
 import { useSpendInsights } from "../features/insights/hooks/useSpendInsights";
 import { JobOverviewCard } from "../features/jobs/components/JobOverviewCard";
@@ -58,9 +59,18 @@ export default function HomePage() {
         </div>
       )}
 
-      {jobsQuery.isError && (
+      {jobsQuery.isError && !jobsQuery.data && (
         <ErrorMessage
           error={jobsQuery.error}
+          onRetry={() => {
+            jobsQuery.refetch();
+            spendQuery.refetch();
+          }}
+        />
+      )}
+
+      {jobsQuery.isError && jobsQuery.data && (
+        <StaleDataNotice
           onRetry={() => {
             jobsQuery.refetch();
             spendQuery.refetch();

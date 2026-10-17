@@ -58,5 +58,9 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
         : res.statusText;
     throw new ApiError(res.status, detail || `Request failed (${res.status})`, body);
   }
+
+  if (typeof body === "string" && (body.trim().startsWith("<") || res.headers.get("content-type")?.includes("text/html"))) {
+    throw new ApiError(500, "The server sent a web page instead of data. Check that the mock server or backend is running", body);
+  }
   return body as T;
 }

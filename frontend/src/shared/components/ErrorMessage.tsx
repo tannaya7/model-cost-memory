@@ -5,6 +5,10 @@ function describe(error: unknown): string {
     if (error.status === 401) return "The project key was not accepted. Check it in Settings.";
     return `${error.message} (${error.status})`;
   }
+  // fetch() throws a TypeError ("Failed to fetch") when the request never reached a server.
+  if (error instanceof TypeError) {
+    return "Could not reach the server. Check that the dev server is still running, then try again.";
+  }
   if (error instanceof Error) return error.message;
   return "Something went wrong.";
 }

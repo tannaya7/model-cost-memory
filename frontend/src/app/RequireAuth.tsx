@@ -25,7 +25,14 @@ export function RequireAuth() {
     return <Outlet />;
   }
 
-  if (isError && !(error instanceof ApiError && error.status === 401)) {
+  const isSignedOut = isError && error instanceof ApiError && error.status === 401;
+
+  // We already know who the user is and only a background refresh failed (not a 401): stay in.
+  if (isError && user && !isSignedOut) {
+    return <Outlet />;
+  }
+
+  if (isError && !isSignedOut) {
     return (
       <div className="min-h-screen p-8 flex items-center justify-center">
         <div className="w-full max-w-md">
