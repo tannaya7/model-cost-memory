@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createJob } from "../api/jobsApi";
 import { ApiError } from "../../../shared/api/apiFetch";
 import type { JobCreate } from "../../../shared/api/types";
+import { CHECK_KIND_LABELS } from "../checkKinds";
 
 const jobFormSchema = z
   .object({
@@ -18,7 +19,8 @@ const jobFormSchema = z
         "Name must start with an alphanumeric character and contain only letters, numbers, '.', '_', or '-'",
       ),
     description: z.string().max(500, "Description must be under 500 characters").optional(),
-    check_kind: z.enum(["ANSWER_KEY", "SCHEMA"]),
+    // TEST_COMMAND needs a code sandbox, which v1 does not have; the backend rejects it.
+    check_kind: z.enum(["ANSWER_KEY", "SCHEMA", "LATE_LABEL"]),
     fields: z.array(z.object({ name: z.string() })).optional(),
     schemaJson: z.string().optional(),
     retest_consent: z.boolean(),
@@ -155,7 +157,7 @@ export function JobCreatePanel({
         .map((f) => f.name.trim())
         .filter(Boolean);
       checkConfig = { fields: fieldNames };
-    } else {
+    } else if (values.check_kind === "SCHEMA") {
       checkConfig = { schema: JSON.parse(values.schemaJson!) };
     }
 
@@ -268,25 +270,18 @@ export function JobCreatePanel({
             <label className="block text-sm font-medium text-ink mb-2">
               Check Kind <span className="text-bad">*</span>
             </label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="radio"
-                  value="ANSWER_KEY"
-                  {...register("check_kind")}
-                  className="text-accent focus:ring-accent"
-                />
-                <span className="font-medium">Answer key</span>
-              </label>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="radio"
-                  value="SCHEMA"
-                  {...register("check_kind")}
-                  className="text-accent focus:ring-accent"
-                />
-                <span className="font-medium">Schema</span>
-              </label>
+            <div className="flex flex-wrap gap-4">
+              {(["ANSWER_KEY", "SCHEMA", "LATE_LABEL"] as const).map((kind) => (
+                <label key={kind} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    value={kind}
+                    {...register("check_kind")}
+                    className="text-accent focus:ring-accent"
+                  />
+                  <span className="font-medium">{CHECK_KIND_LABELS[kind]}</span>
+                </label>
+              ))}
             </div>
           </div>
 
@@ -336,6 +331,14 @@ export function JobCreatePanel({
                     <p className="mt-2 text-xs text-bad">{errors.fields.message}</p>
                   )}
                 </div>
+              ) : selectedKind === "LATE_LABEL" ? (
+                <div className="text-sm">
+                  <p className="font-medium text-ink">Nothing to set up</p>
+                  <p className="mt-1 text-xs text-dim">
+                    Runs are stored as UNKNOWN. A person or another system labels each one later from the
+                    run's detail panel or with <code className="font-mono">POST /v1/runs/&#123;id&#125;/label</code>.
+                  </p>
+                </div>
               ) : (
                 <div>
                   <label htmlFor="schema-json" className="block text-sm font-medium text-ink mb-1">
@@ -358,9 +361,19 @@ export function JobCreatePanel({
             <div className="rounded-card border border-rule bg-bg p-4 flex flex-col justify-between">
               <div>
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-dim mb-2">
-                  Worked Example ({selectedKind === "ANSWER_KEY" ? "Answer key" : "Schema"})
+                  Worked Example ({CHECK_KIND_LABELS[selectedKind]})
                 </h4>
-                {selectedKind === "ANSWER_KEY" ? (
+                {selectedKind === "LATE_LABEL" ? (
+                  <div className="space-y-3 text-xs">
+                    <p className="text-dim">
+                      For work only a person can judge, such as routing a support ticket.
+                    </p>
+                    <div className="rounded-md border border-rule bg-surface p-2.5 text-dim">
+                      The model answers "billing". An agent later sees the ticket was about a refund and
+                      labels the run <span className="font-semibold text-bad">Fail</span>.
+                    </div>
+                  </div>
+                ) : selectedKind === "ANSWER_KEY" ? (
                   <div className="space-y-3 text-xs">
                     <p className="text-dim">
                       A run passes when each listed field matches the expected answer.

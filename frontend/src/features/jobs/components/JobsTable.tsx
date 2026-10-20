@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import type { Job } from "../../../shared/api/types";
 import { Badge } from "../../../shared/components/Badge";
 import { Table, type Column } from "../../../shared/components/Table";
+import { CHECK_KIND_LABELS } from "../checkKinds";
 
 const RUN_STATES = [
   { key: "CAPTURED", label: "Captured", title: "Received, not yet checked" },
@@ -49,13 +50,7 @@ const columns: Column<Job>[] = [
     header: "Check",
     render: (j) => {
       if (!j.check_kind) return "-";
-      const label =
-        j.check_kind === "ANSWER_KEY"
-          ? "Answer key"
-          : j.check_kind === "SCHEMA"
-          ? "Schema"
-          : j.check_kind;
-      return <Badge tone="accent">{label}</Badge>;
+      return <Badge tone="accent">{CHECK_KIND_LABELS[j.check_kind] ?? j.check_kind}</Badge>;
     },
   },
   {
