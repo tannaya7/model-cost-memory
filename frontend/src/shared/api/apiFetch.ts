@@ -29,6 +29,20 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * FastAPI sends `detail` as a string for HTTPException, but as a list of
+ * `{loc, msg}` objects for a 422 validation error.
+ */
+function describeDetail(detail: unknown): string {
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d) => (d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : String(d)))
+      .map((msg) => msg.replace(/^Value error, /, ""))
+      .join("; ");
+  }
+  return String(detail);
+}
+
 /** Relative paths only (e.g. "/v1/jobs"), so the app works from the same origin as the API. */
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
@@ -54,7 +68,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (!res.ok) {
     const detail =
       body && typeof body === "object" && "detail" in body
-        ? String((body as { detail: unknown }).detail)
+        ? describeDetail((body as { detail: unknown }).detail)
         : res.statusText;
     throw new ApiError(res.status, detail || `Request failed (${res.status})`, body);
   }
