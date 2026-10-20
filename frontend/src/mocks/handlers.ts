@@ -1,5 +1,6 @@
 import { delay, http, HttpResponse } from "msw";
 import type {
+  LabelCreate,
   Job,
   Model,
   Run,
@@ -334,6 +335,28 @@ export const handlers = [
       return HttpResponse.json({ detail: "Run not found" }, { status: 404 });
     }
 
+    return HttpResponse.json(run);
+  }),
+
+  // POST /v1/runs/:run_id/label (same rules as the backend's ingest.label_run)
+  http.post("/v1/runs/:run_id/label", async ({ request, params }) => {
+    await delay(350);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+
+    const run = runs.find((r) => r.run_id === params.run_id);
+    if (!run) {
+      return HttpResponse.json({ detail: "Run not found" }, { status: 404 });
+    }
+    if (run.outcome !== "UNKNOWN") {
+      return HttpResponse.json({ detail: "This run already has an outcome" }, { status: 409 });
+    }
+
+    const { outcome, reason } = (await request.json()) as LabelCreate;
+    run.outcome = outcome;
+    run.outcome_reason = `labelled ${outcome}` + (reason ? `: ${reason}` : "");
+    if (run.state === "CAPTURED") run.state = "CHECKED";
     return HttpResponse.json(run);
   }),
 

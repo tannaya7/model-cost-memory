@@ -5,6 +5,7 @@ export type JobCreate = components["schemas"]["JobCreate"];
 export type Run = components["schemas"]["RunOut"];
 export type RunDetail = components["schemas"]["RunDetail"];
 export type RunPage = components["schemas"]["RunPage"];
+export type LabelCreate = components["schemas"]["LabelCreate"];
 export type CheckKind = components["schemas"]["JobCreate"]["check_kind"];
 
 export type Model = components["schemas"]["ModelOut"];
