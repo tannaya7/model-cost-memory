@@ -15,7 +15,8 @@ recommended and why it changed.
 
 - A small SDK (`RunRecorder`) wraps the app's existing model call and sends a copy of each run in
   the background. The production call never passes through this system.
-- Each run is checked automatically (answer key, tests in a sandbox, or schema) and stored.
+- Each run is checked automatically (an answer key or a JSON schema, or a label supplied later) and stored
+  with the reason it passed or failed.
 - Evidence fades with age, faster for model versions that have been superseded, so conclusions stay
   current without anyone curating a test set.
 - Scheduled jobs consolidate runs into recommendations, detect regressions across version changes,
@@ -23,30 +24,83 @@ recommended and why it changed.
 
 Full design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 illustrated walkthrough: [`docs/Architecture_Overview.pdf`](docs/Architecture_Overview.pdf) ·
-database schema: [`db/schema.sql`](db/schema.sql)
+database schema: [`db/schema.sql`](db/schema.sql) · API contract: [`contract/`](contract/)
 
 ## Status
 
-**Week 1 of 12: repository structure and architecture.** Modules exist with their responsibilities
-documented; logic is implemented week by week.
-
-| Weeks | Milestone |
-|---|---|
-| 1–4 | Record and check: data model, SDK and ingest API, outcome checkers with sandbox |
-| 5–8 | Score and recommend: similar-run search, decay, model catalog, recommendations, history. **Public deployment from Week 7** |
-| 9–12 | Detect, prove and ship: regression alerts, re-test runner, lineage graph, staleness experiment, demo |
+| Weeks | Milestone | State |
+|---|---|---|
+| 1 | Repository, schema, architecture | done |
+| 2 | Data model, migrations, API contract | done |
+| 3 | Recorder SDK, idempotent ingest, project keys | done |
+| 4 | Outcome checkers, invoice-extraction corpus | done |
+| 5 | Sync worker, pgvector search, outbox janitor, server files | done (server files not yet run on a real server) |
+| 6 | Importance and decay, model catalog | done |
+| 7–8 | Recommendation engine, public deployment, consolidation, history | next |
+| 9–12 | Regression detection and alerts, re-test runner, sign-in, staleness experiment | planned |
 
 ## Getting started
 
+Development needs Python 3.11+ and a PostgreSQL database with the pgvector extension. A free hosted
+[Neon](https://neon.tech) database works well and needs no Docker. Tests need neither: they start their own
+embedded Postgres.
+
 ```bash
-cp .env.example .env
-docker compose up -d db          # Postgres with pgvector; db/schema.sql is applied on first start
+python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-pytest
+cp .env.example .env                                  # set DATABASE_URL to your database
+
+alembic upgrade head                                  # create the tables
+python scripts/create_project.py my-company           # prints the project key once; copy it
+python scripts/sync_catalog.py                        # model prices and shutdown dates (optional)
+
+uvicorn agent_memory.api:app --reload                 # the API on http://127.0.0.1:8000
+python -m agent_memory.pipeline.sync_worker           # embeds recorded runs (second terminal)
+python -m agent_memory.scheduler                      # maintenance jobs (third terminal)
 ```
 
-The API, worker, scheduler and demo UI are already defined in `docker-compose.yml` under the
-`full` profile and are switched on as they are implemented.
+Record a call from your own code:
+
+```python
+from agent_memory.recorder import RunRecorder
+
+with RunRecorder(job="invoice-extract") as rec:
+    response = client.chat.completions.create(model="my-model", messages=[...])   # your call, unchanged
+    rec.capture(response, prompt=prompt, model="my-model", expected={"total": 1250.0})
+```
+
+Set `MCM_API_KEY` to the project key (and `MCM_API_URL` if the API is not local). The recorder sends in the
+background, adds well under 5 ms, and never raises into your application.
+
+Try it with the built-in corpus of invoices with known answers (a local Ollama model is free):
+
+```bash
+python scripts/build_corpus.py
+python scripts/run_corpus.py --model llama3.2 --limit 50
+```
+
+Logs are JSON lines carrying `run_id`, `job_id` and `project_id`, so one run can be followed end to end
+(`LOG_FORMAT=text` gives a readable form for a terminal). To check that the sync worker is healthy:
+
+```bash
+python scripts/outbox_status.py        # prints the queue counts; exits 1 if anything is failed, stuck or slow
+```
+
+Tool-call arguments can hold sensitive data, so only each tool's name and call id are kept. A project can opt in
+to keeping arguments with `create_project.py --store-tool-arguments`.
+
+Run the tests and lint:
+
+```bash
+pytest
+ruff check .
+```
+
+Docker is for the server only. See [`deploy/README.md`](deploy/README.md).
+
+## Contributing
+
+Branch names, commit messages and sign-off rules are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Team
 

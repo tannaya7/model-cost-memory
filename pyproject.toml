@@ -13,24 +13,23 @@ dependencies = [
     "fastapi",
     "uvicorn[standard]",
     "pydantic>=2",
-    "sqlalchemy>=2",
+    "sqlalchemy[asyncio]>=2",
     "asyncpg",
     "alembic",
     "pgvector",
-    "sentence-transformers",
     "scipy",
+    "jsonschema",
     "apscheduler",
     "cachetools",
     "httpx",
     "anthropic",
     "openai",
-    "docker",
 ]
 
 [project.optional-dependencies]
-graph = ["neo4j"]
-demo = ["streamlit"]
-dev = ["pytest", "pytest-asyncio", "hypothesis", "ruff"]
+embeddings = ["sentence-transformers"]   # ~2 GB with PyTorch: installed in the sync worker image only
+sandbox = ["docker"]                     # test-command sandbox runner only; see TIP section 7
+dev = ["pytest", "pytest-asyncio", "hypothesis", "ruff", "pgserver"]   # pgserver: embedded Postgres for local tests
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -38,7 +37,13 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+# Pinned so a new ruff release cannot start failing CI: syntax errors, import errors, pyflakes.
+select = ["E4", "E9", "F"]

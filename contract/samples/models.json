@@ -1,0 +1,41 @@
+{
+  "items": [
+    {
+      "first_seen_at": "2026-09-01T00:00:00Z",
+      "model": "acme-large-2026-06-01",
+      "model_version": "acme-large-2026-06-01",
+      "price_in_per_mtok": 3.0,
+      "price_out_per_mtok": 15.0,
+      "provider": "acme",
+      "shutdown_date": null,
+      "source": "SYNC",
+      "status": "ACTIVE",
+      "used_by_project": true
+    },
+    {
+      "first_seen_at": "2026-09-01T00:00:00Z",
+      "model": "acme-old-2025-01-01",
+      "model_version": "acme-old-2025-01-01",
+      "price_in_per_mtok": 10.0,
+      "price_out_per_mtok": 30.0,
+      "provider": "acme",
+      "shutdown_date": "2026-12-01",
+      "source": "SYNC",
+      "status": "DEPRECATED",
+      "used_by_project": true
+    },
+    {
+      "first_seen_at": "2026-09-01T00:00:00Z",
+      "model": "local-llm:3b",
+      "model_version": "local-llm:3b",
+      "price_in_per_mtok": 0.0,
+      "price_out_per_mtok": 0.0,
+      "provider": "ollama",
+      "shutdown_date": null,
+      "source": "MANUAL",
+      "status": "ACTIVE",
+      "used_by_project": false
+    }
+  ],
+  "next_cursor": null
+}

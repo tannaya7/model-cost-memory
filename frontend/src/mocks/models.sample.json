@@ -1,0 +1,149 @@
+{
+  "items": [
+    {
+      "first_seen_at": "2026-06-01T00:00:00Z",
+      "model": "acme-large-2026-06-01",
+      "model_version": "acme-large-2026-06-01",
+      "price_in_per_mtok": 3.0,
+      "price_out_per_mtok": 15.0,
+      "provider": "acme",
+      "shutdown_date": null,
+      "source": "SYNC",
+      "status": "ACTIVE",
+      "used_by_project": true
+    },
+    {
+      "first_seen_at": "2026-06-01T00:00:00Z",
+      "model": "acme-mini-2026-06-01",
+      "model_version": "v1.2",
+      "price_in_per_mtok": 0.15,
+      "price_out_per_mtok": 0.6,
+      "provider": "acme",
+      "shutdown_date": null,
+      "source": "SYNC",
+      "status": "ACTIVE",
+      "used_by_project": true
+    },
+    {
+      "first_seen_at": "2025-01-01T00:00:00Z",
+      "model": "acme-old-2025-01-01",
+      "model_version": "acme-old-2025-01-01",
+      "price_in_per_mtok": 10.0,
+      "price_out_per_mtok": 30.0,
+      "provider": "acme",
+      "shutdown_date": "2026-11-05",
+      "source": "SYNC",
+      "status": "DEPRECATED",
+      "used_by_project": true
+    },
+    {
+      "first_seen_at": "2025-08-01T00:00:00Z",
+      "model": "acme-preview-2025-08-01",
+      "model_version": "acme-preview-2025-08-01",
+      "price_in_per_mtok": 5.0,
+      "price_out_per_mtok": 20.0,
+      "provider": "acme",
+      "shutdown_date": "2027-01-15",
+      "source": "SYNC",
+      "status": "DEPRECATED",
+      "used_by_project": false
+    },
+    {
+      "first_seen_at": "2024-01-01T00:00:00Z",
+      "model": "acme-legacy-2024-01-01",
+      "model_version": "v0.9-alpha",
+      "price_in_per_mtok": 20.0,
+      "price_out_per_mtok": 60.0,
+      "provider": "acme",
+      "shutdown_date": "2025-12-31",
+      "source": "SYNC",
+      "status": "RETIRED",
+      "used_by_project": false
+    },
+    {
+      "first_seen_at": "2026-09-01T00:00:00Z",
+      "model": "claude-3-5-sonnet-20241022",
+      "model_version": "claude-3-5-sonnet-20241022",
+      "price_in_per_mtok": 3.0,
+      "price_out_per_mtok": 15.0,
+      "provider": "anthropic",
+      "shutdown_date": null,
+      "source": "SYNC",
+      "status": "ACTIVE",
+      "used_by_project": true
+    },
+    {
+      "first_seen_at": "2026-09-01T00:00:00Z",
+      "model": "claude-3-5-haiku-20241022",
+      "model_version": "claude-3-5-haiku-20241022",
+      "price_in_per_mtok": 1.0,
+      "price_out_per_mtok": 5.0,
+      "provider": "anthropic",
+      "shutdown_date": null,
+      "source": "SYNC",
+      "status": "ACTIVE",
+      "used_by_project": false
+    },
+    {
+      "first_seen_at": "2026-02-01T00:00:00Z",
+      "model": "claude-3-opus-20240229",
+      "model_version": "claude-3-opus-20240229",
+      "price_in_per_mtok": 15.0,
+      "price_out_per_mtok": 75.0,
+      "provider": "anthropic",
+      "shutdown_date": null,
+      "source": "SYNC",
+      "status": "ACTIVE",
+      "used_by_project": false
+    },
+    {
+      "first_seen_at": "2023-11-01T00:00:00Z",
+      "model": "claude-2-1",
+      "model_version": "claude-2-1",
+      "price_in_per_mtok": 8.0,
+      "price_out_per_mtok": 24.0,
+      "provider": "anthropic",
+      "shutdown_date": "2026-11-12",
+      "source": "SYNC",
+      "status": "DEPRECATED",
+      "used_by_project": true
+    },
+    {
+      "first_seen_at": "2026-09-01T00:00:00Z",
+      "model": "local-llm:3b",
+      "model_version": "local-llm:3b",
+      "price_in_per_mtok": 0.0,
+      "price_out_per_mtok": 0.0,
+      "provider": "ollama",
+      "shutdown_date": null,
+      "source": "MANUAL",
+      "status": "ACTIVE",
+      "used_by_project": false
+    },
+    {
+      "first_seen_at": "2026-09-01T00:00:00Z",
+      "model": "llama-3.1:70b",
+      "model_version": "q4_K_M",
+      "price_in_per_mtok": 0.0,
+      "price_out_per_mtok": 0.0,
+      "provider": "ollama",
+      "shutdown_date": null,
+      "source": "MANUAL",
+      "status": "ACTIVE",
+      "used_by_project": false
+    },
+    {
+      "first_seen_at": "2026-10-01T00:00:00Z",
+      "model": "custom-enterprise-v1",
+      "model_version": "custom-enterprise-v1",
+      "price_in_per_mtok": null,
+      "price_out_per_mtok": null,
+      "provider": "ollama",
+      "shutdown_date": null,
+      "source": "MANUAL",
+      "status": "ACTIVE",
+      "used_by_project": true
+    }
+  ],
+  "next_cursor": null
+}
