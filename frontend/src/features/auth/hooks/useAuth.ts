@@ -8,6 +8,9 @@ export function useMe() {
     queryKey: meKey,
     queryFn: fetchMe,
     retry: false,
+    // AppShell also calls useMe(); without this its mount refetches a failed /v1/me, which flips
+    // RequireAuth back to its skeleton, unmounts the shell, and loops.
+    retryOnMount: false,
     staleTime: 60_000,
   });
 }
