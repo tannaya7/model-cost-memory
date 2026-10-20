@@ -2,6 +2,8 @@ import { useParams, Link, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../shared/components/PageHeader";
 import { QueryState } from "../shared/components/QueryState";
 import { ApiError } from "../shared/api/apiFetch";
+import { EmptyState } from "../shared/components/EmptyState";
+import { useJobs } from "../features/jobs/hooks/useJobs";
 import { useRecommendation } from "../features/recommendations/hooks/useRecommendation";
 import { RecommendationCard } from "../features/recommendations/components/RecommendationCard";
 import { JobEvidenceSection } from "../features/recommendations/components/JobEvidenceSection";
@@ -15,7 +17,20 @@ export default function JobDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get("tab") || "recommendation";
 
-  if (query.isError && query.error instanceof ApiError && query.error.status === 404) {
+  // A 404 from the recommendation endpoint does not mean the job is missing (the endpoint may
+  // not be deployed yet), so only the jobs list decides that.
+  const jobs = useJobs();
+  const jobMissing = jobs.isSuccess && !jobs.data.some((j) => j.name === jobName);
+  const noRecommendation =
+    !jobMissing && query.isError && query.error instanceof ApiError && query.error.status === 404;
+  const noRecommendationNotice = (
+    <EmptyState
+      title="No recommendation yet"
+      hint="The server has none for this job yet. Its runs are still recorded: see View runs."
+    />
+  );
+
+  if (jobMissing) {
     return (
       <>
         <PageHeader
@@ -130,36 +145,38 @@ export default function JobDetailPage() {
             id="panel-recommendation"
             aria-labelledby="tab-recommendation"
           >
-            <QueryState
-              query={query}
-              emptyTitle="No recommendation available"
-              emptyHint="Record more runs for this job to generate a model recommendation."
-            >
-              {(recommendation) => (
-                <div className="space-y-6">
-                  <RecommendationCard recommendation={recommendation} />
-                  {recommendation.verdict === "INSUFFICIENT_EVIDENCE" && (
-                    <div className="rounded-card border border-accent/20 bg-accent-soft p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-ink">
-                          Need more data to evaluate models?
-                        </p>
-                        <p className="text-xs text-dim mt-0.5">
-                          Run a safe re-test using historical prompts to collect evidence on cheaper candidate models.
-                        </p>
+            {noRecommendation ? noRecommendationNotice : (
+              <QueryState
+                query={query}
+                emptyTitle="No recommendation available"
+                emptyHint="Record more runs for this job to generate a model recommendation."
+              >
+                {(recommendation) => (
+                  <div className="space-y-6">
+                    <RecommendationCard recommendation={recommendation} />
+                    {recommendation.verdict === "INSUFFICIENT_EVIDENCE" && (
+                      <div className="rounded-card border border-accent/20 bg-accent-soft p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-ink">
+                            Need more data to evaluate models?
+                          </p>
+                          <p className="text-xs text-dim mt-0.5">
+                            Run a safe re-test using historical prompts to collect evidence on cheaper candidate models.
+                          </p>
+                        </div>
+                        <Link
+                          to={`/retest?job=${encodeURIComponent(recommendation.job)}`}
+                          className="shrink-0 rounded-md bg-accent px-4 py-2 text-xs font-semibold text-on-accent hover:opacity-90 transition-opacity"
+                        >
+                          Start a re-test →
+                        </Link>
                       </div>
-                      <Link
-                        to={`/retest?job=${encodeURIComponent(recommendation.job)}`}
-                        className="shrink-0 rounded-md bg-accent px-4 py-2 text-xs font-semibold text-on-accent hover:opacity-90 transition-opacity"
-                      >
-                        Start a re-test →
-                      </Link>
-                    </div>
-                  )}
-                  <JobEvidenceSection recommendation={recommendation} />
-                </div>
-              )}
-            </QueryState>
+                    )}
+                    <JobEvidenceSection recommendation={recommendation} />
+                  </div>
+                )}
+              </QueryState>
+            )}
           </div>
         )}
 
@@ -179,15 +196,17 @@ export default function JobDetailPage() {
             id="panel-compare"
             aria-labelledby="tab-compare"
           >
-            <QueryState
-              query={query}
-              emptyTitle="No comparison data available"
-              emptyHint="Record runs across candidate models to see comparisons."
-            >
-              {(recommendation) => (
-                <JobCompareTable recommendation={recommendation} />
-              )}
-            </QueryState>
+            {noRecommendation ? noRecommendationNotice : (
+              <QueryState
+                query={query}
+                emptyTitle="No comparison data available"
+                emptyHint="Record runs across candidate models to see comparisons."
+              >
+                {(recommendation) => (
+                  <JobCompareTable recommendation={recommendation} />
+                )}
+              </QueryState>
+            )}
           </div>
         )}
       </div>

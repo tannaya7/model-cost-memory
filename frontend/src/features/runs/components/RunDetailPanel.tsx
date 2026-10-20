@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useRunDetail } from "../hooks/useRunDetail";
 import { Badge } from "../../../shared/components/Badge";
 import { Skeleton } from "../../../shared/components/Skeleton";
+import { RunLabelForm } from "./RunLabelForm";
 
 function formatDateTime(iso: string): string {
   try {
@@ -144,6 +145,8 @@ export function RunDetailPanel({
                   <p className="mt-1 font-mono text-xs whitespace-pre-wrap">{run.outcome_reason}</p>
                 </div>
               )}
+
+              {run.outcome === "UNKNOWN" && <RunLabelForm key={run.run_id} runId={run.run_id} />}
 
               {/* Metadata Grid */}
               <div className="grid grid-cols-2 gap-4 rounded-card border border-rule p-4 text-sm sm:grid-cols-3">
