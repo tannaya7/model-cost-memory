@@ -17,6 +17,7 @@ import type {
 import initialJobs from "./jobs.sample.json";
 import sampleRunsData from "./runs.sample.json";
 import sampleModelsData from "./models.sample.json";
+import sampleRecommendation from "./recommendation.sample.json";
 
 const models: Model[] = [...(sampleModelsData.items as Model[])];
 
@@ -410,228 +411,62 @@ export const handlers = [
 
     const jobName = decodeURIComponent(String(params.job));
 
+    const base = sampleRecommendation as Recommendation;
+
     if (jobName === "invoice-extract") {
-      const rec: Recommendation = {
-        job: "invoice-extract",
-        current_model: "max",
-        rules: { evidence_floor: 25.0, tolerance: 0.02 },
-        verdict: "DOWNGRADE",
-        recommended: { model: "mini", model_version: "2026-09" },
-        comparison: {
-          recommended: {
-            model: "mini",
-            latest_version: "2026-09",
-            catalog_status: "ACTIVE",
-            shutdown_date: null,
-            n_runs: 820,
-            failures: 31,
-            evidence_weight: 812.5,
-            weighted_pass_rate: 0.962,
-            mean_cost_usd: 0.0031,
-            cost_per_success_usd: 0.0032,
-            eligible: true,
-          },
-          current: {
-            model: "max",
-            latest_version: "2026-09",
-            catalog_status: "ACTIVE",
-            shutdown_date: null,
-            n_runs: 450,
-            failures: 13,
-            evidence_weight: 430.2,
-            weighted_pass_rate: 0.971,
-            mean_cost_usd: 0.0347,
-            cost_per_success_usd: 0.0357,
-            eligible: true,
-          },
-        },
-        candidates: [
-          {
-            model: "mini",
-            latest_version: "2026-09",
-            catalog_status: "ACTIVE",
-            shutdown_date: null,
-            n_runs: 820,
-            failures: 31,
-            evidence_weight: 812.5,
-            weighted_pass_rate: 0.962,
-            mean_cost_usd: 0.0031,
-            cost_per_success_usd: 0.0032,
-            eligible: true,
-          },
-          {
-            model: "max",
-            latest_version: "2026-09",
-            catalog_status: "ACTIVE",
-            shutdown_date: null,
-            n_runs: 450,
-            failures: 13,
-            evidence_weight: 430.2,
-            weighted_pass_rate: 0.971,
-            mean_cost_usd: 0.0347,
-            cost_per_success_usd: 0.0357,
-            eligible: true,
-          },
-        ],
-        excluded: [
-          {
-            model: "acme-legacy-2024-01-01",
-            latest_version: "v0.9-alpha",
-            catalog_status: "RETIRED",
-            shutdown_date: "2025-12-31",
-            n_runs: 10,
-            failures: 4,
-            evidence_weight: 8.0,
-            weighted_pass_rate: 0.6,
-            mean_cost_usd: 0.02,
-            cost_per_success_usd: 0.033333,
-            why: "RETIRED by its provider on 2025-12-31, can't be called",
-          },
-        ],
-        forecast: {
-          runs_per_month: 960,
-          monthly_saving_usd: 29.4,
-          extra_failures_per_month: 8.6,
-          note: "negative saving = costs more; negative extra failures = fewer failures",
-        },
-        warnings: [
-          "acme-old-2025-01-01 is DEPRECATED and shuts down on 2026-11-05.",
-          "Your current model regressed: accuracy dropped by 6.2% on invoice extraction.",
-        ],
-        evidence: {
-          n_runs: 820,
-          evidence_weight: 812.5,
-          failures: 31,
-          recent_failing_runs: [
-            {
-              run_id: "00000000-0000-0000-0001-000000000005",
-              model_version: "2026-09",
-              outcome_reason: "total: expected 1250.00, got 1205.00",
-              created_at: "2026-10-15T18:30:00Z",
-            },
-            {
-              run_id: "00000000-0000-0000-0001-000000000012",
-              model_version: "2026-09",
-              outcome_reason: "date: expected 2026-10-14, got null",
-              created_at: "2026-10-15T14:15:00Z",
-            },
-            {
-              run_id: "00000000-0000-0000-0001-000000000028",
-              model_version: "2026-09",
-              outcome_reason: "vendor: expected 'ShopCo', got 'Shop LLC'",
-              created_at: "2026-10-14T20:45:00Z",
-            },
-            {
-              run_id: "00000000-0000-0000-0001-000000000041",
-              model_version: "2026-09",
-              outcome_reason: "total: expected 850.50, got 850.00",
-              created_at: "2026-10-14T11:00:00Z",
-            },
-          ],
-        },
-      };
-      return HttpResponse.json(rec);
+      // The contract sample, produced by the backend's own engine.
+      return HttpResponse.json(base);
     }
 
     if (jobName === "ticket-classify") {
+      const mini = {
+        ...base.models[1],
+        model: "mini",
+        model_version: "mini-2026-09",
+        n_runs: 12,
+        failures: 1,
+        evidence_weight: 11.0,
+        effective_n: 11.0,
+        weighted_pass_rate: 0.917,
+        pass_rate_low: 0.646,
+        pass_rate_high: 0.985,
+        mean_cost_usd: 0.003,
+        cost_per_success_usd: 0.00327,
+        status: "BELOW_FLOOR" as const,
+        eligible: false,
+        why: "Evidence 11.0 of the 25 needed to judge it",
+      };
       const rec: Recommendation = {
+        ...base,
         job: "ticket-classify",
-        current_model: "mini",
-        rules: { evidence_floor: 25.0, tolerance: 0.02 },
         verdict: "INSUFFICIENT_EVIDENCE",
-        candidates: [
-          {
-            model: "mini",
-            latest_version: "2026-09",
-            catalog_status: "ACTIVE",
-            shutdown_date: null,
-            n_runs: 12,
-            failures: 1,
-            evidence_weight: 11.0,
-            weighted_pass_rate: 0.9167,
-            mean_cost_usd: 0.003,
-            cost_per_success_usd: 0.003273,
-          },
-        ],
-        excluded: [
-          {
-            model: "mini",
-            latest_version: "2026-09",
-            catalog_status: "ACTIVE",
-            shutdown_date: null,
-            n_runs: 12,
-            failures: 1,
-            evidence_weight: 11.0,
-            weighted_pass_rate: 0.9167,
-            mean_cost_usd: 0.003,
-            cost_per_success_usd: 0.003273,
-            why: "not enough evidence yet (11.0 of 25.0)",
-          },
-        ],
-        progress: "11 of 25 weighted runs",
-        next_step: "Record more runs, or start a re-test to gather evidence sooner",
+        current: { model: "mini", model_version: "mini-2026-09" },
+        recommended: null,
+        reference: null,
+        models: [mini],
+        evidence: { n_runs: 12, evidence_weight: 11.0, floor: 25, failing_runs: [] },
+        progress: 0.44,
+        retest_candidates: [],
+        warnings: [],
+        next_step: "Record more runs, or run a re-test to gather evidence sooner",
       };
       return HttpResponse.json(rec);
     }
 
     if (jobName === "receipt-scan") {
+      const mini = { ...base.models[1], why: "Highest pass rate we can be sure of" };
       const rec: Recommendation = {
+        ...base,
         job: "receipt-scan",
-        current_model: "mini",
-        rules: { evidence_floor: 25.0, tolerance: 0.02 },
         verdict: "HOLD",
-        recommended: { model: "mini", model_version: "2026-09" },
-        comparison: {
-          recommended: {
-            model: "mini",
-            latest_version: "2026-09",
-            catalog_status: "ACTIVE",
-            shutdown_date: null,
-            n_runs: 180,
-            failures: 5,
-            evidence_weight: 175.0,
-            weighted_pass_rate: 0.972,
-            mean_cost_usd: 0.0028,
-            cost_per_success_usd: 0.0029,
-            eligible: true,
-          },
-          current: {
-            model: "mini",
-            latest_version: "2026-09",
-            catalog_status: "ACTIVE",
-            shutdown_date: null,
-            n_runs: 180,
-            failures: 5,
-            evidence_weight: 175.0,
-            weighted_pass_rate: 0.972,
-            mean_cost_usd: 0.0028,
-            cost_per_success_usd: 0.0029,
-            eligible: true,
-          },
-        },
-        candidates: [
-          {
-            model: "mini",
-            latest_version: "2026-09",
-            catalog_status: "ACTIVE",
-            shutdown_date: null,
-            n_runs: 180,
-            failures: 5,
-            evidence_weight: 175.0,
-            weighted_pass_rate: 0.972,
-            mean_cost_usd: 0.0028,
-            cost_per_success_usd: 0.0029,
-            eligible: true,
-          },
-        ],
-        excluded: [],
-        evidence: {
-          n_runs: 180,
-          evidence_weight: 175.0,
-          failures: 5,
-          recent_failing_runs: [],
-        },
-        forecast: null,
+        current: { model: mini.model, model_version: mini.model_version },
+        recommended: { model: mini.model, model_version: mini.model_version },
+        reference: mini.model,
+        models: [mini],
+        evidence: { ...base.evidence, failing_runs: [] },
+        retest_candidates: [],
+        warnings: [],
+        next_step: null,
       };
       return HttpResponse.json(rec);
     }

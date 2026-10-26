@@ -1,7 +1,8 @@
-import type { Recommendation, Verdict } from "../../../shared/api/types";
+import type { ModelEvidence, Recommendation, Verdict } from "../../../shared/api/types";
 import { Badge } from "../../../shared/components/Badge";
 import { Card } from "../../../shared/components/Card";
 import { CountUp } from "../../../shared/motion/CountUp";
+import { findModel, range } from "../evidence";
 
 export function getVerdictChip(verdict: Verdict) {
   switch (verdict) {
@@ -16,32 +17,56 @@ export function getVerdictChip(verdict: Verdict) {
   }
 }
 
-export function RecommendationCard({
-  recommendation,
-}: {
-  recommendation: Recommendation;
-}) {
-  const { verdict, comparison, forecast, warnings, progress, next_step, rules, candidates } =
-    recommendation;
+function ModelNumbers({ label, model }: { label: string; model: ModelEvidence }) {
+  return (
+    <div className="space-y-2 rounded-card border border-rule bg-bg p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wider text-dim">{label}</span>
+        <span className="font-mono text-xs font-bold text-ink">{model.model}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 pt-1">
+        <div>
+          <div className="text-xs text-dim">Pass rate</div>
+          <div className="font-mono text-lg font-bold text-ink">
+            {model.weighted_pass_rate !== null ? (
+              <CountUp value={model.weighted_pass_rate * 100} decimals={1} suffix="%" />
+            ) : (
+              "-"
+            )}
+          </div>
+          {range(model) && <div className="font-mono text-[11px] text-dim">likely {range(model)}</div>}
+        </div>
+        <div>
+          <div className="text-xs text-dim">Cost / success</div>
+          <div className="font-mono text-lg font-bold text-ink">
+            {model.cost_per_success_usd !== null ? (
+              <CountUp value={model.cost_per_success_usd} decimals={4} prefix="$" />
+            ) : (
+              "-"
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  let headline = "";
+export function RecommendationCard({ recommendation }: { recommendation: Recommendation }) {
+  const { verdict, warnings, progress, next_step, rules, models, current, recommended } = recommendation;
+  const recommendedStats = findModel(recommendation, recommended?.model);
+  const currentStats = findModel(recommendation, current?.model);
+
+  let headline: string;
   if (verdict === "DOWNGRADE" || verdict === "SWITCH") {
-    headline = `Use ${recommendation.recommended?.model ?? "recommended model"} instead of ${
-      recommendation.current_model ?? "current model"
-    }`;
+    headline = `Use ${recommended?.model ?? "the recommended model"} instead of ${current?.model ?? "the current model"}`;
   } else if (verdict === "HOLD") {
-    headline = `Keep using ${recommendation.current_model ?? "current model"}`;
+    headline = `Keep using ${current?.model ?? "the current model"}`;
   } else {
     headline = `Gathering evidence for ${recommendation.job}`;
   }
 
-  // Compute progress percentage for INSUFFICIENT_EVIDENCE
-  const highestWeight = candidates?.reduce(
-    (max, c) => Math.max(max, c.evidence_weight),
-    0,
-  ) ?? 0;
-  const floor = rules?.evidence_floor || 25;
-  const progressPct = Math.min(100, Math.max(0, Math.round((highestWeight / floor) * 100)));
+  const highestWeight = models.reduce((max, m) => Math.max(max, m.evidence_weight), 0);
+  const progressPct = Math.round(progress * 100);
 
   return (
     <Card className="space-y-5">
@@ -52,7 +77,7 @@ export function RecommendationCard({
       </div>
 
       {/* Warnings List with warn-colored left border */}
-      {warnings && warnings.length > 0 && (
+      {warnings.length > 0 && (
         <div className="space-y-2">
           {warnings.map((warn, i) => (
             <div
@@ -65,148 +90,16 @@ export function RecommendationCard({
         </div>
       )}
 
-      {/* Side-by-side Numbers: Recommended vs Current */}
-      {verdict !== "INSUFFICIENT_EVIDENCE" && comparison && (
+      {/* Side-by-side Numbers: Recommended vs Current (one panel when they are the same model) */}
+      {verdict !== "INSUFFICIENT_EVIDENCE" && recommendedStats && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {/* Recommended Model */}
-          <div className="space-y-2 rounded-card border border-rule bg-bg p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-dim">
-                Recommended
-              </span>
-              <span className="font-mono text-xs font-bold text-ink">
-                {comparison.recommended.model}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div>
-                <div className="text-xs text-dim">Pass rate</div>
-                <div className="font-mono text-lg font-bold text-ink">
-                  <CountUp
-                    value={comparison.recommended.weighted_pass_rate * 100}
-                    decimals={1}
-                    suffix="%"
-                  />
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-dim">Cost / success</div>
-                <div className="font-mono text-lg font-bold text-ink">
-                  {comparison.recommended.cost_per_success_usd !== null ? (
-                    <CountUp
-                      value={comparison.recommended.cost_per_success_usd}
-                      decimals={4}
-                      prefix="$"
-                    />
-                  ) : (
-                    "-"
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Current Model */}
-          {comparison.current ? (
-            <div className="space-y-2 rounded-card border border-rule bg-bg p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-dim">
-                  Current
-                </span>
-                <span className="font-mono text-xs font-bold text-ink">
-                  {comparison.current.model}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <div>
-                  <div className="text-xs text-dim">Pass rate</div>
-                  <div className="font-mono text-lg font-bold text-ink">
-                    <CountUp
-                      value={comparison.current.weighted_pass_rate * 100}
-                      decimals={1}
-                      suffix="%"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-dim">Cost / success</div>
-                  <div className="font-mono text-lg font-bold text-ink">
-                    {comparison.current.cost_per_success_usd !== null ? (
-                      <CountUp
-                        value={comparison.current.cost_per_success_usd}
-                        decimals={4}
-                        prefix="$"
-                      />
-                    ) : (
-                      "-"
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center rounded-card border border-rule bg-bg p-4 text-xs text-dim italic">
-              No current model recorded
-            </div>
+          <ModelNumbers
+            label={currentStats === recommendedStats ? "Current and recommended" : "Recommended"}
+            model={recommendedStats}
+          />
+          {currentStats && currentStats !== recommendedStats && (
+            <ModelNumbers label="Current" model={currentStats} />
           )}
-        </div>
-      )}
-
-      {/* Savings Forecast Panel */}
-      {forecast && (
-        <div className="space-y-3 rounded-card border border-rule bg-bg p-4">
-          <div>
-            <div
-              className={`text-2xl font-bold tracking-tight ${
-                forecast.monthly_saving_usd >= 0 ? "text-ok" : "text-warn"
-              }`}
-            >
-              {forecast.monthly_saving_usd >= 0 ? (
-                <>
-                  Save{" "}
-                  <CountUp
-                    value={forecast.monthly_saving_usd}
-                    decimals={2}
-                    prefix="$"
-                  />{" "}
-                  a month
-                </>
-              ) : (
-                <>
-                  Costs{" "}
-                  <CountUp
-                    value={Math.abs(forecast.monthly_saving_usd)}
-                    decimals={2}
-                    prefix="$"
-                  />{" "}
-                  more a month
-                </>
-              )}
-            </div>
-            <p className="mt-0.5 text-xs text-dim">
-              Based on {forecast.runs_per_month.toLocaleString()} runs in the last 30 days
-            </p>
-          </div>
-
-          <div className="text-xs font-medium">
-            {forecast.extra_failures_per_month > 0 && (
-              <span className="text-warn">
-                About {forecast.extra_failures_per_month} more failed runs a month
-              </span>
-            )}
-            {forecast.extra_failures_per_month < 0 && (
-              <span className="text-ok">
-                About {Math.abs(forecast.extra_failures_per_month)} fewer failed runs a month
-              </span>
-            )}
-            {forecast.extra_failures_per_month === 0 && (
-              <span className="text-dim">No change in failures</span>
-            )}
-          </div>
-
-          <p className="text-xs text-dim">
-            Estimate. Assumes next month looks like the last 30 days.
-          </p>
         </div>
       )}
 
@@ -215,7 +108,7 @@ export function RecommendationCard({
         <div className="space-y-2 rounded-card border border-rule bg-bg p-4">
           <div className="flex items-center justify-between text-xs font-semibold">
             <span className="text-ink">
-              {progress || `${highestWeight} of ${floor} weighted runs`}
+              {highestWeight.toFixed(1)} of {rules.evidence_floor} weighted runs
             </span>
             <span className="font-mono text-dim">{progressPct}%</span>
           </div>
@@ -225,9 +118,10 @@ export function RecommendationCard({
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          {next_step && <p className="text-xs text-dim italic">{next_step}</p>}
         </div>
       )}
+
+      {next_step && <p className="text-xs text-dim italic">{next_step}</p>}
     </Card>
   );
 }

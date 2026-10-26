@@ -80,21 +80,21 @@ export function JobOverviewCard({
             <div>
               <span className="text-dim">Current model:</span>
               <div className="font-mono font-semibold text-ink">
-                {rec?.current_model || "None"}
+                {rec?.current?.model ?? "None"}
               </div>
             </div>
             <div>
-              <span className="text-dim">Spend so far:</span>
+              <span className="text-dim">Spend, last 30 days:</span>
               <div className="font-mono font-semibold text-ink">
                 {spend !== undefined ? `$${spend.spend_usd.toFixed(2)}` : "—"}
               </div>
             </div>
           </div>
 
-          {/* Savings forecast notice */}
-          {rec?.forecast && rec.forecast.monthly_saving_usd > 0 && (
+          {/* The cheaper model, when one qualifies */}
+          {rec?.verdict === "DOWNGRADE" && rec.recommended && (
             <div className="text-xs font-semibold text-ok">
-              Could save ${rec.forecast.monthly_saving_usd.toFixed(2)}/month
+              {rec.recommended.model} does this job for less
             </div>
           )}
         </div>
