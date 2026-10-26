@@ -72,6 +72,9 @@ class PgVectorClient(VectorStoreClient):
                 select(Run.prompt_hash, Run.embedding)
                 .where(Run.project_id == project_id, Run.prompt_hash.in_(prompt_hashes),
                        Run.embedding_model == model, Run.embedding.is_not(None))
+                # DISTINCT ON with no ORDER BY lets Postgres pick any matching row. That is safe here:
+                # every vector for one project, prompt and embedder (name includes the pinned revision)
+                # is the same vector, so whichever row is picked gives the same answer.
                 .ext(distinct_on(Run.prompt_hash))
             )
         ).all()

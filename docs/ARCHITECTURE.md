@@ -34,7 +34,9 @@ The illustrated version, with a walkthrough and glossary, is
 | **Maintenance** | Scheduler | Decay (hourly) · consolidation and regression sweep (every 15 min) · re-tests (every 30 s, queued) · alert delivery (every minute) · catalog sync (daily) |
 
 They share only the database, so a slow re-test never slows recording and a burst of runs never
-slows answers.
+slows answers. Each process keeps a small connection pool (`DB_POOL_SIZE` 3 + `DB_MAX_OVERFLOW` 2), and only one
+scheduler runs jobs at a time: it holds a Postgres advisory lock for its lifetime, and a second one waits as a
+standby, so a re-test can never be started twice.
 
 **Life of a run:** `CAPTURED → CHECKED → INDEXED → CONSOLIDATED → ARCHIVED` (failure:
 `INGESTION_FAILED`). Archived runs are never deleted; they stop counting.
@@ -95,6 +97,10 @@ The authoritative schema is [`db/schema.sql`](../db/schema.sql): `users`, `proje
 - `projects.store_tool_arguments` (off by default) decides whether tool-call arguments are kept. By default only
   each tool's name and call id are stored; the SDK and the server both enforce it.
 - `runs.outcome` and `runs.outcome_reason` are resolved by the job's checker, never supplied by the client.
+- `runs.cost_usd` is NULL when the model has no catalog price and the client sent none: unknown, never "free".
+  Costs are averaged over priced runs only, and spend reports how many runs it could not price.
+- `runs.embedding_model` names the embedder with its pinned weights (`minilm@<revision>`), so upgrading the model
+  never reuses vectors from the old one.
 - `runs.expected` keeps an answer key only when the job has re-test consent, because a replayed run can only be
   checked against the same answers. Otherwise the answers are used for the check and dropped.
 - `recommendations.current_model` records what production used when a verdict was made, so history can say what

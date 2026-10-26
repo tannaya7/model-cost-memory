@@ -28,6 +28,7 @@ class JobSpend:
     runs: int
     spend_usd: float
     share: float  # of the project's spend in the window, 0..1
+    unpriced_runs: int = 0  # runs with no known price: not in spend_usd
 
 
 async def spend_by_job(
@@ -37,17 +38,19 @@ async def spend_by_job(
     since = (now or datetime.now(UTC)) - timedelta(days=days)
     rows = (
         await session.execute(
-            select(Job.name, func.count(Run.run_id), func.coalesce(func.sum(Run.cost_usd), 0))
+            select(Job.name, func.count(Run.run_id), func.coalesce(func.sum(Run.cost_usd), 0),
+                   func.count(Run.run_id).filter(Run.cost_usd.is_(None)))
             .select_from(Job)
             .outerjoin(Run, (Run.job_id == Job.job_id) & (Run.run_kind == "PRODUCTION") & (Run.created_at >= since))
             .where(Job.project_id == project_id)
             .group_by(Job.name)
         )
     ).all()
-    total = sum(float(spend) for _, _, spend in rows)
+    total = sum(float(spend) for _, _, spend, _ in rows)
     spends = [
-        JobSpend(job=name, runs=runs, spend_usd=float(spend), share=float(spend) / total if total else 0.0)
-        for name, runs, spend in rows
+        JobSpend(job=name, runs=runs, spend_usd=float(spend), share=float(spend) / total if total else 0.0,
+                 unpriced_runs=unpriced)
+        for name, runs, spend, unpriced in rows
     ]
     return sorted(spends, key=lambda s: (-s.spend_usd, s.job))
 
@@ -61,7 +64,7 @@ class Breakdown:
     pass_rate: float
     pass_rate_low: float
     pass_rate_high: float
-    mean_cost_usd: float
+    mean_cost_usd: float | None  # over priced runs; None when none is priced
     cost_per_success_usd: float | None
 
 
@@ -72,11 +75,12 @@ def _band(tokens_in: int) -> str:
 def _rows(groups: dict, confidence: float) -> list[Breakdown]:
     z = z_for(confidence)
     out = []
-    for (model, group), (runs, passed, cost) in sorted(groups.items()):
+    for (model, group), (runs, passed, cost, priced) in sorted(groups.items()):
         rate = passed / runs
         low, high = wilson(rate, runs, z)
-        mean = cost / runs
-        out.append(Breakdown(model, group, runs, passed, rate, low, high, mean, mean / rate if rate else None))
+        mean = cost / priced if priced else None
+        out.append(Breakdown(model, group, runs, passed, rate, low, high, mean,
+                             mean / rate if rate and mean is not None else None))
     return out
 
 
@@ -99,7 +103,9 @@ async def job_insights(
         model = family_key(r.model, r.model_version)
         for groups, group in ((overall, "all"), (by_band, _band(r.tokens_in)),
                               (by_prompt, r.prompt_version or "unversioned")):
-            runs, passed, cost = groups.get((model, group), (0, 0, 0.0))
-            groups[(model, group)] = (runs + 1, passed + (r.outcome == "PASS"), cost + float(r.cost_usd))
+            runs, passed, cost, priced = groups.get((model, group), (0, 0, 0.0, 0))
+            known = r.cost_usd is not None
+            groups[(model, group)] = (runs + 1, passed + (r.outcome == "PASS"),
+                                      cost + (float(r.cost_usd) if known else 0.0), priced + known)
     return {"overall": _rows(overall, confidence), "by_input_size": _rows(by_band, confidence),
             "by_prompt_version": _rows(by_prompt, confidence)}

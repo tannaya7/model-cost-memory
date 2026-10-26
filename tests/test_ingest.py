@@ -125,12 +125,12 @@ async def test_cost_comes_from_the_catalog_price_when_there_is_one(client, proje
     assert cost == Decimal("0.013800")  # (2000x3 + 500x15 + 1000x0.3) per million; the client cost of 99 is ignored
 
 
-async def test_cost_falls_back_to_the_sender_then_to_zero_without_a_price(client, project, session):
+async def test_cost_falls_back_to_the_sender_then_to_unknown_without_a_price(client, project, session):
     await client.post("/v1/jobs", json=JOB, headers=project)
     await client.post("/v1/runs", json=run_body(cost_usd=0.25), headers=project)
     await client.post("/v1/runs", json=run_body(), headers=project)
-    costs = sorted((await session.execute(select(Run.cost_usd))).scalars().all())
-    assert costs == [Decimal("0.000000"), Decimal("0.250000")]
+    costs = (await session.execute(select(Run.cost_usd))).scalars().all()
+    assert sorted(costs, key=lambda c: c is not None) == [None, Decimal("0.250000")]  # unknown, never $0
 
 
 async def test_runs_need_a_key(client, project):

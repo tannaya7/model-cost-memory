@@ -185,7 +185,7 @@ export function RunDetailPanel({
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-wider text-dim">Cost</div>
                   <div className="mt-1 font-mono text-base font-semibold text-ink">
-                    ${run.cost_usd.toFixed(4)}
+                    {run.cost_usd !== null ? `$${run.cost_usd.toFixed(4)}` : "no price"}
                   </div>
                 </div>
                 <div>

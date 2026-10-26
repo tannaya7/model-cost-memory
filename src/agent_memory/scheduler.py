@@ -7,9 +7,12 @@
   alert-delivery   every minute   posts due alerts to project webhooks, with backoff
   retests          every 30 s     runs queued re-tests (budget and monthly cap checked before each call)
   retest-unsure    every hour     queues a re-test when the engine is unsure about a cheaper model
-  catalog-sync     daily + at start   refreshes model prices, statuses and shutdown dates; alerts
+  catalog-sync     daily, and once directly at start   refreshes prices, statuses and shutdown dates; alerts
                                   for recommended models that were deprecated or retired, and
                                   re-tests for new models cheaper than what a job uses now
+
+Only one scheduler runs jobs at a time: it holds a Postgres advisory lock (become_leader); a second
+one waits as a standby.
 
 Run it with:  python -m agent_memory.scheduler
 """
@@ -22,12 +25,14 @@ from datetime import UTC, datetime
 
 import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from .alerts.notifier import deliver_pending
 from .alerts.service import catalog_alerts
 from .catalog.sync import fetch_price_list, sync_catalog
-from .config import Settings, get_settings, load_dotenv_file
+from .config import Settings, get_settings, load_dotenv_file, normalize_database_url
 from .logging_config import configure_logging
 from .pipeline.consolidation import consolidate_all
 from .pipeline.decay import recompute
@@ -112,10 +117,30 @@ def build_scheduler(sessions: async_sessionmaker[AsyncSession], settings: Settin
     scheduler.add_job(
         run_catalog_sync, "cron", hour=3, minute=30, args=[sessions, settings], id="catalog-sync", **common
     )
-    scheduler.add_job(  # and once at start, so a fresh server has prices straight away
-        run_catalog_sync, "date", run_date=datetime.now(UTC), args=[sessions, settings], id="catalog-sync-startup"
-    )
     return scheduler
+
+
+LEADER_LOCK = "mcm:scheduler"
+STANDBY_CHECK_SECONDS = 30
+
+
+async def become_leader(engine: AsyncEngine, *, wait: bool = True) -> AsyncConnection | None:
+    """Take the scheduler lock: a Postgres advisory lock held on its own connection for the life of the
+    process. Only the holder runs jobs, so a second scheduler started by mistake can never double a
+    re-test's spend. A standby checks every STANDBY_CHECK_SECONDS and takes over if the leader dies (its
+    connection drops and Postgres releases the lock). Returns the connection holding the lock, or None
+    when `wait` is False and another process holds it."""
+    while True:
+        conn = await engine.connect()
+        got = (await conn.execute(text("SELECT pg_try_advisory_lock(hashtext(:k))"), {"k": LEADER_LOCK})).scalar()
+        if got:
+            await conn.commit()  # keep the connection idle; the lock belongs to the session, not a transaction
+            return conn
+        await conn.close()
+        if not wait:
+            return None
+        log.info("another scheduler is running; standing by")
+        await asyncio.sleep(STANDBY_CHECK_SECONDS)
 
 
 async def _main() -> None:
@@ -123,13 +148,22 @@ async def _main() -> None:
 
     load_dotenv_file()
     configure_logging()
-    scheduler = build_scheduler(session_factory())
+    settings = get_settings()
+    lock_engine = create_async_engine(normalize_database_url(settings.database_url), poolclass=NullPool)
+    leader = await become_leader(lock_engine)
+    sessions = session_factory()
+    # Prices first, called directly: as a one-off scheduled job it could be dropped as a misfire if
+    # start-up took a moment, leaving a fresh server without prices.
+    await run_catalog_sync(sessions, settings)
+    scheduler = build_scheduler(sessions, settings)
     scheduler.start()
     log.info("scheduler started with jobs: %s", [j.id for j in scheduler.get_jobs()])
     try:
         await asyncio.Event().wait()  # run until interrupted
     finally:
         scheduler.shutdown(wait=False)
+        await leader.close()
+        await lock_engine.dispose()
         await dispose_engine()
 
 

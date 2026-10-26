@@ -31,7 +31,14 @@ const columns: Column<SpendInsight>[] = [
     key: "spend",
     header: "Spend",
     render: (row) => (
-      <span className="font-mono text-ink">${row.spend_usd.toFixed(2)}</span>
+      <div className="flex flex-col">
+        <span className="font-mono text-ink">${row.spend_usd.toFixed(2)}</span>
+        {row.unpriced_runs > 0 && (
+          <span className="text-[11px] text-warn">
+            + {row.unpriced_runs.toLocaleString()} {row.unpriced_runs === 1 ? "run" : "runs"} with no known price
+          </span>
+        )}
+      </div>
     ),
   },
   {

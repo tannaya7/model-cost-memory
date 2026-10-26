@@ -90,7 +90,7 @@ CREATE TABLE runs (
     tokens_out        INT NOT NULL DEFAULT 0,      -- includes thinking tokens (billed as output)
     cache_read_tokens  INT NOT NULL DEFAULT 0,     -- priced lower than normal input
     cache_write_tokens INT NOT NULL DEFAULT 0,     -- priced higher than normal input
-    cost_usd          NUMERIC(12,6) NOT NULL DEFAULT 0,  -- usage × catalog price (3.13)
+    cost_usd          NUMERIC(12,6),                -- usage × catalog price (3.13); NULL = price unknown
     latency_ms        INT,
     output            TEXT,
     tool_calls        JSONB,                        -- optional; names + ids only by default (Could)

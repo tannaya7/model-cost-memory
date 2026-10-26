@@ -563,9 +563,9 @@ export const handlers = [
     }
 
     const spendData: SpendInsight[] = [
-      { job: "invoice-extract", runs: 964, spend_usd: 18.42, share: 0.785 },
-      { job: "ticket-classify", runs: 120, spend_usd: 3.85, share: 0.164 },
-      { job: "receipt-scan", runs: 180, spend_usd: 1.18, share: 0.051 },
+      { job: "invoice-extract", runs: 964, spend_usd: 18.42, share: 0.785, unpriced_runs: 0 },
+      { job: "ticket-classify", runs: 120, spend_usd: 3.85, share: 0.164, unpriced_runs: 0 },
+      { job: "receipt-scan", runs: 180, spend_usd: 1.18, share: 0.051, unpriced_runs: 12 },
     ];
 
     return HttpResponse.json(spendData);

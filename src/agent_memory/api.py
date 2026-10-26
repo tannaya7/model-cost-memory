@@ -145,7 +145,7 @@ def _run_fields(r: Run, job_name: str) -> dict:
         run_id=r.run_id, job_id=r.job_id, job=job_name, model=r.model, model_version=r.model_version,
         prompt_version=r.prompt_version, tokens_in=r.tokens_in, tokens_out=r.tokens_out,
         cache_read_tokens=r.cache_read_tokens, cache_write_tokens=r.cache_write_tokens,
-        cost_usd=float(r.cost_usd), latency_ms=r.latency_ms, outcome=r.outcome,
+        cost_usd=float(r.cost_usd) if r.cost_usd is not None else None, latency_ms=r.latency_ms, outcome=r.outcome,
         outcome_reason=r.outcome_reason, run_kind=r.run_kind, state=r.state, created_at=r.created_at,
         prompt_preview=r.prompt[:PREVIEW_CHARS],
         output_preview=r.output[:PREVIEW_CHARS] if r.output is not None else None,
@@ -156,8 +156,11 @@ def _run_out(r: Run, job_name: str) -> RunOut:
     return RunOut(**_run_fields(r, job_name))
 
 
-async def _job_name(session: AsyncSession, job_id) -> str:
-    return (await session.execute(select(Job.name).where(Job.job_id == job_id))).scalar_one()
+async def _job_name(session: AsyncSession, job_id, project_id: str) -> str:
+    """Scoped to the project like every other read, so a stray job_id can never reveal another project's job."""
+    return (
+        await session.execute(select(Job.name).where(Job.job_id == job_id, Job.project_id == project_id))
+    ).scalar_one()
 
 
 def _encode_cursor(created_at: datetime, run_id) -> str:
@@ -255,7 +258,7 @@ async def get_run(
     if run is None:
         raise HTTPException(404, "Run not found")
     return RunDetail(
-        **_run_fields(run, await _job_name(session, run.job_id)),
+        **_run_fields(run, await _job_name(session, run.job_id, project.project_id)),
         prompt=run.prompt, output=run.output, tool_calls=run.tool_calls,
     )
 
@@ -275,7 +278,7 @@ async def label_run_endpoint(
     except ingest.AlreadyResolved as exc:
         raise HTTPException(409, "This run already has an outcome") from exc
     await session.commit()
-    return _run_out(run, await _job_name(session, run.job_id))
+    return _run_out(run, await _job_name(session, run.job_id, project.project_id))
 
 
 @app.get("/v1/models", response_model=ModelPage, tags=["models"])

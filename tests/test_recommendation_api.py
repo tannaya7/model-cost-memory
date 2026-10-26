@@ -142,11 +142,12 @@ async def test_spend_by_job_counts_production_in_the_window_most_expensive_first
     response = await client.get("/v1/insights/spend", headers=auth(keys["demo"]))
     assert response.status_code == 200
     assert response.json() == [
-        {"job": "invoice", "runs": 10, "spend_usd": pytest.approx(0.30), "share": pytest.approx(0.75)},
-        {"job": "ticket", "runs": 10, "spend_usd": pytest.approx(0.10), "share": pytest.approx(0.25)},
+        {"job": "invoice", "runs": 10, "spend_usd": pytest.approx(0.30), "share": pytest.approx(0.75), "unpriced_runs": 0},
+        {"job": "ticket", "runs": 10, "spend_usd": pytest.approx(0.10), "share": pytest.approx(0.25), "unpriced_runs": 0},
     ]
     wider = (await client.get("/v1/insights/spend?days=60", headers=auth(keys["demo"]))).json()
-    assert wider[0] == {"job": "invoice", "runs": 20, "spend_usd": pytest.approx(0.60), "share": pytest.approx(6 / 7)}
+    assert wider[0] == {"job": "invoice", "runs": 20, "spend_usd": pytest.approx(0.60), "share": pytest.approx(6 / 7),
+                        "unpriced_runs": 0}
     assert (await client.get("/v1/insights/spend?days=0", headers=auth(keys["demo"]))).status_code == 422
 
 

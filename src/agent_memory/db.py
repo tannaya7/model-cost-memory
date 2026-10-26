@@ -15,10 +15,14 @@ _sessions: async_sessionmaker[AsyncSession] | None = None
 
 def make_engine(url: str | None = None) -> AsyncEngine:
     """Create an engine. The URL defaults to DATABASE_URL and is normalised for asyncpg."""
-    raw = url or get_settings().database_url
+    settings = get_settings()
+    raw = url or settings.database_url
     if not raw:
         raise RuntimeError("DATABASE_URL is not set (see .env.example)")
-    return create_async_engine(normalize_database_url(raw), pool_pre_ping=True)
+    return create_async_engine(
+        normalize_database_url(raw), pool_pre_ping=True, pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow, pool_recycle=1800,  # hosted Postgres drops idle connections
+    )
 
 
 def get_engine() -> AsyncEngine:

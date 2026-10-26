@@ -258,12 +258,14 @@ async def recommend(
     current_version = await current_versions(session, job.job_id)
 
     weights: dict[str, list[tuple[float, bool]]] = defaultdict(list)
-    weighted_cost: dict[str, float] = defaultdict(float)
+    weighted_cost: dict[str, float] = defaultdict(float)  # over priced runs only
+    priced_weight: dict[str, float] = defaultdict(float)
     failures: dict[str, list] = defaultdict(list)
     for run in runs:
         name = family_key(run.model, run.model_version)
-        superseded = normalize(run.model_version) != current_version[(job.job_id, name)]
-        cost = float(run.cost_usd)
+        # An unrecognised version is treated as current (TIP 3.7): never discount evidence by accident.
+        superseded = normalize(run.model_version) != current_version.get((job.job_id, name), normalize(run.model_version))
+        cost = float(run.cost_usd) if run.cost_usd is not None else None  # None: price unknown
         # The averaging weight must not depend on the outcome: if failures were remembered longer than
         # passes of the same age, every pass rate would be biased down, most for models with old failures
         # (a superseded version's failures outliving its passes). Importance keeps doing its two jobs,
@@ -275,7 +277,9 @@ async def recommend(
         )
         w = freshness(age_days(run.created_at, now), stab)
         weights[name].append((w, run.outcome == "PASS"))
-        weighted_cost[name] += w * cost
+        if cost is not None:
+            weighted_cost[name] += w * cost
+            priced_weight[name] += w
         if run.outcome == "FAIL":
             failures[name].append(run)
 
@@ -290,17 +294,18 @@ async def recommend(
 
     # The current model is listed even when none of its runs is checked yet (e.g. awaiting labels).
     names = set(weights) | ({current_model} if current_model else set())
-    versions = {name: current_version[(job.job_id, name)] for name in names}
+    versions = {name: current_version.get((job.job_id, name), name) for name in names}
     catalog = await _catalog(session, names | set(versions.values()))
     inputs = []
     for name in sorted(names):
         pairs = weights.get(name, [])
         s = sample(pairs)
         entry = catalog.get(versions[name]) or catalog.get(name)
-        mean_cost = weighted_cost[name] / s.evidence_weight if s else 0.0
+        # Mean over priced runs; a model with no priced run has no cost, so it can never look cheapest.
+        mean_cost = weighted_cost[name] / priced_weight[name] if priced_weight[name] else None
         inputs.append(ModelInput(
             model=name, model_version=versions[name], n_runs=len(pairs), failures=len(failures[name]), sample=s,
-            mean_cost_usd=mean_cost if mean_cost > 0 else None,
+            mean_cost_usd=mean_cost,
             catalog_status=entry.status if entry else "UNKNOWN", shutdown_date=entry.shutdown_date if entry else None,
         ))
     decision = decide(

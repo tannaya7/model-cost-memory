@@ -35,7 +35,12 @@ _STOP = object()
 
 
 class Sender:
-    """Posts runs to the API from one background thread. Bounded queue; drops instead of blocking."""
+    """Posts runs to the API from one background thread. Bounded queue; drops instead of blocking.
+
+    If the API is unreachable, a circuit breaker stops the thread from spending ~seconds per run on
+    retries: after `breaker_threshold` runs in a row could not be delivered, runs are dropped at once
+    for `breaker_cooldown` seconds, then one is tried again (and a success closes the breaker).
+    """
 
     def __init__(
         self,
@@ -46,7 +51,9 @@ class Sender:
         queue_size: int = 1000,
         retries: int = 3,
         backoff: float = 0.2,
-        timeout: float = 5.0,
+        timeout: float = 2.0,
+        breaker_threshold: int = 5,
+        breaker_cooldown: float = 30.0,
     ) -> None:
         self.api_url = (api_url or os.environ.get("MCM_API_URL") or DEFAULT_API_URL).rstrip("/")
         self.api_key = api_key or os.environ.get("MCM_API_KEY", "")
@@ -54,6 +61,12 @@ class Sender:
         self._queue: queue.Queue[Any] = queue.Queue(maxsize=queue_size)
         self._retries = retries
         self._backoff = backoff
+        self._breaker_threshold = breaker_threshold
+        self._breaker_cooldown = breaker_cooldown
+        self._failures_in_a_row = 0
+        self._open_until = 0.0  # monotonic time until which runs are dropped without trying
+        self._pending = 0  # queued and not yet sent or dropped
+        self._idle = threading.Condition()
         self.sent = 0
         self.dropped = 0
         self._thread = threading.Thread(target=self._loop, name="mcm-recorder", daemon=True)
@@ -61,24 +74,23 @@ class Sender:
 
     def submit(self, payload: dict[str, Any]) -> bool:
         """Queue a run. Never blocks; returns False (and counts a drop) when the queue is full."""
-        try:
-            self._queue.put_nowait(payload)
+        with self._idle:
+            try:
+                self._queue.put_nowait(payload)
+            except queue.Full:
+                self.dropped += 1
+                log.warning("run recorder queue is full; dropping run %s", payload.get("run_id"))
+                return False
+            self._pending += 1
             return True
-        except queue.Full:
-            self.dropped += 1
-            log.warning("run recorder queue is full; dropping run %s", payload.get("run_id"))
-            return False
 
     def flush(self, timeout: float = 5.0) -> bool:
         """Wait until everything queued has been sent or dropped. True if it finished in time."""
-        deadline = time.monotonic() + timeout
-        while self._queue.unfinished_tasks:
-            if time.monotonic() >= deadline:
-                return False
-            time.sleep(0.005)
-        return True
+        with self._idle:
+            return self._idle.wait_for(lambda: self._pending == 0, timeout=timeout)
 
     def close(self) -> None:
+        """Send what is queued (briefly), stop the thread and close the HTTP client."""
         self.flush(2.0)
         self._queue.put(_STOP)
         self._thread.join(timeout=2.0)
@@ -87,34 +99,52 @@ class Sender:
     def _loop(self) -> None:
         while True:
             item = self._queue.get()
+            if item is _STOP:
+                return
             try:
-                if item is _STOP:
-                    return
                 self._deliver(item)
             except Exception:  # the loop must never die
                 log.exception("run recorder failed unexpectedly")
             finally:
-                self._queue.task_done()
+                with self._idle:
+                    self._pending -= 1
+                    self._idle.notify_all()
 
     def _deliver(self, payload: dict[str, Any]) -> None:
+        if time.monotonic() < self._open_until:  # the API was unreachable just now: do not wait on it
+            self.dropped += 1
+            return
+        if self._deliver_once(payload):
+            self._failures_in_a_row = 0
+            return
+        self._failures_in_a_row += 1
+        if self._failures_in_a_row >= self._breaker_threshold:
+            self._open_until = time.monotonic() + self._breaker_cooldown
+            log.warning("the API has been unreachable for %d runs; dropping runs for %.0f s",
+                        self._failures_in_a_row, self._breaker_cooldown)
+
+    def _deliver_once(self, payload: dict[str, Any]) -> bool:
+        """Send one run with retries. False only when the API could not be reached at all."""
         headers = {"X-API-Key": self.api_key}
         for attempt in range(1, self._retries + 1):
             try:
                 response = self._client.post(f"{self.api_url}/v1/runs", json=payload, headers=headers)
                 if response.status_code < 300:
                     self.sent += 1
-                    return
+                    return True
                 if response.status_code < 500 and response.status_code != 429:
-                    # A rejection (bad key, unknown job, invalid run) will not improve on retry.
+                    # A rejection (bad key, unknown job, invalid run) will not improve on retry; the API
+                    # is up, so this is not a reason to open the breaker.
                     self.dropped += 1
                     log.warning("run %s rejected: %s %s", payload["run_id"], response.status_code, response.text[:200])
-                    return
+                    return True
             except httpx.HTTPError as exc:
                 log.debug("send attempt %d failed: %s", attempt, exc)
             if attempt < self._retries:
                 time.sleep(self._backoff * attempt)
         self.dropped += 1
         log.warning("could not reach the API; dropping run %s", payload["run_id"])
+        return False
 
 
 _default_sender: Sender | None = None
@@ -126,7 +156,7 @@ def default_sender() -> Sender:
     with _default_lock:
         if _default_sender is None:
             _default_sender = Sender()
-            atexit.register(_default_sender.flush)
+            atexit.register(_default_sender.close)  # send what is queued, then stop the thread and client
         return _default_sender
 
 

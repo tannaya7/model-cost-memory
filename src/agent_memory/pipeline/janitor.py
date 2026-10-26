@@ -4,6 +4,8 @@
   `outbox_stuck_minutes` ago are handed back (PENDING). Each hand-back counts as a retry, so a "poison"
   row that keeps killing workers ends up FAILED instead of looping for ever.
 - Finished (DONE) rows are deleted after a retention window, so the table does not grow without bound.
+- A row whose op no worker handles (RETEST, which the outbox schema allows but re-tests do not use) is
+  marked FAILED with the reason, instead of waiting PENDING for ever.
   The outbox is a queue, not evidence: runs and recommendations are never deleted.
 """
 
@@ -53,6 +55,22 @@ async def requeue_stuck(session: AsyncSession, *, minutes: int, max_retries: int
     return len(rows) - failed, failed
 
 
+async def fail_unhandled(session: AsyncSession) -> int:
+    """Fail PENDING rows whose op no worker claims. Returns how many."""
+    from .sync_worker import HANDLED_OPS
+
+    result = await session.execute(
+        text(
+            "UPDATE outbox SET status = 'FAILED', updated_at = now(), "
+            "last_error = 'no worker handles op ' || op || ' (re-tests are queued in the retests table)' "
+            "WHERE status = 'PENDING' AND op <> ALL(:ops)"
+        ),
+        {"ops": list(HANDLED_OPS)},
+    )
+    await session.commit()
+    return result.rowcount
+
+
 async def purge_done(session: AsyncSession, *, days: int) -> int:
     """Delete DONE rows older than `days`. Returns how many were removed."""
     result = await session.execute(
@@ -70,6 +88,7 @@ async def run_janitor(sessions: async_sessionmaker[AsyncSession], settings: Sett
             session, minutes=settings.outbox_stuck_minutes, max_retries=settings.outbox_max_retries
         )
         purged = await purge_done(session, days=settings.outbox_done_retention_days)
+        failed += await fail_unhandled(session)
         await flow.purge(session)  # the live view's trail; a day is plenty
     if requeued or failed or purged:
         log.info("outbox janitor: %d requeued, %d failed, %d purged", requeued, failed, purged)

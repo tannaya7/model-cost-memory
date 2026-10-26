@@ -123,7 +123,7 @@ export function RunsTable({
                     {run.outcome_reason ?? "-"}
                   </div>
                   <div className="text-right font-mono text-xs text-ink">
-                    ${run.cost_usd.toFixed(4)}
+                    {run.cost_usd !== null ? `$${run.cost_usd.toFixed(4)}` : "—"}
                   </div>
                   <div
                     className="text-right font-mono text-xs text-ink cursor-help"

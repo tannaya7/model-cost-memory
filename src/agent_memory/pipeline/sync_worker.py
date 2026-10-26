@@ -31,6 +31,9 @@ from ..storage.vector_store import PgVectorClient
 
 log = logging.getLogger("agent_memory.sync_worker")
 
+# RETEST is allowed by the outbox schema but not used: re-tests are queued in the `retests` table and run
+# by the scheduler (retest/runner.py). The janitor fails any row with an op no worker handles, so such a
+# row can never wait PENDING for ever.
 HANDLED_OPS = ("UPSERT", "INVALIDATE")
 BACKOFF_BASE_SECONDS = 1.0
 BACKOFF_CAP_SECONDS = 300.0

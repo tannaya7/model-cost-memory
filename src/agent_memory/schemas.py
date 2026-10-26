@@ -93,7 +93,7 @@ class RunOut(Model):
     tokens_out: int
     cache_read_tokens: int
     cache_write_tokens: int
-    cost_usd: float
+    cost_usd: float | None = Field(description="Null when the model has no catalog price and none was sent")
     latency_ms: int | None
     outcome: Outcome
     outcome_reason: str | None
@@ -277,8 +277,9 @@ class RecommendationOut(Model):
 class SpendOut(Model):
     job: str
     runs: int = Field(description="Production runs in the window")
-    spend_usd: float
+    spend_usd: float = Field(description="Priced runs only; see unpriced_runs")
     share: float = Field(description="Share of the project's spend in the window, 0..1")
+    unpriced_runs: int = Field(default=0, description="Runs on models with no known price, not in spend_usd")
 
 
 class ForecastOut(Model):
@@ -463,7 +464,7 @@ class BreakdownOut(Model):
     pass_rate: float
     pass_rate_low: float
     pass_rate_high: float
-    mean_cost_usd: float
+    mean_cost_usd: float | None = Field(description="Over the group's priced runs; null when none is priced")
     cost_per_success_usd: float | None
 
 

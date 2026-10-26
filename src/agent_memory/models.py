@@ -141,7 +141,7 @@ class Run(Base):
     tokens_out: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     cache_read_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     cache_write_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    cost_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6), server_default=text("0"))
+    cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))  # NULL = price unknown, never "free"
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     output: Mapped[str | None] = mapped_column(Text)
     tool_calls: Mapped[Any | None] = mapped_column(JSONB)
