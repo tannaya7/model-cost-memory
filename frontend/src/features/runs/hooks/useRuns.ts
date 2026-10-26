@@ -5,6 +5,7 @@ export interface RunsFiltersState {
   job?: string;
   model?: string;
   outcome?: string;
+  recommendation?: string;
 }
 
 export function useRuns(filters: RunsFiltersState) {
@@ -15,6 +16,7 @@ export function useRuns(filters: RunsFiltersState) {
         job: filters.job || undefined,
         model: filters.model || undefined,
         outcome: filters.outcome && filters.outcome !== "ALL" ? filters.outcome : undefined,
+        recommendation: filters.recommendation,
         limit: 50,
         cursor: pageParam ?? undefined,
       }),

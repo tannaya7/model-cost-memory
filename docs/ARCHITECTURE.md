@@ -30,8 +30,8 @@ The illustrated version, with a walkthrough and glossary, is
 | Path | Trigger | Steps |
 |---|---|---|
 | **Write** | Every model call | Validate → pass/fail check (answer key, tests in a sandbox, or schema) → run + outbox row in one transaction → `202` → worker indexes it |
-| **Read** | Someone asks | Load active runs → weight by freshness → group by model, drop retired models → evidence floor → lowest cost per success within tolerance → verdict with failing run ids. Never writes |
-| **Maintenance** | Scheduler | Decay · consolidation · regression check · catalog sync · re-tests · alert delivery |
+| **Read** | Someone asks | Load checked runs → weight by freshness → group by model, drop retired models → evidence floor → 95% intervals → tolerance rule → lowest cost per success → verdict with failing runs and a savings forecast. Cached for 5 minutes against a fingerprint of the runs. Never writes |
+| **Maintenance** | Scheduler | Decay (hourly) · consolidation and regression sweep (every 15 min) · re-tests (every 30 s, queued) · alert delivery (every minute) · catalog sync (daily) |
 
 They share only the database, so a slow re-test never slows recording and a burst of runs never
 slows answers.
@@ -44,7 +44,8 @@ slows answers.
 ```
 freshness            R(t) = e^(-t / S),  S = importance × 30 × version_factor
                      version_factor = 1.00 current, 0.25 superseded (fades ~4× faster)
-weighted pass rate   Σ(R × passed) / Σ R
+weighted pass rate   Σ(R × passed) / Σ R, with S = 30 × version_factor (importance decides archiving
+                     and re-test sampling, never the average: an outcome-dependent weight biases it)
 cost per run         usage × catalog price (input, output incl. thinking, cache read, cache write)
 cost per success     mean cost / weighted pass rate
 pass-rate interval   Wilson 95%, over the Kish effective sample size (Σ R)² / Σ R²
@@ -53,8 +54,19 @@ tolerance rule       a model is GOOD_ENOUGH when we are 95% sure it is at most 3
                      it is more, UNSURE otherwise (a re-test settles it)
 recommendation       lowest cost per success among GOOD_ENOUGH models, never RETIRED;
                      INSUFFICIENT_EVIDENCE until a model reaches the evidence floor
-regression           two-proportion test across a version change: p < 0.05 AND drop ≥ minimum
+savings forecast     saving = (cost per success now − recommended) × successes per month;
+                     extra failures = (pass rate now − recommended) × runs per month, with its interval
+regression           one-sided two-proportion z-test, the current version against the one it replaced:
+                     p < 0.05 AND drop ≥ 5 points AND ≥ 30 runs a side
+silent drop          same version, last 28 days split in half: the same test, plus a standardized
+                     one-sided CUSUM over the second half (k = 0.5, h = 4) so one noisy day never fires
+re-test spend        before every call: re-test spend + reserved + this call ≤ budget, and this month's
+                     project re-test spend (at list price) + reserved + this call ≤ the monthly cap
 ```
+
+Measured on the simulated-time harness (`scripts/simulate.py`, 20 trials each, 50 runs a day):
+no false alarms in the controls; version regressions of 10 and 15 points caught 20/20, 5 points 15/20;
+silent drops of 10 and 15 points caught 20/20, 5 points 11/20. Results in `reports/`.
 
 ## Five design decisions
 
@@ -68,8 +80,8 @@ regression           two-proportion test across a version change: p < 0.05 AND d
 
 ## Data model
 
-The authoritative schema is [`db/schema.sql`](../db/schema.sql): `projects`, `jobs`, `runs`,
-`recommendations`, `outbox`, `model_catalog`, `alerts`.
+The authoritative schema is [`db/schema.sql`](../db/schema.sql): `users`, `projects`, `provider_keys`,
+`jobs`, `retests`, `runs`, `recommendations`, `outbox`, `model_catalog`, `alerts`, `flow_events`.
 
 - `recommendations.consolidated_from` links a conclusion to every run behind it.
 - `recommendations.superseded_by_id` links it to the conclusion that replaced it, with a date and
@@ -83,30 +95,61 @@ The authoritative schema is [`db/schema.sql`](../db/schema.sql): `projects`, `jo
 - `projects.store_tool_arguments` (off by default) decides whether tool-call arguments are kept. By default only
   each tool's name and call id are stored; the SDK and the server both enforce it.
 - `runs.outcome` and `runs.outcome_reason` are resolved by the job's checker, never supplied by the client.
+- `runs.expected` keeps an answer key only when the job has re-test consent, because a replayed run can only be
+  checked against the same answers. Otherwise the answers are used for the check and dropped.
+- `recommendations.current_model` records what production used when a verdict was made, so history can say what
+  was recommended instead of what.
+- `alerts.dedupe_key` (one open alert per finding) and `delivery_attempts` / `next_attempt_at` (webhook retries with
+  backoff). Payloads are signed with `projects.webhook_secret` (HMAC-SHA256, header `X-MCM-Signature`) and carry a
+  one-line `text`/`content` message, so a Slack, Discord, Google Chat or Mattermost incoming webhook works directly.
+- `retests` records each replay: trigger (`MANUAL`, `NEW_MODEL`, `UNSURE`), budget, spend, progress and why it
+  stopped. `provider_keys` holds the customer's key for re-tests, encrypted with the server's `SECRET_KEY`; only the
+  last four characters are ever shown.
+- `users` and `projects.owner_user_id`: Google sign-in; a signed-in user sees only their own projects.
+- `flow_events` is the live data-flow view's trail (`sdk → api → check → index → consolidate`), written in the same
+  transaction as each step and deleted after a day.
 - The schema changes only through Alembic migrations (`migrations/versions/`). `db/schema.sql` is the reference
   snapshot, and a test fails if it disagrees with the migrations or the models.
 
 ## API
 
-Every `/v1` route needs the project key (`X-API-Key: <key>` or `Authorization: Bearer <key>`) and only
-sees that project's data. The machine-readable contract is [`contract/openapi.json`](../contract/openapi.json).
+Every `/v1` route acts on one project and only sees that project's data: the one whose key is sent
+(`X-API-Key: <key>` or `Authorization: Bearer <key>`: the SDK and scripts), or, for a signed-in user, the one
+they own named in `X-Project-Id`. If `DEMO_PROJECT_ID` is set, anyone may read that one project, never change it.
+The machine-readable contract is [`contract/openapi.json`](../contract/openapi.json).
 
 | Method | Path | Purpose | Built |
 |---|---|---|---|
 | `GET` | `/healthz` | Liveness and database check (no key) | W2 |
 | `GET` | `/v1/jobs` | Jobs with run counts, in total and per state | W2 |
 | `POST` | `/v1/jobs` | Define a job and its success check | W3 |
-| `GET` | `/v1/runs` | Recorded runs, newest first, filtered and paged | W2 |
+| `GET` | `/v1/runs` | Recorded runs, newest first, filtered and paged; `?recommendation=` lists a verdict's runs | W2, W8 |
 | `POST` | `/v1/runs` | Record a run (idempotent by `run_id`; answers 202) | W3 |
 | `GET` | `/v1/runs/{id}` | One run in full, with why it passed or failed | W4 |
 | `POST` | `/v1/runs/{id}/label` | Supply a late outcome label | W4 |
 | `GET` | `/v1/models` | Model catalog: price, status and shutdown dates | W6 |
-| `GET` | `/v1/jobs/{job}/recommendation` | Cheapest model that passes, with evidence | W7 |
+| `GET` | `/v1/jobs/{job}/recommendation` | Cheapest model that passes, with evidence, forecast and optional summary | W7, W8 |
 | `GET` | `/v1/insights/spend` | Spend by job | W7 |
-| `GET` | `/v1/jobs/{job}/history` | What changed, when and why | W8 |
-| `GET` | `/v1/jobs/{job}/regressions` | Open regression alerts | W9 |
-| `POST` | `/v1/jobs/{job}/retest` | Replay sampled runs on a candidate, under a budget | W10 |
-| `GET` | `/v1/jobs/{job}/insights` | Cost per success, pass rate by input size and prompt version | W11 |
+| `GET` | `/v1/jobs/{job}/history` | Every verdict, newest first: what changed, when and why (recursive SQL) | W8 |
+| `GET` | `/v1/jobs/{job}/regressions` | The job's alerts (open by default) | W9 |
+| `GET` | `/v1/alerts` | Every job's alerts in the project | W9 |
+| `POST` | `/v1/alerts/{id}/resolve` | Mark an alert handled | W9 |
+| `POST` | `/v1/jobs/{job}/retest` | Queue a re-test of a candidate, under a budget; 409 with a reason code when it cannot start | W10 |
+| `GET` | `/v1/jobs/{job}/retest/{id}` | Re-test progress and spend so far (the page polls it every 2 s) | W10 |
+| `GET` | `/v1/jobs/{job}/retests` | The job's re-tests | W10 |
+| `GET` | `/v1/retest/limits` | Monthly cap, spend this month, and whether the provider key is given | W10 |
+| `PUT` / `DELETE` | `/v1/provider-key` | Give or remove the key re-tests use (asked for when first needed) | W10 |
+| `GET` | `/auth/config` | Which sign-in this server offers | W11 |
+| `GET` | `/auth/google/login`, `/auth/google/callback` | Google sign-in; sets the session cookie | W11 |
+| `POST` | `/auth/dev/login` | Development only (`DEV_LOGIN=true`): sign in by email | W11 |
+| `POST` | `/auth/logout` | End the session | W11 |
+| `GET` | `/v1/me` | The signed-in user | W11 |
+| `GET` / `POST` | `/v1/projects` | The user's own projects; create one (its key is returned once) | W11 |
+| `GET` / `PATCH` | `/v1/projects/{id}` | Name, alert webhook, monthly re-test cap, re-test switch | W11 |
+| `POST` | `/v1/projects/{id}/key` | A new project key, shown once; the old one stops working | W11 |
+| `GET` | `/v1/jobs/{job}/insights` | Cost per success per model; pass rate by input size and prompt version | W11 |
+| `GET` | `/v1/flow` | The live data-flow trail, polled | W12 |
+| `GET` | `/v1/flow/stream` | The same as Server-Sent Events (resumes from `Last-Event-ID`) | W12 |
 
 ## Repository layout
 
@@ -116,10 +159,10 @@ src/agent_memory/
 ├── db.py              async engine and session factory
 ├── models.py          SQLAlchemy models (a test keeps them in step with the migrations)
 ├── schemas.py         request and response models: the API contract
-├── security.py        project API keys: generate, hash, read from a request
+├── security.py        project keys, webhook secrets, encryption of stored provider keys
 ├── logging_config.py  structured JSON logs carrying run_id, job_id and project_id
 ├── privacy.py         what is kept about a run: tool names and ids only, unless a project opts in
-├── api.py             FastAPI routes
+├── api.py             FastAPI routes (data); auth/routes.py adds sign-in and projects
 ├── ingest.py          write path: jobs, runs, outcomes, late labels (run + outbox row in one transaction)
 ├── projects.py        create a project and its key
 ├── costing.py         exact run cost from token usage and catalog prices
@@ -127,27 +170,33 @@ src/agent_memory/
 ├── embeddings.py      MiniLM and hashing embedders behind an LRU cache
 ├── corpus.py          invoice-extraction corpus with exact known answers
 ├── recorder.py        RunRecorder SDK
-├── scheduler.py       maintenance jobs: outbox janitor, decay, catalog sync
+├── scheduler.py       maintenance jobs: janitor, decay, consolidation, regression sweep, re-tests, alerts, catalog
 ├── checks/            OutcomeChecker interface; answer key, schema, late label (test command and sandbox: later)
-├── storage/           vector_store (pgvector); lineage (recursive SQL) arrives in week 8
-├── pipeline/          sync_worker, janitor, scoring and decay; consolidation and regression follow
+├── storage/           vector_store (pgvector); lineage (recursive SQL over superseded_by_id)
+├── pipeline/          sync_worker, janitor, scoring, decay, consolidation, regression, flow events
 ├── catalog/           model catalog: daily sync from the public price list, manual overrides
-├── recommend/         engine: cheapest that passes + evidence + forecast (week 7)
-├── retest/            budgeted, importance-sampled replay: the only code that spends money (week 10)
+├── recommend/         stats (intervals, tolerance rule), engine, forecast, cache, optional summary
+├── retest/            budgeted, importance-sampled replay: the only code that spends money
+├── simulation/        simulated-time harness, regression evaluation, staleness experiment
+├── auth/              Google sign-in, session cookie, project ownership, the public demo
 ├── insights/          spend and pass-rate breakdowns
-├── alerts/            alert records and webhook delivery
+├── alerts/            alert records, signed webhook delivery with backoff
 └── prompts/           the one prompt file the system owns
-migrations/            Alembic: the only way the schema changes
+migrations/            Alembic: the only way the schema changes (0001-0008)
 contract/              OpenAPI file and sample responses the web app is built against
 corpus/                the generated invoice corpus
 deploy/                Caddy, backup, restore and deploy files for the server
 frontend/              React web app: feature folders, shared data layer and components
-db/schema.sql · scripts/ · tests/ · docker-compose.yml · Dockerfile · pyproject.toml
+reports/               measured results: regression detection, silent drops, the staleness experiment
+scripts/               create_project, sync_catalog, build/run_corpus, simulate, staleness_experiment, seed_demo, ...
+db/schema.sql · tests/ · docker-compose.yml · Dockerfile · pyproject.toml
 ```
 
 ## Technology
 
 Python 3.11 · FastAPI · Pydantic v2 · PostgreSQL + SQLAlchemy 2 + Alembic · pgvector with local
-`all-MiniLM-L6-v2` embeddings · scipy · APScheduler · `anthropic` and `openai` clients (the latter also reaches local Ollama) · React + Vite +
+`all-MiniLM-L6-v2` embeddings · scipy · APScheduler · cachetools · `cryptography` (provider keys) · `openai` client
+for re-tests and demo data against any OpenAI-compatible endpoint (Gemini and Groq free tiers) · `anthropic` for the
+optional summary (Claude Haiku) · React + Vite +
 TypeScript web app (TanStack Query, React Router, Recharts) with Google sign-in via `authlib` ·
 Neon (hosted PostgreSQL) for development, docker-compose on one VPS behind Caddy (HTTPS) for production.

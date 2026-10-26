@@ -1,4 +1,4 @@
-import type { ModelEvidence, Recommendation, Verdict } from "../../../shared/api/types";
+import type { Forecast, ModelEvidence, Recommendation, Verdict } from "../../../shared/api/types";
 import { Badge } from "../../../shared/components/Badge";
 import { Card } from "../../../shared/components/Card";
 import { CountUp } from "../../../shared/motion/CountUp";
@@ -51,6 +51,44 @@ function ModelNumbers({ label, model }: { label: string; model: ModelEvidence })
   );
 }
 
+function failuresText(n: number): string {
+  const rounded = Math.round(Math.abs(n) * 10) / 10;
+  return `${rounded} ${rounded === 1 ? "failure" : "failures"}`;
+}
+
+function ForecastPanel({ forecast }: { forecast: Forecast }) {
+  const saving = forecast.monthly_saving_usd;
+  const extra = forecast.extra_failures_per_month;
+  return (
+    <div className="space-y-3 rounded-card border border-rule bg-bg p-4">
+      <div>
+        <div className={`text-2xl font-bold tracking-tight ${saving >= 0 ? "text-ok" : "text-warn"}`}>
+          {saving >= 0 ? "Save " : "Costs "}
+          <CountUp value={Math.abs(saving)} decimals={2} prefix="$" />
+          {saving >= 0 ? " a month" : " more a month"}
+        </div>
+        <p className="mt-0.5 text-xs text-dim">
+          Based on {forecast.runs_per_month.toLocaleString()} runs in the last 30 days
+        </p>
+      </div>
+      <div className="text-xs font-medium">
+        {Math.abs(extra) < 0.05 ? (
+          <span className="text-dim">No change in failures expected</span>
+        ) : extra > 0 ? (
+          <span className="text-warn">About {failuresText(extra)} more a month</span>
+        ) : (
+          <span className="text-ok">About {failuresText(extra)} fewer a month</span>
+        )}
+        <span className="text-dim">
+          {" "}
+          (likely between {forecast.extra_failures_low.toFixed(1)} and {forecast.extra_failures_high.toFixed(1)})
+        </span>
+      </div>
+      <p className="text-xs text-dim">Estimate. Assumes next month looks like the last 30 days.</p>
+    </div>
+  );
+}
+
 export function RecommendationCard({ recommendation }: { recommendation: Recommendation }) {
   const { verdict, warnings, progress, next_step, rules, models, current, recommended } = recommendation;
   const recommendedStats = findModel(recommendation, recommended?.model);
@@ -75,6 +113,13 @@ export function RecommendationCard({ recommendation }: { recommendation: Recomme
         <h2 className="text-xl font-bold tracking-tight text-ink">{headline}</h2>
         <div>{getVerdictChip(verdict)}</div>
       </div>
+
+      {/* Optional plain-English summary, written from the figures below and never deciding anything */}
+      {recommendation.summary && (
+        <p className="rounded-card border border-accent/20 bg-accent-soft p-3 text-sm text-ink">
+          {recommendation.summary}
+        </p>
+      )}
 
       {/* Warnings List with warn-colored left border */}
       {warnings.length > 0 && (
@@ -101,6 +146,11 @@ export function RecommendationCard({ recommendation }: { recommendation: Recomme
             <ModelNumbers label="Current" model={currentStats} />
           )}
         </div>
+      )}
+
+      {/* Savings Forecast Panel */}
+      {recommendation.forecast && (
+        <ForecastPanel forecast={recommendation.forecast} />
       )}
 
       {/* Progress Bar for INSUFFICIENT_EVIDENCE */}

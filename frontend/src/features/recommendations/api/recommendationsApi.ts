@@ -1,5 +1,5 @@
 import { apiFetch } from "../../../shared/api/apiFetch";
-import type { HistoryEntry, Recommendation, RegressionAlert } from "../../../shared/api/types";
+import type { History, Recommendation, RegressionAlert } from "../../../shared/api/types";
 
 /**
  * Builds the URL path for a job's recommendation endpoint.
@@ -21,8 +21,8 @@ export function fetchRecommendation(jobName: string): Promise<Recommendation> {
   return apiFetch<Recommendation>(recommendationPath(jobName));
 }
 
-export function fetchJobHistory(jobName: string): Promise<HistoryEntry[]> {
-  return apiFetch<HistoryEntry[]>(historyPath(jobName));
+export function fetchJobHistory(jobName: string): Promise<History> {
+  return apiFetch<History>(historyPath(jobName));
 }
 
 export function fetchJobRegressions(jobName: string): Promise<RegressionAlert[]> {

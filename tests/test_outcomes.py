@@ -20,8 +20,9 @@ async def headers(session):
     return {"X-API-Key": key}
 
 
-async def make_job(client, headers, kind, config, name="j"):
-    r = await client.post("/v1/jobs", json={"name": name, "check_kind": kind, "check_config": config}, headers=headers)
+async def make_job(client, headers, kind, config, name="j", retest_consent=False):
+    r = await client.post("/v1/jobs", json={"name": name, "check_kind": kind, "check_config": config,
+                                            "retest_consent": retest_consent}, headers=headers)
     assert r.status_code == 201
     return name
 
@@ -55,11 +56,15 @@ async def test_without_an_expected_answer_the_run_stays_unknown(client, headers)
     assert "no expected value" in got["outcome_reason"]
 
 
-async def test_the_expected_answer_is_used_but_not_stored(client, headers, session):
-    job = await make_job(client, headers, "ANSWER_KEY", {"fields": ["total"]})
-    await send(client, headers, run(job, output='{"total": 5}', expected={"total": 5}))
-    stored = (await session.execute(select(Run))).scalar_one()
-    assert "expected" not in {c.name for c in Run.__table__.columns} and stored.outcome == "PASS"
+async def test_the_expected_answer_is_kept_only_when_the_job_may_be_re_tested(client, headers, session):
+    private = await make_job(client, headers, "ANSWER_KEY", {"fields": ["total"]}, name="private")
+    await send(client, headers, run(private, output='{"total": 5}', expected={"total": 5}))
+    retestable = await make_job(client, headers, "ANSWER_KEY", {"fields": ["total"]}, name="retestable",
+                                retest_consent=True)
+    await send(client, headers, run(retestable, output='{"total": 5}', expected={"total": 5}))
+    rows = (await session.execute(select(Run).order_by(Run.created_at))).scalars().all()
+    assert [r.outcome for r in rows] == ["PASS", "PASS"]
+    assert [r.expected for r in rows] == [None, {"total": 5}]  # used for the check; kept only with consent
 
 
 async def test_a_schema_job_checks_the_shape(client, headers):

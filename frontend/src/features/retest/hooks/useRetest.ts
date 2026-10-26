@@ -1,8 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { RetestCreateInput } from "../../../shared/api/types";
+import type { ProviderKeyInput, RetestCreateInput } from "../../../shared/api/types";
 import {
+  deleteProviderKey,
+  fetchJobRetests,
   fetchRetestLimits,
   fetchRetestStatus,
+  saveProviderKey,
   startRetest,
 } from "../api/retestApi";
 
@@ -47,5 +50,29 @@ export function useRetestStatus(jobName: string, retestId: string) {
       }
       return false;
     },
+  });
+}
+
+export function useJobRetests(jobName: string | undefined) {
+  return useQuery({
+    queryKey: ["retest", "list", jobName],
+    queryFn: () => fetchJobRetests(jobName!),
+    enabled: Boolean(jobName),
+  });
+}
+
+export function useSaveProviderKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ProviderKeyInput) => saveProviderKey(input),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: retestLimitsKey }),
+  });
+}
+
+export function useDeleteProviderKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteProviderKey,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: retestLimitsKey }),
   });
 }

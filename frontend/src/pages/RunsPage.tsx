@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../shared/components/PageHeader";
 import { QueryState } from "../shared/components/QueryState";
 import { RunsFilters } from "../features/runs/components/RunsFilters";
@@ -15,6 +15,7 @@ export default function RunsPage() {
     job: searchParams.get("job") || undefined,
     model: searchParams.get("model") || undefined,
     outcome: searchParams.get("outcome") || undefined,
+    recommendation: searchParams.get("recommendation") || undefined,
   };
 
   const query = useRuns(filters);
@@ -26,7 +27,16 @@ export default function RunsPage() {
         subtitle="Individual calls your app recorded to AI models."
       />
 
-      <RunsFilters />
+      {filters.recommendation ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-card border border-accent/30 bg-accent-soft p-3 text-xs text-ink">
+          <span>Showing only the runs one recommendation rests on.</span>
+          <Link to="/runs" className="font-semibold text-accent hover:underline">
+            Show all runs
+          </Link>
+        </div>
+      ) : (
+        <RunsFilters />
+      )}
 
       <QueryState
         query={query}

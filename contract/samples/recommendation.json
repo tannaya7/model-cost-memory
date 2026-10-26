@@ -25,6 +25,7 @@
     "floor": 25.0,
     "n_runs": 1084
   },
+  "forecast": null,
   "job": "invoice-extract",
   "models": [
     {
@@ -97,6 +98,8 @@
     "evidence_floor": 25.0,
     "margin": 0.03
   },
+  "summary": null,
+  "summary_prompt_version": null,
   "verdict": "DOWNGRADE",
   "warnings": []
 }

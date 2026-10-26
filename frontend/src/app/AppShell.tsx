@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { getActiveProject } from "../shared/api/apiFetch";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { motion, MotionConfig } from "framer-motion";
 import { RouteErrorBoundary } from "../shared/components/RouteErrorBoundary";
@@ -50,8 +51,13 @@ export function AppShell() {
       <div className="min-h-screen md:flex">
         <aside className="border-b border-rule bg-surface p-4 md:min-h-screen md:w-[var(--sidebar-width)] md:border-b-0 md:border-r flex flex-col justify-between">
           <div>
-            <div className="mb-4 text-sm font-bold tracking-tight">
-              Model &amp; Cost Memory
+            <div className="mb-4 space-y-1">
+              <div className="text-sm font-bold tracking-tight">Model &amp; Cost Memory</div>
+              {getActiveProject() && (
+                <NavLink to="/projects" className="block truncate text-xs text-dim hover:text-accent">
+                  Project: <span className="font-mono text-ink">{getActiveProject()}</span>
+                </NavLink>
+              )}
             </div>
             <nav className="flex flex-wrap gap-1 md:flex-col">
               {NAV.map((item) => (

@@ -31,9 +31,12 @@ def sessions(engine):
 def test_the_scheduler_has_all_its_maintenance_jobs():
     scheduler = build_scheduler(sessions=None, settings=SETTINGS)
     jobs = {j.id: j for j in scheduler.get_jobs()}
-    assert set(jobs) == {"outbox-janitor", "decay", "catalog-sync", "catalog-sync-startup"}
-    assert all(jobs[name].max_instances == 1 for name in ("outbox-janitor", "decay", "catalog-sync"))
+    assert set(jobs) == {"outbox-janitor", "decay", "consolidation", "regression", "alert-delivery", "retests",
+                         "retest-unsure", "catalog-sync", "catalog-sync-startup"}
+    assert all(jobs[name].max_instances == 1
+               for name in ("outbox-janitor", "decay", "consolidation", "regression", "alert-delivery", "catalog-sync"))
     assert jobs["decay"].trigger.interval.total_seconds() == 3600
+    assert jobs["consolidation"].trigger.interval.total_seconds() == 900
     assert "hour='3'" in str(jobs["catalog-sync"].trigger)
 
 

@@ -1,0 +1,507 @@
+[
+  {
+    "seed": 0,
+    "checkpoints": [
+      {
+        "day": 14,
+        "truth": "acme-mini",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 21,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 28,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 35,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 42,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 49,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 56,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 63,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 70,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 77,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 84,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 91,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 98,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 105,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 112,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 119,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      }
+    ]
+  },
+  {
+    "seed": 1,
+    "checkpoints": [
+      {
+        "day": 14,
+        "truth": "acme-mini",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 21,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 28,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 35,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 42,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 49,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 56,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 63,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 70,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 77,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 84,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 91,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 98,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 105,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 112,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 119,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      }
+    ]
+  },
+  {
+    "seed": 2,
+    "checkpoints": [
+      {
+        "day": 14,
+        "truth": "acme-mini",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 21,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 28,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 35,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 42,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 49,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 56,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 63,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 70,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 77,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 84,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 91,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 98,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 105,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 112,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 119,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      }
+    ]
+  },
+  {
+    "seed": 3,
+    "checkpoints": [
+      {
+        "day": 14,
+        "truth": "acme-mini",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 21,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 28,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 35,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 42,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 49,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 56,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 63,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 70,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 77,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 84,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 91,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 98,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 105,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 112,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 119,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      }
+    ]
+  },
+  {
+    "seed": 4,
+    "checkpoints": [
+      {
+        "day": 14,
+        "truth": "acme-mini",
+        "frozen": "acme-large",
+        "maintained": "acme-mini"
+      },
+      {
+        "day": 21,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 28,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 35,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 42,
+        "truth": "acme-large",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 49,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-large"
+      },
+      {
+        "day": 56,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 63,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 70,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 77,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 84,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 91,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 98,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 105,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 112,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      },
+      {
+        "day": 119,
+        "truth": "acme-mid",
+        "frozen": "acme-large",
+        "maintained": "acme-mid"
+      }
+    ]
+  }
+]

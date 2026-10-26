@@ -35,6 +35,8 @@ async def main(args: argparse.Namespace) -> int:
         await dispose_engine()
     print(f"Project:  {project.project_id}")
     print(f"API key:  {key}")
+    if project.webhook_url:
+        print(f"Webhook secret: {project.webhook_secret}  (verify X-MCM-Signature with it)")
     print("Copy the key now. It is not stored and cannot be shown again.")
     return 0
 

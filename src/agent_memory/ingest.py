@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .checks import Outcome, check_run
 from .costing import Price, compute_cost
+from .pipeline import flow
 from .models import CatalogEntry, Job, OutboxRow, Project, Run
 from .privacy import sanitize_tool_calls
 from .schemas import JobCreate, RunCreate
@@ -84,13 +85,20 @@ async def find_price(session: AsyncSession, model: str, model_version: str) -> P
     return Price.from_input_output(best.price_in_per_mtok, best.price_out_per_mtok)
 
 
-async def record_run(session: AsyncSession, project: Project, body: RunCreate) -> bool:
-    """Store a run and its outbox row. Returns False when this run_id was already recorded."""
+async def record_run(
+    session: AsyncSession, project: Project, body: RunCreate, *, run_kind: str = "PRODUCTION", retest_id=None
+) -> bool:
+    """Store a run and its outbox row. Returns False when this run_id was already recorded.
+
+    The answer key (`expected`) is kept only when the job has re-test consent, because a re-test can
+    only check a replayed run against the same answers; otherwise it is used for the check and dropped.
+    """
     job = (
         await session.execute(select(Job).where(Job.project_id == project.project_id, Job.name == body.job))
     ).scalar_one_or_none()
     if job is None:
         raise UnknownJob(body.job)
+    keep_expected = body.expected if job.retest_consent and job.check_kind == "ANSWER_KEY" else None
 
     price = await find_price(session, body.model, body.model_version)
     if price is not None:
@@ -112,7 +120,8 @@ async def record_run(session: AsyncSession, project: Project, body: RunCreate) -
                 cache_read_tokens=body.cache_read_tokens, cache_write_tokens=body.cache_write_tokens,
                 cost_usd=cost, latency_ms=body.latency_ms, output=body.output,
                 tool_calls=sanitize_tool_calls(body.tool_calls, keep_arguments=project.store_tool_arguments),
-                outcome=result.outcome.value, outcome_reason=result.reason, state=state,
+                outcome=result.outcome.value, outcome_reason=result.reason, state=state, run_kind=run_kind,
+                retest_id=retest_id, expected=keep_expected,
             )
             .on_conflict_do_nothing(index_elements=["run_id"])
             .returning(Run.run_id)
@@ -129,6 +138,14 @@ async def record_run(session: AsyncSession, project: Project, body: RunCreate) -
                "from_state": None, "to_state": state, "cost_usd": float(cost)},
     )
     session.add(OutboxRow(run_id=body.run_id, op="UPSERT", payload={"run_id": str(body.run_id), "prompt_hash": digest}))
+    source = "Re-test runner" if run_kind == "RETEST" else "RunRecorder"
+    flow.emit(session, project.project_id, "sdk", f"{source} captured a call to '{body.model}' for '{job.name}'",
+              run_id=body.run_id, data={"job": job.name, "model": body.model, "run_kind": run_kind})
+    flow.emit(session, project.project_id, "api", "POST /v1/runs accepted: stored and queued for indexing",
+              run_id=body.run_id, data={"cost_usd": float(cost), "tokens_in": body.tokens_in})
+    verdict = {"PASS": "Check passed", "FAIL": "Check failed", "UNKNOWN": "Waiting for a label"}[result.outcome.value]
+    flow.emit(session, project.project_id, "check", f"{verdict}: {result.reason}" if result.reason else verdict,
+              run_id=body.run_id, data={"outcome": result.outcome.value})
     return True
 
 

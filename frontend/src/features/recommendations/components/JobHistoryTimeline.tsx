@@ -30,6 +30,10 @@ function getReasonChip(reason: HistoryEntry["supersession_reason"]) {
       return <Badge tone="neutral">Evidence went stale</Badge>;
     case "REGRESSION":
       return <Badge tone="bad">Regression</Badge>;
+    case "MODEL_RETIRED":
+      return <Badge tone="warn">Model retired</Badge>;
+    case "NEW_EVIDENCE":
+      return <Badge tone="neutral">New evidence</Badge>;
     default:
       return null;
   }
@@ -44,8 +48,8 @@ export function JobHistoryTimeline({ jobName }: { jobName: string }) {
       emptyTitle="No recommendation has been made for this job yet."
       emptyHint="Record runs to trigger model recommendations."
     >
-      {(history) => {
-        if (!history || history.length === 0) {
+      {({ entries: history, versions }) => {
+        if (history.length === 0) {
           return (
             <EmptyState
               title="No recommendation has been made for this job yet."
@@ -60,6 +64,7 @@ export function JobHistoryTimeline({ jobName }: { jobName: string }) {
         );
 
         return (
+          <div className="space-y-6">
           <div className="relative space-y-6 pl-6 before:absolute before:bottom-3 before:left-2 before:top-3 before:w-0.5 before:bg-rule">
             {history.map((entry) => {
               const isCurrent = entry.invalid_at === null;
@@ -102,11 +107,16 @@ export function JobHistoryTimeline({ jobName }: { jobName: string }) {
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
                       <div>
                         <span className="text-base font-bold text-ink">
-                          {entry.model}
+                          {entry.model || "No model yet"}
                         </span>
                         <span className="ml-2 font-mono text-xs text-dim">
-                          v: {entry.model_version}
+                          {entry.model_version}
                         </span>
+                        {entry.current_model && entry.current_model !== entry.model && (
+                          <span className="ml-2 text-xs text-dim">
+                            instead of <span className="font-mono text-ink">{entry.current_model}</span>
+                          </span>
+                        )}
                       </div>
 
                       {supersededBy && (
@@ -132,15 +142,15 @@ export function JobHistoryTimeline({ jobName }: { jobName: string }) {
                       <div>
                         <div className="text-xs text-dim">Cost / success</div>
                         <div className="font-mono text-base font-bold text-ink">
-                          {entry.cost_per_success !== null
-                            ? `$${entry.cost_per_success.toFixed(4)}`
+                          {entry.cost_per_success_usd !== null
+                            ? `$${entry.cost_per_success_usd.toFixed(4)}`
                             : "—"}
                         </div>
                       </div>
                       <div>
                         <div className="text-xs text-dim">Evidence</div>
                         <div className="text-xs font-medium text-ink">
-                          built from {entry.n_source_runs.toLocaleString()} runs
+                          built from {entry.n_runs.toLocaleString()} runs
                         </div>
                         <div className="font-mono text-[11px] text-dim">
                           weight: {entry.evidence_weight.toFixed(1)}
@@ -151,9 +161,7 @@ export function JobHistoryTimeline({ jobName }: { jobName: string }) {
                     {/* Footer link to runs */}
                     <div className="flex justify-end pt-1">
                       <Link
-                        to={`/runs?job=${encodeURIComponent(
-                          jobName,
-                        )}&model=${encodeURIComponent(entry.model)}`}
+                        to={`/runs?recommendation=${entry.recommendation_id}`}
                         className="text-xs font-semibold text-accent hover:underline"
                       >
                         See these runs →
@@ -163,6 +171,24 @@ export function JobHistoryTimeline({ jobName }: { jobName: string }) {
                 </div>
               );
             })}
+          </div>
+
+          <Card className="space-y-3">
+            <h3 className="text-base font-bold tracking-tight text-ink">Model versions this job ran on</h3>
+            <div className="divide-y divide-rule">
+              {versions.map((v) => (
+                <div
+                  key={`${v.model}|${v.model_version}`}
+                  className="flex flex-col gap-1 py-2 text-xs sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <span className="font-mono text-ink">{v.model_version}</span>
+                  <span className="text-dim">
+                    {v.runs.toLocaleString()} runs · {formatTimestamp(v.first_seen)} to {formatTimestamp(v.last_seen)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Card>
           </div>
         );
       }}

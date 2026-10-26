@@ -4,6 +4,94 @@
  */
 
 export interface paths {
+    "/auth/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Auth Config */
+        get: operations["auth_config_auth_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/dev/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dev Login
+         * @description Local development only: sign in as any email. Off unless DEV_LOGIN=true.
+         */
+        post: operations["dev_login_auth_dev_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/google/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Google Callback */
+        get: operations["google_callback_auth_google_callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/google/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Google Login */
+        get: operations["google_login_auth_google_login_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Logout */
+        post: operations["logout_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -13,6 +101,87 @@ export interface paths {
         };
         /** Healthz */
         get: operations["healthz_healthz_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Alerts
+         * @description Every job's alerts in the project, newest first: open ones by default.
+         */
+        get: operations["list_alerts_v1_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/alerts/{alert_id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve Alert
+         * @description Mark an alert handled. The same finding can raise a new alert later.
+         */
+        post: operations["resolve_alert_v1_alerts__alert_id__resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/flow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Flow
+         * @description The live data-flow view, polled: each run's steps, oldest first.
+         */
+        get: operations["get_flow_v1_flow_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/flow/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream Flow
+         * @description Server-Sent Events: each run's steps as they happen. The browser reconnects by itself and
+         *     resumes from Last-Event-ID. Read-only, one short query a second, no WebSockets.
+         */
+        get: operations["stream_flow_v1_flow_stream_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -65,6 +234,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/jobs/{job}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get History
+         * @description Every recommendation the job has had, newest first: what changed, when and why.
+         *
+         *     Followed through `superseded_by_id` with a recursive query; each entry's runs are listed by
+         *     `GET /v1/runs?recommendation=<id>`.
+         */
+        get: operations["get_history_v1_jobs__job__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job}/insights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Job Insights
+         * @description Cost per success per model, and pass rate per model by input-size band and by prompt version,
+         *     each with its run count and 95% interval.
+         */
+        get: operations["get_job_insights_v1_jobs__job__insights_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/jobs/{job}/recommendation": {
         parameters: {
             query?: never;
@@ -87,6 +300,107 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/jobs/{job}/regressions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Regressions
+         * @description The job's alerts, newest first: open ones by default.
+         */
+        get: operations["get_regressions_v1_jobs__job__regressions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job}/retest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Retest
+         * @description Queue a re-test: replay sampled past runs on `candidate_model`, spending at most `budget_usd`.
+         *
+         *     409 with `{"code", "message"}` when it cannot start; `code` is one of consent_off, project_off,
+         *     not_checkable, provider_key_required (ask for the key, then try again), cap_reached, already_running.
+         *     Poll `GET /v1/jobs/{job}/retest/{id}` for progress.
+         */
+        post: operations["start_retest_v1_jobs__job__retest_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job}/retest/{retest_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Retest
+         * @description One re-test's progress and spend so far; the web app polls it every 2 s while it runs.
+         */
+        get: operations["get_retest_v1_jobs__job__retest__retest_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job}/retests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Retests
+         * @description The job's re-tests, newest first.
+         */
+        get: operations["list_retests_v1_jobs__job__retests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Me */
+        get: operations["me_v1_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/models": {
         parameters: {
             query?: never;
@@ -99,6 +413,111 @@ export interface paths {
          * @description The model catalog: price, status and shutdown date, so a retirement is seen before it bites.
          */
         get: operations["list_models_v1_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Projects */
+        get: operations["list_projects_v1_projects_get"];
+        put?: never;
+        /**
+         * New Project
+         * @description Create a project you own. Its key is in the response once; copy it into the SDK.
+         */
+        post: operations["new_project_v1_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project */
+        get: operations["get_project_v1_projects__project_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Project
+         * @description Change the name, the alert webhook (https only; null removes it), the monthly re-test cap or
+         *     the project-wide re-test switch. Only the fields sent change.
+         */
+        patch: operations["patch_project_v1_projects__project_id__patch"];
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** New Project Key */
+        post: operations["new_project_key_v1_projects__project_id__key_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/provider-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Provider Key
+         * @description Give (or replace) the key re-tests use. With the monthly cap, this is standing permission for
+         *     re-tests to run within the cap. Encrypted at rest; never returned again.
+         */
+        put: operations["put_provider_key_v1_provider_key_put"];
+        post?: never;
+        /**
+         * Delete Provider Key
+         * @description Remove the key. Running re-tests finish the call in flight; no new ones start.
+         */
+        delete: operations["delete_provider_key_v1_provider_key_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/retest/limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Retest Limits
+         * @description This month's re-test cap, what is spent, and whether the provider key has been given.
+         */
+        get: operations["get_retest_limits_v1_retest_limits_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -175,6 +594,99 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AlertOut
+         * @description A regression, silent drop or deprecation that needs a person's attention.
+         */
+        AlertOut: {
+            /**
+             * Alert Id
+             * Format: uuid
+             */
+            alert_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Delivered At
+             * @description When the webhook accepted it; null if not (yet)
+             */
+            delivered_at: string | null;
+            /** Delivery Attempts */
+            delivery_attempts: number;
+            /**
+             * Detail
+             * @description VERSION_REGRESSION: model, old_version, new_version, old_pass_rate, new_pass_rate, n_old, n_new, drop, p_value, failing_run_ids. SILENT_DROP: model, model_version, before_pass_rate, after_pass_rate, n_before, n_after, drop, p_value. MODEL_DEPRECATED: model, model_version, status.
+             */
+            detail: {
+                [key: string]: unknown;
+            };
+            /** Job */
+            job: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "VERSION_REGRESSION" | "SILENT_DROP" | "MODEL_DEPRECATED";
+            /** Resolved At */
+            resolved_at: string | null;
+            /**
+             * Summary
+             * @description One sentence; the figures are in `detail`
+             */
+            summary: string;
+        };
+        /** AuthConfig */
+        AuthConfig: {
+            /**
+             * Demo Project Id
+             * @description A project anyone may read without signing in
+             */
+            demo_project_id: string | null;
+            /**
+             * Dev Login
+             * @description Development-only sign-in by email; never on in production
+             */
+            dev_login: boolean;
+            /**
+             * Google
+             * @description Google sign-in is configured on this server
+             */
+            google: boolean;
+        };
+        /** BreakdownOut */
+        BreakdownOut: {
+            /** Cost Per Success Usd */
+            cost_per_success_usd: number | null;
+            /**
+             * Group
+             * @description 'all', an input-size band ('under 8k', '8k to 32k', 'over 32k') or a prompt version
+             */
+            group: string;
+            /** Mean Cost Usd */
+            mean_cost_usd: number;
+            /** Model */
+            model: string;
+            /** Pass Rate */
+            pass_rate: number;
+            /** Pass Rate High */
+            pass_rate_high: number;
+            /** Pass Rate Low */
+            pass_rate_low: number;
+            /** Passed */
+            passed: number;
+            /** Runs */
+            runs: number;
+        };
+        /** DevLogin */
+        DevLogin: {
+            /** Email */
+            email: string;
+            /** Name */
+            name?: string | null;
+        };
         /** FailingRunOut */
         FailingRunOut: {
             /**
@@ -194,6 +706,63 @@ export interface components {
              */
             run_id: string;
         };
+        /**
+         * FlowEventOut
+         * @description One step of a run through the pipeline, for the live data-flow view.
+         */
+        FlowEventOut: {
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Event Id
+             * @description Increasing; resume with ?after= or the SSE Last-Event-ID
+             */
+            event_id: number;
+            /** Message */
+            message: string;
+            /** Run Id */
+            run_id: string | null;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "sdk" | "api" | "check" | "index" | "consolidate";
+            /**
+             * Ts
+             * Format: date-time
+             */
+            ts: string;
+        };
+        /**
+         * ForecastOut
+         * @description What switching would change per month, if next month looks like the last 30 days.
+         */
+        ForecastOut: {
+            /** Extra Failures High */
+            extra_failures_high: number;
+            /**
+             * Extra Failures Low
+             * @description Lower end of the interval, in failures per month
+             */
+            extra_failures_low: number;
+            /**
+             * Extra Failures Per Month
+             * @description Negative means fewer failures
+             */
+            extra_failures_per_month: number;
+            /**
+             * Monthly Saving Usd
+             * @description Negative means switching costs more
+             */
+            monthly_saving_usd: number;
+            /**
+             * Runs Per Month
+             * @description Production runs in the last 30 days
+             */
+            runs_per_month: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -206,6 +775,76 @@ export interface components {
              * @constant
              */
             status: "ok";
+        };
+        /**
+         * HistoryEntryOut
+         * @description One stored recommendation: what was decided, on how much evidence, and what replaced it.
+         */
+        HistoryEntryOut: {
+            /** Cost Per Success Usd */
+            cost_per_success_usd: number | null;
+            /**
+             * Current Model
+             * @description What production used when this was decided
+             */
+            current_model: string | null;
+            /** Evidence Weight */
+            evidence_weight: number;
+            /**
+             * Invalid At
+             * @description Null while it is the current recommendation
+             */
+            invalid_at: string | null;
+            /** Mean Cost Usd */
+            mean_cost_usd: number | null;
+            /**
+             * Model
+             * @description The recommended model (the current one for HOLD); empty if none
+             */
+            model: string;
+            /** Model Version */
+            model_version: string;
+            /**
+             * N Runs
+             * @description Runs it rests on; GET /v1/runs?recommendation= lists them
+             */
+            n_runs: number;
+            /**
+             * Recommendation Id
+             * Format: uuid
+             */
+            recommendation_id: string;
+            /** Superseded By Id */
+            superseded_by_id: string | null;
+            /** Supersession Reason */
+            supersession_reason: ("NEW_EVIDENCE" | "MODEL_UPGRADE" | "EVIDENCE_DECAYED" | "REGRESSION" | "MODEL_RETIRED") | null;
+            /**
+             * Valid At
+             * Format: date-time
+             */
+            valid_at: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "HOLD" | "DOWNGRADE" | "SWITCH" | "INSUFFICIENT_EVIDENCE";
+            /** Weighted Pass Rate */
+            weighted_pass_rate: number | null;
+        };
+        /** HistoryOut */
+        HistoryOut: {
+            /**
+             * Entries
+             * @description Newest first; the first is current unless invalidated
+             */
+            entries: components["schemas"]["HistoryEntryOut"][];
+            /** Job */
+            job: string;
+            /**
+             * Versions
+             * @description Every model version this job has run on
+             */
+            versions: components["schemas"]["ModelVersionSeen"][];
         };
         /**
          * JobCreate
@@ -237,6 +876,25 @@ export interface components {
              * @default false
              */
             retest_consent: boolean;
+        };
+        /**
+         * JobInsightsOut
+         * @description Where a job's money goes and where each model is weak. Groupings and statistics only.
+         */
+        JobInsightsOut: {
+            /** By Input Size */
+            by_input_size: components["schemas"]["BreakdownOut"][];
+            /** By Prompt Version */
+            by_prompt_version: components["schemas"]["BreakdownOut"][];
+            /** Days */
+            days: number;
+            /** Job */
+            job: string;
+            /**
+             * Overall
+             * @description Cost per success per model
+             */
+            overall: components["schemas"]["BreakdownOut"][];
         };
         /** JobOut */
         JobOut: {
@@ -433,6 +1091,124 @@ export interface components {
              */
             model_version: string;
         };
+        /** ModelVersionSeen */
+        ModelVersionSeen: {
+            /**
+             * First Seen
+             * Format: date-time
+             */
+            first_seen: string;
+            /**
+             * Last Seen
+             * Format: date-time
+             */
+            last_seen: string;
+            /** Model */
+            model: string;
+            /** Model Version */
+            model_version: string;
+            /** Runs */
+            runs: number;
+        };
+        /** ProjectCreate */
+        ProjectCreate: {
+            /** Name */
+            name: string;
+        };
+        /** ProjectCreated */
+        ProjectCreated: {
+            /**
+             * Api Key
+             * @description Shown once. Put it in the SDK as MCM_API_KEY
+             */
+            api_key: string;
+            project: components["schemas"]["ProjectOut"];
+        };
+        /** ProjectKey */
+        ProjectKey: {
+            /**
+             * Api Key
+             * @description Shown once; the previous key stops working immediately
+             */
+            api_key: string;
+        };
+        /** ProjectOut */
+        ProjectOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Key Prefix
+             * @description The first characters of the live project key
+             */
+            key_prefix: string | null;
+            /** Name */
+            name: string;
+            /** Project Id */
+            project_id: string;
+            /** Retest Allowed */
+            retest_allowed: boolean;
+            /** Retest Monthly Cap Usd */
+            retest_monthly_cap_usd: number;
+            /**
+             * Webhook Secret
+             * @description Verify X-MCM-Signature on webhook payloads with it
+             */
+            webhook_secret: string | null;
+            /** Webhook Url */
+            webhook_url: string | null;
+        };
+        /** ProjectPatch */
+        ProjectPatch: {
+            /** Name */
+            name?: string | null;
+            /** Retest Allowed */
+            retest_allowed?: boolean | null;
+            /** Retest Monthly Cap Usd */
+            retest_monthly_cap_usd?: number | null;
+            /**
+             * Webhook Url
+             * @description Must be https; send null to remove
+             */
+            webhook_url?: string | null;
+        };
+        /**
+         * ProviderKeyIn
+         * @description The key re-tests use. Encrypted at rest; only its last four characters are shown again.
+         */
+        ProviderKeyIn: {
+            /** Api Key */
+            api_key: string;
+            /**
+             * Base Url
+             * @description An OpenAI-compatible endpoint; known providers fill it in
+             */
+            base_url?: string | null;
+            /**
+             * Provider
+             * @description e.g. openai, gemini, groq
+             */
+            provider: string;
+        };
+        /** ProviderKeyOut */
+        ProviderKeyOut: {
+            /** Base Url */
+            base_url: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Key Hint
+             * @description The key's last four characters
+             */
+            key_hint: string;
+            /** Provider */
+            provider: string;
+        };
         /** RecommendationEvidence */
         RecommendationEvidence: {
             /** Evidence Weight */
@@ -463,6 +1239,8 @@ export interface components {
             /** @description The model production used most recently */
             current: components["schemas"]["ModelRef"] | null;
             evidence: components["schemas"]["RecommendationEvidence"];
+            /** @description Set for DOWNGRADE and SWITCH when both costs are known */
+            forecast: components["schemas"]["ForecastOut"] | null;
             /** Job */
             job: string;
             /** Models */
@@ -487,6 +1265,16 @@ export interface components {
             retest_candidates: string[];
             rules: components["schemas"]["RecommendationRules"];
             /**
+             * Summary
+             * @description Optional two sentences written from the figures above; never decides anything
+             */
+            summary?: string | null;
+            /**
+             * Summary Prompt Version
+             * @description Git blob hash of the prompt file used
+             */
+            summary_prompt_version?: string | null;
+            /**
              * Verdict
              * @enum {string}
              */
@@ -508,6 +1296,94 @@ export interface components {
              * @description How much worse (0.03 = 3 points) a cheaper model may be and still qualify
              */
             margin: number;
+        };
+        /**
+         * RetestCreate
+         * @description Replay past runs of this job on a candidate model, spending at most `budget_usd`.
+         */
+        RetestCreate: {
+            /**
+             * Budget Usd
+             * @description Required: the re-test stops before going over it
+             */
+            budget_usd: number;
+            /**
+             * Candidate Model
+             * @description The model name to call
+             */
+            candidate_model: string;
+            /**
+             * Sample Size
+             * @description Prompts to replay (default 50)
+             */
+            sample_size?: number | null;
+        };
+        /** RetestLimits */
+        RetestLimits: {
+            /** Cap Remaining Usd */
+            cap_remaining_usd: number;
+            /** Monthly Cap Usd */
+            monthly_cap_usd: number;
+            /** @description Null until the key is given */
+            provider_key: components["schemas"]["ProviderKeyOut"] | null;
+            /** Retest Allowed */
+            retest_allowed: boolean;
+            /**
+             * Spent This Month Usd
+             * @description At catalog list price, so it counts free keys too
+             */
+            spent_this_month_usd: number;
+        };
+        /** RetestOut */
+        RetestOut: {
+            /** Budget Usd */
+            budget_usd: number;
+            /** Candidate Model */
+            candidate_model: string;
+            /** Cap Remaining Usd */
+            cap_remaining_usd: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Failed */
+            failed: number;
+            /** Finished At */
+            finished_at: string | null;
+            /** Job */
+            job: string;
+            /** Message */
+            message: string | null;
+            /** Monthly Cap Usd */
+            monthly_cap_usd: number;
+            /** Pass Rate */
+            pass_rate: number | null;
+            /** Passed */
+            passed: number;
+            /**
+             * Retest Id
+             * Format: uuid
+             */
+            retest_id: string;
+            /** Runs Done */
+            runs_done: number;
+            /** Runs Planned */
+            runs_planned: number;
+            /** Spent Usd */
+            spent_usd: number;
+            /** Started At */
+            started_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "QUEUED" | "RUNNING" | "DONE" | "STOPPED_BUDGET" | "STOPPED_CAP" | "FAILED";
+            /**
+             * Trigger
+             * @enum {string}
+             */
+            trigger: "MANUAL" | "NEW_MODEL" | "UNSURE";
         };
         /** RunAccepted */
         RunAccepted: {
@@ -548,7 +1424,7 @@ export interface components {
             cost_usd?: number | null;
             /**
              * Expected
-             * @description The correct values for an ANSWER_KEY job, used to check this run and not stored
+             * @description The correct values for an ANSWER_KEY job, used to check this run. Stored only when the job has re-test consent, so a re-test can check the replayed run against the same answers
              */
             expected?: {
                 [key: string]: unknown;
@@ -778,6 +1654,20 @@ export interface components {
             /** Spend Usd */
             spend_usd: number;
         };
+        /** UserOut */
+        UserOut: {
+            /** Email */
+            email: string;
+            /** Name */
+            name: string | null;
+            /** Picture Url */
+            picture_url: string | null;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -800,6 +1690,128 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    auth_config_auth_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthConfig"];
+                };
+            };
+        };
+    };
+    dev_login_auth_dev_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DevLogin"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    google_callback_auth_google_callback_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    google_login_auth_google_login_get: {
+        parameters: {
+            query?: {
+                next?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logout_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     healthz_healthz_get: {
         parameters: {
             query?: never;
@@ -820,6 +1832,145 @@ export interface operations {
             };
         };
     };
+    list_alerts_v1_alerts_get: {
+        parameters: {
+            query?: {
+                include_resolved?: boolean;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_alert_v1_alerts__alert_id__resolve_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_flow_v1_flow_get: {
+        parameters: {
+            query?: {
+                /** @description Only events after this event_id; 0 = the latest ones */
+                after?: number;
+                limit?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowEventOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_flow_v1_flow_stream_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "last-event-id"?: string | null;
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_spend_v1_insights_spend_get: {
         parameters: {
             query?: {
@@ -829,6 +1980,7 @@ export interface operations {
             header?: {
                 "x-api-key"?: string | null;
                 authorization?: string | null;
+                "x-project-id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -861,6 +2013,7 @@ export interface operations {
             header?: {
                 "x-api-key"?: string | null;
                 authorization?: string | null;
+                "x-project-id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -893,6 +2046,7 @@ export interface operations {
             header?: {
                 "x-api-key"?: string | null;
                 authorization?: string | null;
+                "x-project-id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -923,12 +2077,86 @@ export interface operations {
             };
         };
     };
+    get_history_v1_jobs__job__history_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_job_insights_v1_jobs__job__insights_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back to count */
+                days?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobInsightsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_recommendation_v1_jobs__job__recommendation_get: {
         parameters: {
             query?: never;
             header?: {
                 "x-api-key"?: string | null;
                 authorization?: string | null;
+                "x-project-id"?: string | null;
             };
             path: {
                 job: string;
@@ -957,6 +2185,174 @@ export interface operations {
             };
         };
     };
+    get_regressions_v1_jobs__job__regressions_get: {
+        parameters: {
+            query?: {
+                /** @description Also return alerts already resolved */
+                include_resolved?: boolean;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_retest_v1_jobs__job__retest_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetestCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_retest_v1_jobs__job__retest__retest_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+                retest_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_retests_v1_jobs__job__retests_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetestOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    me_v1_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+        };
+    };
     list_models_v1_models_get: {
         parameters: {
             query?: {
@@ -971,6 +2367,7 @@ export interface operations {
             header?: {
                 "x-api-key"?: string | null;
                 authorization?: string | null;
+                "x-project-id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -997,6 +2394,257 @@ export interface operations {
             };
         };
     };
+    list_projects_v1_projects_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectOut"][];
+                };
+            };
+        };
+    };
+    new_project_v1_projects_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_project_v1_projects__project_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_project_v1_projects__project_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    new_project_key_v1_projects__project_id__key_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectKey"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_provider_key_v1_provider_key_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderKeyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKeyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_provider_key_v1_provider_key_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_retest_limits_v1_retest_limits_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetestLimits"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_runs_v1_runs_get: {
         parameters: {
             query?: {
@@ -1004,12 +2652,15 @@ export interface operations {
                 job?: string | null;
                 model?: string | null;
                 outcome?: string | null;
+                /** @description Only the runs this verdict rests on */
+                recommendation?: string | null;
                 limit?: number;
                 cursor?: string | null;
             };
             header?: {
                 "x-api-key"?: string | null;
                 authorization?: string | null;
+                "x-project-id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -1042,6 +2693,7 @@ export interface operations {
             header?: {
                 "x-api-key"?: string | null;
                 authorization?: string | null;
+                "x-project-id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -1078,6 +2730,7 @@ export interface operations {
             header?: {
                 "x-api-key"?: string | null;
                 authorization?: string | null;
+                "x-project-id"?: string | null;
             };
             path: {
                 run_id: string;
@@ -1112,6 +2765,7 @@ export interface operations {
             header?: {
                 "x-api-key"?: string | null;
                 authorization?: string | null;
+                "x-project-id"?: string | null;
             };
             path: {
                 run_id: string;

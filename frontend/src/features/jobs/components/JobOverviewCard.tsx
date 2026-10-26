@@ -91,11 +91,17 @@ export function JobOverviewCard({
             </div>
           </div>
 
-          {/* The cheaper model, when one qualifies */}
-          {rec?.verdict === "DOWNGRADE" && rec.recommended && (
+          {/* Savings forecast notice, or the cheaper model when no forecast is possible */}
+          {rec?.forecast && rec.forecast.monthly_saving_usd > 0 ? (
             <div className="text-xs font-semibold text-ok">
-              {rec.recommended.model} does this job for less
+              Could save ${rec.forecast.monthly_saving_usd.toFixed(2)}/month
             </div>
+          ) : (
+            rec?.verdict === "DOWNGRADE" && rec.recommended && (
+              <div className="text-xs font-semibold text-ok">
+                {rec.recommended.model} does this job for less
+              </div>
+            )
           )}
         </div>
 

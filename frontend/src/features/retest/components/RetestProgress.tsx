@@ -21,6 +21,8 @@ function getStatusBadge(status: RetestExecutionStatus) {
       return <Badge tone="ok">Completed</Badge>;
     case "STOPPED_BUDGET":
       return <Badge tone="warn">Stopped (Budget Reached)</Badge>;
+    case "STOPPED_CAP":
+      return <Badge tone="warn">Stopped (Monthly Cap Reached)</Badge>;
     case "FAILED":
       return <Badge tone="bad">Failed</Badge>;
   }
@@ -30,6 +32,7 @@ export function RetestProgress({ retest }: { retest: RetestStatus }) {
   const isFinished =
     retest.status === "DONE" ||
     retest.status === "STOPPED_BUDGET" ||
+    retest.status === "STOPPED_CAP" ||
     retest.status === "FAILED";
 
   const runsPercent =
@@ -108,7 +111,7 @@ export function RetestProgress({ retest }: { retest: RetestStatus }) {
             <div className="flex items-center justify-between text-xs">
               <span className="font-medium text-ink">Budget Consumption</span>
               <span className="font-mono text-dim">
-                ${retest.spent_usd.toFixed(2)} / ${retest.budget_usd.toFixed(2)}{" "}
+                ${retest.spent_usd.toFixed(4)} / ${retest.budget_usd.toFixed(2)}{" "}
                 ({spendPercent}%)
               </span>
             </div>
@@ -183,7 +186,7 @@ export function RetestProgress({ retest }: { retest: RetestStatus }) {
             <div>
               <dt className="text-dim">Started</dt>
               <dd className="mt-0.5 text-ink">
-                {new Date(retest.started_at).toLocaleTimeString([], {
+                {new Date(retest.started_at ?? retest.created_at).toLocaleTimeString([], {
                   hour: "2-digit",
                   minute: "2-digit",
                   second: "2-digit",
@@ -214,7 +217,9 @@ export function RetestProgress({ retest }: { retest: RetestStatus }) {
                   ? "Re-test completed successfully!"
                   : retest.status === "STOPPED_BUDGET"
                     ? "Re-test stopped because run budget was reached."
-                    : "Re-test finished."}
+                    : retest.status === "STOPPED_CAP"
+                      ? "Re-test stopped at this month's re-test cap."
+                      : "Re-test finished."}
               </h4>
               <p className="mt-0.5 text-xs text-dim">
                 Evidence collected from this re-test is incorporated into job

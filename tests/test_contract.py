@@ -44,3 +44,31 @@ def test_openapi_lists_the_week_two_endpoints(built):
 def test_openapi_lists_the_week_seven_endpoints(built):
     paths = json.loads(built["openapi.json"])["paths"]
     assert {"/v1/jobs/{job}/recommendation", "/v1/insights/spend"} <= set(paths)
+
+
+def test_openapi_lists_the_week_eight_endpoints(built):
+    paths = json.loads(built["openapi.json"])["paths"]
+    assert "/v1/jobs/{job}/history" in paths
+    assert "recommendation" in {p["name"] for p in paths["/v1/runs"]["get"]["parameters"]}
+
+
+def test_openapi_lists_the_week_nine_endpoints(built):
+    paths = json.loads(built["openapi.json"])["paths"]
+    assert {"/v1/jobs/{job}/regressions", "/v1/alerts", "/v1/alerts/{alert_id}/resolve"} <= set(paths)
+
+
+def test_openapi_lists_the_week_ten_endpoints(built):
+    paths = json.loads(built["openapi.json"])["paths"]
+    assert {"/v1/jobs/{job}/retest", "/v1/jobs/{job}/retest/{retest_id}", "/v1/jobs/{job}/retests",
+            "/v1/retest/limits", "/v1/provider-key"} <= set(paths)
+
+
+def test_openapi_lists_the_week_eleven_endpoints(built):
+    paths = json.loads(built["openapi.json"])["paths"]
+    assert {"/auth/config", "/auth/google/login", "/auth/google/callback", "/auth/logout", "/v1/me", "/v1/projects",
+            "/v1/projects/{project_id}", "/v1/projects/{project_id}/key", "/v1/jobs/{job}/insights"} <= set(paths)
+
+
+def test_openapi_lists_the_week_twelve_endpoints(built):
+    paths = json.loads(built["openapi.json"])["paths"]
+    assert {"/v1/flow", "/v1/flow/stream"} <= set(paths)

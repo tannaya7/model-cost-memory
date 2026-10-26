@@ -1,14 +1,15 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { useMe } from "../features/auth/hooks/useAuth";
+import { useAuthConfig, useMe } from "../features/auth/hooks/useAuth";
 import { Skeleton } from "../shared/components/Skeleton";
 import { ErrorMessage } from "../shared/components/ErrorMessage";
-import { ApiError } from "../shared/api/apiFetch";
+import { ApiError, hasApiKey } from "../shared/api/apiFetch";
 
 export function RequireAuth() {
   const location = useLocation();
   const { data: user, isPending, isError, error, refetch } = useMe();
+  const config = useAuthConfig();
 
-  if (isPending) {
+  if (isPending || (isError && config.isPending)) {
     return (
       <div className="min-h-screen p-8 flex items-center justify-center">
         <div className="w-full max-w-md space-y-4">
@@ -26,6 +27,12 @@ export function RequireAuth() {
   }
 
   const isSignedOut = isError && error instanceof ApiError && error.status === 401;
+
+  // Not signed in, but a project key is saved (the SDK-style setup) or this server has a public demo.
+  // Settings is where a key is entered, so it must be reachable before one exists.
+  if (isSignedOut && (hasApiKey() || config.data?.demo_project_id || location.pathname === "/settings")) {
+    return <Outlet />;
+  }
 
   // We already know who the user is and only a background refresh failed (not a 401): stay in.
   if (isError && user && !isSignedOut) {

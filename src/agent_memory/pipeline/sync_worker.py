@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ..config import Settings, get_settings, load_dotenv_file
 from ..embeddings import Embedder, get_embedder
 from ..logging_config import bind, configure_logging
+from . import flow
 from ..models import OutboxRow, Run
 from ..storage.vector_store import PgVectorClient
 
@@ -167,6 +168,9 @@ async def run_once(
                         )
                         log.info("run indexed", extra={"embedder": embedder.name, "from_state": before, "to_state": after,
                                                        "embedding_reused": run_id in reused})
+                        flow.emit(session, run_hash[run_id][0], "index",
+                                  "Indexed: similar-run search can find it"
+                                  + (" (embedding reused)" if run_id in reused else ""), run_id=run_id)
                     else:  # INVALIDATE: the run should no longer be searchable
                         await store.delete(run_id)
                         log.info("run removed from similar-run search")

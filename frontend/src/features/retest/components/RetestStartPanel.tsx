@@ -6,7 +6,8 @@ import { Badge } from "../../../shared/components/Badge";
 import { useJobs } from "../../jobs/hooks/useJobs";
 import { fetchModels } from "../../models/api/modelsApi";
 import { useRetestLimits, useStartRetest } from "../hooks/useRetest";
-import { ApiError } from "../../../shared/api/apiFetch";
+import { ApiError, errorCode } from "../../../shared/api/apiFetch";
+import { ProviderKeyForm } from "./ProviderKeyForm";
 import type { Model } from "../../../shared/api/types";
 
 function formatPrice(price: number | null | undefined): string {
@@ -31,6 +32,7 @@ export function RetestStartPanel() {
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [budgetUsd, setBudgetUsd] = useState<string>("2.00");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [askForKey, setAskForKey] = useState(false);
 
   const jobs = jobsQuery.data || [];
   const limits = limitsQuery.data;
@@ -121,7 +123,9 @@ export function RetestStartPanel() {
         `/retest/${encodeURIComponent(result.retest_id)}?job=${encodeURIComponent(result.job)}`,
       );
     } catch (err) {
-      if (err instanceof ApiError) {
+      if (errorCode(err) === "provider_key_required") {
+        setAskForKey(true);
+      } else if (err instanceof ApiError) {
         setSubmitError(err.message);
       } else if (err instanceof Error) {
         setSubmitError(err.message);
@@ -192,6 +196,22 @@ export function RetestStartPanel() {
           </div>
         )}
       </Card>
+
+      {/* The provider key: asked for only when a re-test first needs it */}
+      {(askForKey || (limits && limits.provider_key === null)) && (
+        <ProviderKeyForm
+          onSaved={() => {
+            setAskForKey(false);
+            setSubmitError(null);
+          }}
+        />
+      )}
+      {limits?.provider_key && (
+        <p className="text-xs text-dim">
+          Re-tests use your {limits.provider_key.provider} key ending in{" "}
+          <span className="font-mono text-ink">{limits.provider_key.key_hint}</span>, within the monthly cap above.
+        </p>
+      )}
 
       {/* Re-test Configuration Form */}
       <Card className="p-6">
@@ -354,11 +374,12 @@ export function RetestStartPanel() {
 
           {/* Notice Callout */}
           <div className="rounded-md border border-rule bg-bg p-4 text-xs text-dim space-y-1">
-            <p className="font-medium text-ink">Sandbox Execution Notice</p>
+            <p className="font-medium text-ink">What this spends</p>
             <p>
-              Re-tests replay historical job inputs against the candidate model.
-              Actual token spend will be billed to your provider account and
-              tracked against your monthly re-test cap.
+              Up to 50 past prompts of this job are replayed on the candidate model with your own provider key,
+              most important runs first, and each answer is checked like a production run. Before every call
+              the runner checks that this re-test stays within its budget and the project within its monthly cap,
+              so it stops before either is exceeded. It also stops early once the answer is clear.
             </p>
           </div>
 

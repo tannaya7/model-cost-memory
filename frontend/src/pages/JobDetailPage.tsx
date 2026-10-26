@@ -1,9 +1,14 @@
+import { lazy, Suspense } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../shared/components/PageHeader";
 import { QueryState } from "../shared/components/QueryState";
 import { ApiError } from "../shared/api/apiFetch";
 import { EmptyState } from "../shared/components/EmptyState";
 import { useJobs } from "../features/jobs/hooks/useJobs";
+import { Skeleton } from "../shared/components/Skeleton";
+
+// The chart library is loaded only when the breakdown tab is opened.
+const JobBreakdown = lazy(() => import("../features/insights/components/JobBreakdown"));
 import { useRecommendation } from "../features/recommendations/hooks/useRecommendation";
 import { RecommendationCard } from "../features/recommendations/components/RecommendationCard";
 import { JobEvidenceSection } from "../features/recommendations/components/JobEvidenceSection";
@@ -81,6 +86,7 @@ export default function JobDetailPage() {
     { id: "recommendation", label: "Recommendation" },
     { id: "history", label: "History" },
     { id: "compare", label: "Compare" },
+    { id: "breakdown", label: "Breakdown" },
   ];
 
   return (
@@ -187,6 +193,14 @@ export default function JobDetailPage() {
             aria-labelledby="tab-history"
           >
             <JobHistoryTimeline jobName={jobName} />
+          </div>
+        )}
+
+        {activeTab === "breakdown" && jobName && (
+          <div role="tabpanel" id="panel-breakdown" aria-labelledby="tab-breakdown">
+            <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+              <JobBreakdown jobName={jobName} />
+            </Suspense>
           </div>
         )}
 

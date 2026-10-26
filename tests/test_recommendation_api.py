@@ -105,9 +105,9 @@ async def test_evidence_about_a_superseded_version_fades_faster(client, world):
     add(60, version="big-2026-09", age_days=1)  # current version, all pass
     await commit()
     big = (await get_rec(client, keys["demo"]))["models"][0]
-    # Unweighted it is 75%. Superseded runs fade 4x faster (failures, being important, a little slower),
-    # so at 40 days the old version's failures weigh ~0.26 each and its passes ~0.07.
-    assert big["weighted_pass_rate"] > 0.85
+    # Unweighted it is 75%. Superseded runs fade 4x faster (S = 7.5 days), so at 40 days the old version's
+    # runs weigh ~0.005 each against ~0.97 for the current version's.
+    assert big["weighted_pass_rate"] > 0.98
     assert big["model_version"] == "big-2026-09"
 
 
@@ -148,3 +148,11 @@ async def test_spend_by_job_counts_production_in_the_window_most_expensive_first
     wider = (await client.get("/v1/insights/spend?days=60", headers=auth(keys["demo"]))).json()
     assert wider[0] == {"job": "invoice", "runs": 20, "spend_usd": pytest.approx(0.60), "share": pytest.approx(6 / 7)}
     assert (await client.get("/v1/insights/spend?days=0", headers=auth(keys["demo"]))).status_code == 422
+
+
+async def test_weights_do_not_depend_on_the_outcome_so_the_rate_is_unbiased(client, world):
+    keys, add, commit = world
+    add(300, fail_every=4, age_days=10)  # 75% pass, all ten days old
+    await commit()
+    big = (await get_rec(client, keys["demo"]))["models"][0]
+    assert big["weighted_pass_rate"] == pytest.approx(0.75, abs=0.005)  # failures are not remembered longer

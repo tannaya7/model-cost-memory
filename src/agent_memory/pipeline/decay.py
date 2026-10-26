@@ -60,9 +60,11 @@ async def current_versions(session: AsyncSession, job_id=None) -> dict[tuple, st
 
 
 async def recompute(
-    session: AsyncSession, *, now: datetime | None = None, settings: Settings | None = None
+    session: AsyncSession, *, now: datetime | None = None, settings: Settings | None = None,
+    project_id: str | None = None,
 ) -> DecayStats:
-    """Re-score every run that is not archived yet, and archive the ones that have faded.
+    """Re-score every run that is not archived yet (optionally one project's), and archive the ones that
+    have faded.
 
     `now` can be set to any moment, which is how the simulated-time harness replays weeks in minutes.
     """
@@ -80,7 +82,7 @@ async def recompute(
         await session.execute(
             select(Run.run_id, Run.job_id, Run.project_id, Run.model, Run.model_version, Run.outcome, Run.cost_usd,
                    Run.created_at, Run.state)
-            .where(Run.state != "ARCHIVED")
+            .where(Run.state != "ARCHIVED", *([Run.project_id == project_id] if project_id else []))
         )
     ).all()
 
