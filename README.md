@@ -36,7 +36,8 @@ database schema: [`db/schema.sql`](db/schema.sql) · API contract: [`contract/`]
 | 4 | Outcome checkers, invoice-extraction corpus | done |
 | 5 | Sync worker, pgvector search, outbox janitor, server files | done (server files not yet run on a real server) |
 | 6 | Importance and decay, model catalog | done |
-| 7–8 | Recommendation engine, public deployment, consolidation, history | next |
+| 7 | Recommendation engine (95% intervals, 3-point tolerance), spend by job | done (public deployment waits for the server) |
+| 8 | Consolidation, history | next |
 | 9–12 | Regression detection and alerts, re-test runner, sign-in, staleness experiment | planned |
 
 ## Getting started
