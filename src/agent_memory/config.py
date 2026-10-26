@@ -59,9 +59,11 @@ class Settings:
     database_url: str = ""
     # Re-tests: a hard monthly ceiling per project (default for new projects).
     retest_monthly_cap_usd: float = 10.0
-    # Recommendation: minimum weighted evidence before a verdict, and the tolerance rule.
+    # Recommendation: minimum weighted evidence before a verdict, and the tolerance rule: a cheaper
+    # model qualifies when we are `confidence_level` sure it is at most `tolerance_points` worse.
     evidence_floor: float = 25.0
-    tolerance_points: float = 0.02
+    tolerance_points: float = 0.03
+    confidence_level: float = 0.95
     # Decay: stability S = importance x base_days x version_factor.
     decay_base_days: float = 30.0
     version_factor_superseded: float = 0.25
@@ -84,7 +86,8 @@ class Settings:
             database_url=normalize_database_url(url) if url else "",
             retest_monthly_cap_usd=_float("RETEST_MONTHLY_CAP_USD", 10.0),
             evidence_floor=_float("EVIDENCE_FLOOR", 25.0),
-            tolerance_points=_float("TOLERANCE_POINTS", 0.02),
+            tolerance_points=_float("TOLERANCE_POINTS", 0.03),
+            confidence_level=_float("CONFIDENCE_LEVEL", 0.95),
             decay_base_days=_float("DECAY_BASE_DAYS", 30.0),
             version_factor_superseded=_float("VERSION_FACTOR_SUPERSEDED", 0.25),
             archive_below_weight=_float("ARCHIVE_BELOW_WEIGHT", 0.05),
