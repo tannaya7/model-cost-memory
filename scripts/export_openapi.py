@@ -7,8 +7,11 @@ Produces, in contract/:
   samples/jobs.json     an example GET /v1/jobs response
   samples/runs.json     an example GET /v1/runs response
   samples/models.json   an example GET /v1/models response
+  samples/recommendation.json   an example GET /v1/jobs/{job}/recommendation response
+  samples/spend.json    an example GET /v1/insights/spend response
 
-The samples are built from the response models themselves, so they cannot drift from the schema.
+The samples are built from the response models themselves, so they cannot drift from the schema; the
+recommendation sample is produced by the engine's own `decide`.
 A test fails when the committed files are out of date; run this script and commit the result.
 """
 
@@ -23,8 +26,11 @@ CONTRACT = Path(__file__).resolve().parents[1] / "contract"
 
 
 def build() -> dict[str, str]:
-    from agent_memory.api import app
-    from agent_memory.schemas import JobOut, ModelOut, ModelPage, RunOut, RunPage
+    from agent_memory.api import _recommendation_out, app
+    from agent_memory.config import Settings
+    from agent_memory.recommend.engine import FailingRun, JobRecommendation, ModelInput, decide
+    from agent_memory.recommend.stats import Sample
+    from agent_memory.schemas import JobOut, ModelOut, ModelPage, RunOut, RunPage, SpendOut
 
     invoice, ticket = uuid.UUID(int=0x1001), uuid.UUID(int=0x1002)
     jobs = [
@@ -71,6 +77,33 @@ def build() -> dict[str, str]:
         next_cursor=None,
     )
 
+    settings = Settings()
+    evidence = [  # (model, version, runs, failures, effective n, evidence weight, mean cost, catalog status)
+        ("acme-large", "acme-large-2026-06-01", 640, 6, 560.0, 610.0, 0.0347, "ACTIVE"),
+        ("acme-mini", "acme-mini-2026-08-15", 420, 4, 380.0, 400.0, 0.0031, "ACTIVE"),
+        ("acme-nano", "acme-nano-2026-09-01", 24, 1, 21.0, 22.5, 0.0009, "ACTIVE"),
+    ]
+    decision = decide(
+        [ModelInput(model=m, model_version=v, n_runs=n, failures=f,
+                    sample=Sample(pass_rate=1 - f / n, effective_n=eff, evidence_weight=w), mean_cost_usd=cost,
+                    catalog_status=status)
+         for m, v, n, f, eff, w, cost, status in evidence],
+        "acme-large", floor=settings.evidence_floor, margin=settings.tolerance_points,
+        confidence=settings.confidence_level,
+    )
+    recommendation = _recommendation_out(JobRecommendation(
+        job="invoice-extract", decision=decision, n_runs=1084, evidence_weight=1032.5,
+        failing_runs=[
+            FailingRun(uuid.UUID(int=0x2003), "acme-mini", "acme-mini-2026-08-15",
+                       "total: expected 1250.00, got 1205.00", t0 - timedelta(hours=3)),
+            FailingRun(uuid.UUID(int=0x2011), "acme-large", "acme-large-2026-06-01",
+                       "date: expected 2026-10-02, got 2026-02-10", t0 - timedelta(days=2)),
+        ],
+        computed_at=t0, settings=settings,
+    ))
+    spend = [SpendOut(job="invoice-extract", runs=961, spend_usd=28.41, share=0.87),
+             SpendOut(job="ticket-classify", runs=1530, spend_usd=4.26, share=0.13)]
+
     def dump(obj) -> str:
         return json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
@@ -79,6 +112,8 @@ def build() -> dict[str, str]:
         "samples/jobs.json": dump([j.model_dump(mode="json") for j in jobs]),
         "samples/runs.json": dump(runs.model_dump(mode="json")),
         "samples/models.json": dump(models.model_dump(mode="json")),
+        "samples/recommendation.json": dump(recommendation.model_dump(mode="json")),
+        "samples/spend.json": dump([s.model_dump(mode="json") for s in spend]),
     }
 
 
