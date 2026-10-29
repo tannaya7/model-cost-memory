@@ -55,7 +55,10 @@ tolerance rule       a model is GOOD_ENOUGH when we are 95% sure it is at most 3
                      than the best (Newcombe interval of the difference), CLEARLY_WORSE when sure
                      it is more, UNSURE otherwise (a re-test settles it)
 recommendation       lowest cost per success among GOOD_ENOUGH models, never RETIRED;
-                     INSUFFICIENT_EVIDENCE until a model reaches the evidence floor
+                     INSUFFICIENT_EVIDENCE until a model reaches the evidence floor. A DOWNGRADE also
+                     needs the pick shown within 3 points of the model in use, not only of the best;
+                     otherwise HOLD and re-test it. A model in use that measures more than 3 points
+                     behind the best, unproven, gets the best model re-tested to settle it
 savings forecast     saving = (cost per success now − recommended) × successes per month;
                      extra failures = (pass rate now − recommended) × runs per month, with its interval
 regression           one-sided two-proportion z-test, the current version against the one it replaced:
@@ -68,9 +71,17 @@ re-test spend        before every call: re-test spend + reserved + this call ≤
                      project re-test spend (at list price) + reserved + this call ≤ the monthly cap
 ```
 
-Measured on the simulated-time harness (`scripts/simulate.py`, 20 trials each, 50 runs a day):
-no false alarms in the controls; version regressions of 10 and 15 points caught 20/20, 5 points 15/20;
-silent drops of 10 and 15 points caught 20/20, 5 points 11/20. Results in `reports/`.
+Measured on the simulated-time harness (`scripts/simulate.py`, 50 trials each, 50 runs a day):
+version regressions of 5 points caught 48/50 and of 10 and 15 points 50/50, a 10-point one the day after
+the upgrade, with 1 false alarm in 50 controls; silent drops of 5 points caught 34/50, of 10 and 15 points
+50/50, with no false alarms. The earlier rule (a fixed p < 0.05 checked daily, 5-point minimum) looked
+alarm-free over 20 trials, but over 20,000 simulated ones it raised a false alarm on 7% of unchanged
+upgrades. Results in `reports/`.
+
+The held-out check (`scripts/holdout_check.py`, `reports/holdout_check.md`) scores the engine's pick on
+prompts it never saw. It found that with little evidence the luckiest model could be recommended without
+being compared with the model in use (8% of picks at 25 runs were more than 3 points worse than the best),
+which is why a DOWNGRADE now needs that comparison.
 
 ## Five design decisions
 

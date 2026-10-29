@@ -52,11 +52,17 @@ Simulated data, run through the production engine, decay, consolidation and regr
 - **Staleness experiment** ([report](reports/staleness_experiment.md)): as the workload drifts and a new model
   version arrives, a curated evidence set frozen at day 14 stops picking the right model, while the
   self-maintaining memory keeps up.
-- **Regression detection** ([data](reports/regression_detection.json)), 20 trials per size: no false alarms;
-  drops of 10 and 15 points caught every time; drops of exactly 5 points 75% of the time.
+- **Regression detection** ([version](reports/regression_detection.json),
+  [silent](reports/silent_drop_detection.json)), 50 trials per size: a version upgrade that costs 5 points is
+  caught 96% of the time and 10 points always, the day after it lands, with 1 false alarm in 50 unchanged
+  upgrades. A silent drop under an unchanged name is caught 68% of the time at 5 points and always at 10, with
+  no false alarms.
+- **Held-out check** ([report](reports/holdout_check.md)): on simulated answers at real Gemini prices, every
+  model the engine moves a job to is truly within 3 points of the best, at every amount of evidence. The cost
+  is caution: a cheaper model only 1.4 points worse takes several hundred runs per model to prove.
 
-Reproduce with `python scripts/staleness_experiment.py` and `python scripts/simulate.py` (an embedded
-Postgres is started for them).
+Reproduce with `python scripts/staleness_experiment.py`, `python scripts/simulate.py` (an embedded Postgres
+is started for them) and `python scripts/holdout_check.py --simulated`.
 
 ## Getting started
 
