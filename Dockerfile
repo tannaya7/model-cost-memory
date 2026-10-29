@@ -11,7 +11,9 @@ COPY src ./src
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY scripts ./scripts
-RUN pip install --no-cache-dir "${INSTALL_TARGET}"
+# The CPU build of PyTorch: the server has no GPU, and the default Linux wheels bring ~5 GB of CUDA
+# libraries (the worker image was 6.3 GB). A "+cpu" wheel sorts above the plain one, so pip picks it.
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu "${INSTALL_TARGET}"
 
 # Run as an unprivileged user, never root.
 RUN useradd --create-home --uid 10001 app
