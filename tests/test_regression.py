@@ -15,7 +15,7 @@ from agent_memory.alerts.notifier import deliver_pending, sign
 from agent_memory.alerts.service import catalog_alerts
 from agent_memory.models import Alert, Job, Project, Recommendation, Run
 from agent_memory.pipeline.consolidation import consolidate_job
-from agent_memory.pipeline.regression import cusum_alarm, drop_test, sweep_job
+from agent_memory.pipeline.regression import boundary_alpha, cusum_alarm, drop_test, sweep_job
 from agent_memory.security import generate_key, hash_key
 from agent_memory.simulation.evaluation import detection, upgrade_scenario
 from agent_memory.simulation.harness import Simulator
@@ -85,8 +85,24 @@ async def test_a_drop_across_a_version_change_raises_one_alert_and_supersedes_th
 async def test_a_small_or_unproven_drop_is_not_flagged(session, world):
     _, job, add = world
     await add(200, version="big-2026-08", passes=190, start=T0)  # 95%
-    await add(100, version="big-2026-09", passes=93, start=T0 + timedelta(days=3))  # 93%: below the 5-point minimum
+    await add(100, version="big-2026-09", passes=93, start=T0 + timedelta(days=3))  # 93%: below the 3-point minimum
     assert (await sweep_job(session, job, now=T0 + timedelta(days=5))).alerts == []
+
+
+def test_the_daily_boundary_is_strict_early_and_relaxes_to_alpha():
+    assert boundary_alpha(0.005, 500, 500) == boundary_alpha(0.005, 5000, 500) == 0.005
+    assert boundary_alpha(0.005, 300, 500) < boundary_alpha(0.005, 400, 500) < 0.005
+    assert boundary_alpha(0.005, 30, 500) == 0.0001  # never stricter than this, so a huge drop shows at once
+
+
+async def test_a_moderate_drop_on_few_runs_waits_for_more_evidence(session, world):
+    _, job, add = world
+    await add(1000, version="big-2026-08", passes=950, start=T0)  # 95%
+    await add(100, version="big-2026-09", passes=89, start=T0 + timedelta(days=8))  # 89%: p ~ 0.01 on 100 runs
+    assert (await sweep_job(session, job, now=T0 + timedelta(days=9))).alerts == []
+    await add(500, version="big-2026-09", passes=445, start=T0 + timedelta(days=9))  # still 89%, now 600 runs
+    [alert] = (await sweep_job(session, job, now=T0 + timedelta(days=13))).alerts
+    assert alert.detail["drop"] == pytest.approx(0.06)
 
 
 async def test_too_few_runs_on_the_new_version_are_not_judged(session, world):

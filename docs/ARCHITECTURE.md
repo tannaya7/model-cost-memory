@@ -59,9 +59,11 @@ recommendation       lowest cost per success among GOOD_ENOUGH models, never RET
 savings forecast     saving = (cost per success now − recommended) × successes per month;
                      extra failures = (pass rate now − recommended) × runs per month, with its interval
 regression           one-sided two-proportion z-test, the current version against the one it replaced:
-                     p < 0.05 AND drop ≥ 5 points AND ≥ 30 runs a side
-silent drop          same version, last 28 days split in half: the same test, plus a standardized
-                     one-sided CUSUM over the second half (k = 0.5, h = 4) so one noisy day never fires
+                     p < boundary AND drop ≥ 3 points AND ≥ 30 runs a side. The sweep checks daily,
+                     so the boundary is strict early (z ≥ z₀.₀₀₅ × √(500 / n), but never past
+                     p < 0.0001) and p < 0.005 from 500 runs on the new version
+silent drop          same version, last 28 days (≥ 20 with runs) split in half: p < 0.001 AND drop ≥ 3
+                     points, plus a standardized one-sided CUSUM over the second half (k = 0.5, h = 4)
 re-test spend        before every call: re-test spend + reserved + this call ≤ budget, and this month's
                      project re-test spend (at list price) + reserved + this call ≤ the monthly cap
 ```
