@@ -280,6 +280,7 @@ class ProviderPrice(Base):
     provider: Mapped[str] = mapped_column(Text, primary_key=True)
     price_in_per_mtok: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
     price_out_per_mtok: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    shutdown_date: Mapped[date | None] = mapped_column(Date)  # this provider's own date (0011)
     first_seen_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
 
 

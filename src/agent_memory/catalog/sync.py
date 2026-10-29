@@ -180,12 +180,20 @@ async def _sync_provider_prices(
     for rec in parse_provider_prices(data, today):
         row = prices.get((rec.model, rec.provider))
         if row is None:
-            session.add(ProviderPrice(model=rec.model, provider=rec.provider,
-                                      price_in_per_mtok=rec.price_in_per_mtok, price_out_per_mtok=rec.price_out_per_mtok))
+            session.add(ProviderPrice(model=rec.model, provider=rec.provider, price_in_per_mtok=rec.price_in_per_mtok,
+                                      price_out_per_mtok=rec.price_out_per_mtok, shutdown_date=rec.shutdown_date))
             if not first_fill or rec.model in new_names:
                 result.added_models.append(rec)
-        elif (row.price_in_per_mtok, row.price_out_per_mtok) != (rec.price_in_per_mtok, rec.price_out_per_mtok):
+            continue
+        if (row.price_in_per_mtok, row.price_out_per_mtok) != (rec.price_in_per_mtok, rec.price_out_per_mtok):
             row.price_in_per_mtok, row.price_out_per_mtok = rec.price_in_per_mtok, rec.price_out_per_mtok
+        if row.shutdown_date != rec.shutdown_date:
+            # A provider announcing (or moving) its own shutdown date is a status change the alerts
+            # check, even when the catalog row's provider has not changed anything.
+            old, new = status_for(row.shutdown_date, today), status_for(rec.shutdown_date, today)
+            row.shutdown_date = rec.shutdown_date
+            if old != new and (rec.model, old, new) not in result.status_changes:
+                result.status_changes.append((rec.model, old, new))
 
 
 async def set_override(

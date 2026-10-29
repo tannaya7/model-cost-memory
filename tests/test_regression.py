@@ -4,16 +4,16 @@ import hashlib
 import hmac
 import json
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from agent_memory.alerts.notifier import deliver_pending, sign
 from agent_memory.alerts.service import catalog_alerts
-from agent_memory.models import Alert, Job, Project, Recommendation, Run
+from agent_memory.models import Alert, CatalogEntry, Job, Project, ProviderPrice, Recommendation, Run
 from agent_memory.pipeline.consolidation import consolidate_job
 from agent_memory.pipeline.regression import boundary_alpha, cusum_alarm, drop_test, sweep_job
 from agent_memory.security import generate_key, hash_key
@@ -168,10 +168,26 @@ async def test_a_deprecated_recommended_model_raises_an_alert(session, world):
     _, job, add = world
     await add(200, version="big-2026-08", passes=198, start=T0)
     await consolidate_job(session, job, now=T0 + timedelta(days=2))
+    session.add(CatalogEntry(model="big-2026-08", model_version="big-2026-08", provider="acme", status="DEPRECATED",
+                             shutdown_date=date(2027, 1, 1)))
+    await session.commit()
     raised = await catalog_alerts(session, [("big-2026-08", "ACTIVE", "DEPRECATED")], now=T0 + timedelta(days=3))
     await session.commit()
     assert [a.kind for a in raised] == ["MODEL_DEPRECATED"]
     assert await catalog_alerts(session, [("unrelated-model", "ACTIVE", "RETIRED")], now=T0) == []
+
+
+async def test_another_provider_retiring_the_model_raises_no_alert(session, world):
+    _, job, add = world
+    await add(200, version="big-2026-08", passes=198, start=T0)
+    await session.execute(update(Run).values(provider="gemini"))  # this job's runs go to the Gemini API
+    await consolidate_job(session, job, now=T0 + timedelta(days=2))
+    session.add(CatalogEntry(model="big-2026-08", model_version="big-2026-08", provider="vertex", status="RETIRED",
+                             shutdown_date=date(2026, 1, 1)))
+    session.add(ProviderPrice(model="big-2026-08", provider="vertex", shutdown_date=date(2026, 1, 1)))
+    session.add(ProviderPrice(model="big-2026-08", provider="gemini", shutdown_date=None))
+    await session.commit()
+    assert await catalog_alerts(session, [("big-2026-08", "ACTIVE", "RETIRED")], now=T0 + timedelta(days=3)) == []
 
 
 def test_truth_picks_the_cheapest_model_within_the_margin():
