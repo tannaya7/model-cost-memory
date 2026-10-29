@@ -270,7 +270,9 @@ class RecommendationOut(Model):
     models: list[ModelEvidenceOut]
     evidence: RecommendationEvidence
     progress: float = Field(description="Progress toward the evidence floor, 0..1; below 1 only when insufficient")
-    retest_candidates: list[str] = Field(description="Cheaper models a re-test could qualify")
+    retest_candidates: list[str] = Field(
+        description="Models a re-test would settle: cheaper ones that could qualify, or the best model when "
+                    "the current one measures worse but that is not proven yet")
     forecast: ForecastOut | None = Field(description="Set for DOWNGRADE and SWITCH when both costs are known")
     summary: str | None = Field(
         default=None, description="Optional two sentences written from the figures above; never decides anything")

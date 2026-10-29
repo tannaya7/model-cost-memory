@@ -12,9 +12,17 @@ lower bound is the reference, and every other one is tested against it with the 
 The verdict compares that with the model production uses now:
 
     HOLD                   keep the current model
-    DOWNGRADE              a cheaper model is good enough
+    DOWNGRADE              a cheaper model is good enough, and shown to be within the margin of the
+                           current model itself, not only of the reference
     SWITCH                 the current model is clearly worse or retired
     INSUFFICIENT_EVIDENCE  no model has enough evidence yet; refusing is a required answer
+
+Moving off the model in use needs proof in both directions. A cheaper model that is good enough next
+to the reference but not yet next to the current model is held, and re-testing it is suggested: with
+little evidence the reference is often just the luckiest model, and the held-out check
+(holdout.py) showed that recommending it broke the 95% promise. The other way round, a current model
+that measures more than the margin below the reference without that being proven yet is held too,
+and the reference is suggested for a re-test, so the proof arrives sooner than traffic alone brings it.
 
 `decide` is pure (no database), so the rule can be tested and swapped on its own; `recommend` loads a
 job's runs and calls it, and `forecast` turns a DOWNGRADE or SWITCH into money and failures per month.
@@ -94,6 +102,13 @@ def _cheaper(a: ModelEvidence, b: ModelEvidence) -> bool:
     )
 
 
+def _within(candidate: ModelEvidence, current: ModelEvidence, margin: float, z: float) -> bool:
+    """Shown to be at most `margin` worse than the model in use."""
+    if candidate.sample is None or current.sample is None:
+        return False
+    return assess(candidate.sample, current.sample, margin=margin, z=z) == "GOOD_ENOUGH"
+
+
 def decide(
     inputs: list[ModelInput], current_model: str | None, *, floor: float, margin: float, confidence: float
 ) -> Decision:
@@ -153,20 +168,40 @@ def decide(
             next_step="Record production runs, so the engine knows which model this job uses now",
         )
 
+    settle: list[str] = []  # re-tests that would settle a decision held for want of proof
+    # The model in use measures more than the margin below the reference, but that is not proven yet.
+    gap = reference.sample.pass_rate - current.sample.pass_rate if current.sample else 0.0
+    behind = current.status == "UNSURE" and gap > margin
     if recommended is current:
         verdict: Verdict = "HOLD"
     elif current.status in ("RETIRED", "CLEARLY_WORSE"):
         verdict = "SWITCH"
     elif current.status == "GOOD_ENOUGH" or _cheaper(recommended, current):
-        verdict = "DOWNGRADE"  # what qualifies and costs less per success
+        if _within(recommended, current, margin, z):
+            verdict = "DOWNGRADE"  # what qualifies and costs less per success
+        else:
+            warnings.append(
+                f"Not yet sure {recommended.model} is within {_points(margin)} of {current.model}, the model in "
+                f"use; a re-test of {recommended.model} would settle it"
+            )
+            settle.append(recommended.model)
+            verdict, recommended = "HOLD", current
     else:
         # The current model is not proven good enough, but nothing cheaper is either.
         verdict, recommended = "HOLD", current
+        if not behind:
+            warnings.append(
+                f"{current.model} has too little evidence to judge yet" if current.status == "BELOW_FLOOR"
+                else f"Not yet sure {current.model} is within {_points(margin)} of {reference.model}; "
+                "a re-test on more of its prompts would settle it"
+            )
+
+    if verdict == "HOLD" and behind and reference.model not in settle:
         warnings.append(
-            f"{current.model} has too little evidence to judge yet" if current.status == "BELOW_FLOOR"
-            else f"Not yet sure {current.model} is within {_points(margin)} of {reference.model}; "
-            "a re-test on more of its prompts would settle it"
+            f"{current.model} measures {gap * 100:.1f} points below {reference.model}, not yet proven; a re-test of "
+            f"{reference.model} will show whether to switch"
         )
+        settle.append(reference.model)
 
     if recommended.catalog_status == "DEPRECATED":
         warnings.append(f"{recommended.model} is deprecated and shuts down on {recommended.shutdown_date}")
@@ -179,7 +214,13 @@ def decide(
         m.model for m in models
         if m.status in ("UNSURE", "BELOW_FLOOR") and m is not recommended and _cheaper(m, recommended)
     ]
-    next_step = f"Re-test {', '.join(retest)}: cheaper, but not enough evidence yet" if retest else None
+    if retest:
+        next_step = f"Re-test {', '.join(retest)}: cheaper, but not enough evidence yet"
+    elif settle:
+        next_step = f"Re-test {', '.join(settle)} to settle whether to switch"
+    else:
+        next_step = None
+    retest += [m for m in settle if m not in retest]
     return Decision(verdict, current, recommended, reference, models, retest_candidates=retest,
                     warnings=warnings, next_step=next_step)
 

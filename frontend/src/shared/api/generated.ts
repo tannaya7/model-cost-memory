@@ -1263,7 +1263,7 @@ export interface components {
             reference: string | null;
             /**
              * Retest Candidates
-             * @description Cheaper models a re-test could qualify
+             * @description Models a re-test would settle: cheaper ones that could qualify, or the best model when the current one measures worse but that is not proven yet
              */
             retest_candidates: string[];
             rules: components["schemas"]["RecommendationRules"];

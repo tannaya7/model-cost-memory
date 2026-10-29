@@ -92,3 +92,25 @@ def test_without_production_runs_there_is_no_current_model_to_compare():
     d = decide([model("big", 0.99, 400, 0.03)], None, **RULES)
     assert d.verdict == "INSUFFICIENT_EVIDENCE"
     assert d.recommended.model == "big"
+
+
+def test_a_cheaper_model_must_be_shown_within_the_margin_of_the_current_one_before_a_downgrade():
+    # 30 lucky runs make 'mini' the reference, but nothing shows it is within 3 points of 'big', the model
+    # in use. Downgrading on that was the gamble the held-out check caught.
+    d = decide([model("big", 0.96, 30, 0.03), model("mini", 1.0, 30, 0.001)], "big", **RULES)
+    assert d.reference.model == "mini"
+    assert (d.verdict, d.recommended.model) == ("HOLD", "big")
+    assert d.warnings == ["Not yet sure mini is within 3 points of big, the model in use; a re-test of mini "
+                          "would settle it"]
+    assert d.retest_candidates == ["mini"]
+    assert d.next_step == "Re-test mini to settle whether to switch"
+
+
+def test_a_current_model_that_measures_well_below_the_best_asks_for_a_re_test_of_the_best():
+    # 7 points behind, but with 100 and 200 runs that is not yet proven to be more than 3.
+    d = decide([model("big", 0.97, 100, 0.03), model("mini", 0.90, 200, 0.001)], "mini", **RULES)
+    assert by_name(d)["mini"].status == "UNSURE"
+    assert (d.verdict, d.recommended.model) == ("HOLD", "mini")
+    assert d.warnings == ["mini measures 7.0 points below big, not yet proven; a re-test of big will show "
+                          "whether to switch"]
+    assert d.retest_candidates == ["big"]

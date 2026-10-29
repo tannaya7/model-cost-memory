@@ -364,7 +364,8 @@ async def start_for_new_models(
 
 async def start_when_unsure(session: AsyncSession, *, settings: Settings | None = None,
                             quiet_days: int = 7) -> list[Retest]:
-    """The engine is unsure whether a cheaper model is good enough: re-test it, at most once a week."""
+    """The engine is unsure whether to switch: re-test the model that would settle it (a cheaper candidate,
+    or the best model when the current one measures worse), at most once a week per model."""
     settings = settings or get_settings()
     started: list[Retest] = []
     since = datetime.now(UTC) - timedelta(days=quiet_days)
