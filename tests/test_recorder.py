@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from agent_memory.recorder import RunRecorder, Sender, read_response
+from agent_memory.recorder import RunRecorder, Sender, provider_for, read_response
 
 
 def anthropic_like():
@@ -183,4 +183,28 @@ def test_a_full_queue_drops_instead_of_blocking():
     results = [sender.submit({"run_id": str(i)}) for i in range(6)]
     assert results.count(False) >= 3 and sender.dropped >= 3
     gate.append(1)
+    sender.close()
+
+
+@pytest.mark.parametrize("url, provider", [
+    ("https://api.groq.com/openai/v1", "groq"),
+    ("https://generativelanguage.googleapis.com/v1beta/openai/", "gemini"),
+    ("https://API.OpenAI.com/v1", "openai"),
+    ("http://localhost:11434/v1", "ollama"),
+    ("https://llm.internal.example/v1", None),
+    (None, None),
+])
+def test_the_provider_is_named_from_the_endpoint_address(url, provider):
+    assert provider_for(url) == provider
+
+
+def test_the_recorders_provider_is_sent_with_each_run():
+    server = Server()
+    sender = sender_for(server)
+    with RunRecorder(job="j", provider="groq", sender=sender) as rec:
+        rec.capture(openai_like(), prompt="p")
+    with RunRecorder(job="j", sender=sender) as rec:
+        rec.capture(openai_like(), prompt="p")
+    sender.flush(2)
+    assert [b.get("provider") for b in server.bodies()] == ["groq", None]
     sender.close()

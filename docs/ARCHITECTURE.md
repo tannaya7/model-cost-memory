@@ -83,7 +83,7 @@ silent drops of 10 and 15 points caught 20/20, 5 points 11/20. Results in `repor
 ## Data model
 
 The authoritative schema is [`db/schema.sql`](../db/schema.sql): `users`, `projects`, `provider_keys`,
-`jobs`, `retests`, `runs`, `recommendations`, `outbox`, `model_catalog`, `alerts`, `flow_events`.
+`jobs`, `retests`, `runs`, `recommendations`, `outbox`, `model_catalog`, `model_prices`, `alerts`, `flow_events`.
 
 - `recommendations.consolidated_from` links a conclusion to every run behind it.
 - `recommendations.superseded_by_id` links it to the conclusion that replaced it, with a date and
@@ -97,6 +97,9 @@ The authoritative schema is [`db/schema.sql`](../db/schema.sql): `users`, `proje
 - `projects.store_tool_arguments` (off by default) decides whether tool-call arguments are kept. By default only
   each tool's name and call id are stored; the SDK and the server both enforce it.
 - `runs.outcome` and `runs.outcome_reason` are resolved by the job's checker, never supplied by the client.
+- `model_catalog` has one row per model name; `model_prices` has each provider's own price for it, because the
+  same open-weight model is sold by several providers at different prices. A run that names its `provider` is
+  priced from `model_prices`; one that does not, from the catalog. A hand-entered (MANUAL) catalog price wins.
 - `runs.cost_usd` is NULL when the model has no catalog price and the client sent none: unknown, never "free".
   Costs are averaged over priced runs only, and spend reports how many runs it could not price.
 - `runs.embedding_model` names the embedder with its pinned weights (`minilm@<revision>`), so upgrading the model

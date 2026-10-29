@@ -1910,6 +1910,19 @@
             ],
             "title": "Prompt Version"
           },
+          "provider": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who served the call, as the price list names it (e.g. openai, gemini, groq, together_ai). The same model can cost different amounts on different providers; without it the catalog's default price for the model is used",
+            "title": "Provider"
+          },
           "run_id": {
             "format": "uuid",
             "title": "Run Id",

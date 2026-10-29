@@ -129,6 +129,12 @@ class RunCreate(Model):
     model_version: str = Field(
         min_length=1, max_length=200, description="The provider-resolved version from the response"
     )
+    provider: str | None = Field(
+        default=None, max_length=40,
+        description="Who served the call, as the price list names it (e.g. openai, gemini, groq, together_ai). "
+                    "The same model can cost different amounts on different providers; without it the catalog's "
+                    "default price for the model is used",
+    )
     prompt_version: str | None = Field(default=None, max_length=64)
     tokens_in: int = Field(default=0, ge=0, le=MAX_TOKENS, description="Uncached input tokens")
     tokens_out: int = Field(default=0, ge=0, le=MAX_TOKENS, description="Output tokens, thinking included")

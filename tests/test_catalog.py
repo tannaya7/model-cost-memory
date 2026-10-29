@@ -11,11 +11,12 @@ from agent_memory.catalog.sync import (
     clear_override,
     fetch_price_list,
     parse_price_list,
+    parse_provider_prices,
     set_override,
     status_for,
     sync_catalog,
 )
-from agent_memory.models import CatalogEntry
+from agent_memory.models import CatalogEntry, ProviderPrice
 
 TODAY = date(2026, 10, 14)
 
@@ -148,3 +149,36 @@ async def test_the_price_list_is_fetched_over_http():
     failing = httpx.MockTransport(lambda r: httpx.Response(503))
     with pytest.raises(httpx.HTTPStatusError):
         await fetch_price_list("https://prices.example/list.json", transport=failing)
+
+
+def test_each_provider_keeps_its_own_price_for_the_same_model():
+    prices = {(r.model, r.provider): r.price_in_per_mtok for r in parse_provider_prices(price_list(), TODAY)}
+    assert prices[("acme-large-2026-06-01", "acme")] == Decimal("3.0000")
+    assert prices[("acme-large-2026-06-01", "acme-via-proxy")] == Decimal("9.0000")
+    assert by_model(parse_price_list(price_list(), TODAY))["acme-large-2026-06-01"].price_in_per_mtok == Decimal("3.0000")
+
+
+async def test_the_sync_stores_provider_prices_and_reports_only_new_pairs(session):
+    first = await sync_catalog(session, price_list(), today=TODAY)
+    assert len((await session.execute(select(ProviderPrice))).scalars().all()) == 5
+    assert {(r.model, r.provider) for r in first.added_models} >= {("acme-large-2026-06-01", "acme-via-proxy")}
+    assert (await sync_catalog(session, price_list(), today=TODAY)).added_models == []
+
+    cheaper = price_list(**{"cheapco/acme-small": {"litellm_provider": "cheapco", "mode": "chat",
+                                                   "input_cost_per_token": 1e-07, "output_cost_per_token": 5e-07}})
+    third = await sync_catalog(session, cheaper, today=TODAY)
+    assert [(r.model, r.provider, r.price_in_per_mtok) for r in third.added_models] == [
+        ("acme-small", "cheapco", Decimal("0.1000"))]
+
+
+async def test_filling_provider_prices_for_an_existing_catalog_starts_no_re_tests(session):
+    """After migration 0010 the catalog is full but model_prices is empty: only truly new models count."""
+    await sync_catalog(session, price_list(), today=TODAY)
+    for row in (await session.execute(select(ProviderPrice))).scalars():
+        await session.delete(row)
+    await session.commit()
+    newer = price_list(**{"acme-tiny": {"litellm_provider": "acme", "mode": "chat",
+                                        "input_cost_per_token": 1e-08, "output_cost_per_token": 2e-08}})
+    result = await sync_catalog(session, newer, today=TODAY)
+    assert [r.model for r in result.added_models] == ["acme-tiny"]
+    assert len((await session.execute(select(ProviderPrice))).scalars().all()) == 6

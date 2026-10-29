@@ -1456,6 +1456,11 @@ export interface components {
             /** Prompt Version */
             prompt_version?: string | null;
             /**
+             * Provider
+             * @description Who served the call, as the price list names it (e.g. openai, gemini, groq, together_ai). The same model can cost different amounts on different providers; without it the catalog's default price for the model is used
+             */
+            provider?: string | null;
+            /**
              * Run Id
              * Format: uuid
              */

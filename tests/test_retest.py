@@ -96,6 +96,7 @@ async def test_a_re_test_replays_runs_records_them_and_stays_within_budget(engin
     replayed = (await session.execute(select(Run).where(Run.retest_id == retest.retest_id))).scalars().all()
     assert len(replayed) == 20 and {r.run_kind for r in replayed} == {"RETEST"}
     assert {r.model_version for r in replayed} == {"mini-2026-10-01"}
+    assert {r.provider for r in replayed} == {"acme"}  # priced at the key's provider's rate
     assert await spent_this_month(session, "demo") == Decimal("0.024000")
 
 

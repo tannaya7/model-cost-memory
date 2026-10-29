@@ -164,7 +164,8 @@ async def run_retest(
         key = await session.get(ProviderKey, retest.project_id)
         wanted = sample_size or retest.runs_planned or settings.retest_default_sample
         sources = await sample_sources(session, job, retest.candidate_model, wanted, seed=retest_id.int % 2**32)
-        price = await find_price(session, retest.candidate_model, retest.candidate_model)
+        price = await find_price(session, retest.candidate_model, retest.candidate_model,
+                                 key.provider if key else None)
         retest.status, retest.started_at, retest.runs_planned = "RUNNING", datetime.now(UTC), len(sources)
         await session.commit()
         budget, cap = Decimal(retest.budget_usd), Decimal(project.retest_monthly_cap_usd)
@@ -218,7 +219,7 @@ async def run_retest(
 
         parsed = read_response(response)
         body = RunCreate(
-            run_id=uuid.uuid4(), job=job.name, prompt=src.prompt, model=retest.candidate_model,
+            run_id=uuid.uuid4(), job=job.name, prompt=src.prompt, model=retest.candidate_model, provider=key.provider,
             model_version=parsed.get("model_version") or retest.candidate_model,
             tokens_in=parsed.get("tokens_in", 0), tokens_out=parsed.get("tokens_out", 0),
             cache_read_tokens=parsed.get("cache_read_tokens", 0), cache_write_tokens=parsed.get("cache_write_tokens", 0),

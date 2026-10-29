@@ -27,8 +27,8 @@ ROOT = Path(__file__).resolve().parents[1]
 # The embedded Postgres library logs from an exit hook, after pytest has closed its capture stream, which
 # prints a harmless "Logging error" at the very end of every run. Its own logs are not needed in test output.
 logging.getLogger("pgserver").propagate = False
-TABLES = ["alerts", "outbox", "recommendations", "runs", "retests", "provider_keys", "model_catalog", "jobs",
-          "projects", "users", "flow_events"]
+TABLES = ["alerts", "outbox", "recommendations", "runs", "retests", "provider_keys", "model_catalog", "model_prices",
+          "jobs", "projects", "users", "flow_events"]
 
 
 @pytest.fixture(scope="session")

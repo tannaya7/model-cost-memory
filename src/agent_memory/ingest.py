@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .checks import Outcome, check_run
 from .costing import Price, compute_cost
 from .pipeline import flow
-from .models import CatalogEntry, Job, OutboxRow, Project, Run
+from .models import CatalogEntry, Job, OutboxRow, Project, ProviderPrice, Run
 from .privacy import sanitize_tool_calls
 from .schemas import JobCreate, RunCreate
 from .versions import normalize
@@ -64,11 +64,15 @@ async def create_job(session: AsyncSession, project: Project, body: JobCreate) -
     return job
 
 
-async def find_price(session: AsyncSession, model: str, model_version: str) -> Price | None:
+async def find_price(
+    session: AsyncSession, model: str, model_version: str, provider: str | None = None
+) -> Price | None:
     """The catalog price for this call, or None when unpriced.
 
     Tries the provider-resolved version first (usually the full dated name), then the model that was
-    asked for (the alias), after normalising both.
+    asked for (the alias), after normalising both. A hand-entered (MANUAL) catalog price always wins;
+    otherwise, when the run names its provider, that provider's own price is used, because the same
+    model can cost several times more on one provider than on another.
     """
     candidates = [normalize(model_version), normalize(model)]
     rows = (
@@ -79,9 +83,21 @@ async def find_price(session: AsyncSession, model: str, model_version: str) -> P
             )
         )
     ).scalars().all()
-    if not rows:
+    best = min(rows, key=lambda r: (candidates.index(r.model), -r.first_seen_at.timestamp())) if rows else None
+    if provider and not (best and best.source == "MANUAL"):
+        sold = (
+            await session.execute(
+                select(ProviderPrice).where(
+                    ProviderPrice.model.in_(candidates), ProviderPrice.provider == provider.strip().lower(),
+                    ProviderPrice.price_in_per_mtok.is_not(None), ProviderPrice.price_out_per_mtok.is_not(None),
+                )
+            )
+        ).scalars().all()
+        if sold:
+            own = min(sold, key=lambda r: candidates.index(r.model))
+            return Price.from_input_output(own.price_in_per_mtok, own.price_out_per_mtok)
+    if best is None:
         return None
-    best = min(rows, key=lambda r: (candidates.index(r.model), -r.first_seen_at.timestamp()))
     return Price.from_input_output(best.price_in_per_mtok, best.price_out_per_mtok)
 
 
@@ -100,7 +116,8 @@ async def record_run(
         raise UnknownJob(body.job)
     keep_expected = body.expected if job.retest_consent and job.check_kind == "ANSWER_KEY" else None
 
-    price = await find_price(session, body.model, body.model_version)
+    provider = body.provider.strip().lower() if body.provider else None
+    price = await find_price(session, body.model, body.model_version, provider)
     if price is not None:
         cost = compute_cost(price, body.tokens_in, body.tokens_out, body.cache_read_tokens, body.cache_write_tokens)
     else:
@@ -123,7 +140,7 @@ async def record_run(
                 cost_usd=cost, latency_ms=body.latency_ms, output=body.output,
                 tool_calls=sanitize_tool_calls(body.tool_calls, keep_arguments=project.store_tool_arguments),
                 outcome=result.outcome.value, outcome_reason=result.reason, state=state, run_kind=run_kind,
-                retest_id=retest_id, expected=keep_expected,
+                retest_id=retest_id, expected=keep_expected, provider=provider,
             )
             .on_conflict_do_nothing(index_elements=["run_id"])
             .returning(Run.run_id)

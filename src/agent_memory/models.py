@@ -158,6 +158,7 @@ class Run(Base):
     invalid_at: Mapped[datetime | None] = mapped_column(Timestamp)
     retest_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("retests.retest_id"))
     expected: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # kept only for jobs with re-test consent
+    provider: Mapped[str | None] = mapped_column(Text)  # who served the call; picks the price
 
 
 class Retest(Base):
@@ -267,6 +268,18 @@ class CatalogEntry(Base):
     price_in_per_mtok: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
     price_out_per_mtok: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
     source: Mapped[str] = mapped_column(Text, server_default=text("'SYNC'"))
+    first_seen_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+
+
+class ProviderPrice(Base):
+    """One provider's price for a model. The catalog has one row per name; this has one per seller."""
+
+    __tablename__ = "model_prices"
+
+    model: Mapped[str] = mapped_column(Text, primary_key=True)
+    provider: Mapped[str] = mapped_column(Text, primary_key=True)
+    price_in_per_mtok: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    price_out_per_mtok: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
     first_seen_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
 
 
