@@ -59,9 +59,14 @@ echo "all 30 runs INDEXED"
 api '/v1/runs?job=invoice-extract&outcome=FAIL' | python3 -c \
   'import json,sys; n=len(json.load(sys.stdin)["items"]); assert n == 3, n; print("3 runs checked FAIL")'
 
-echo "--- a recommendation comes back"
-api /v1/jobs/invoice-extract/recommendation | python3 -c \
-  'import json,sys; d=json.load(sys.stdin); print("verdict:", d["verdict"])'
+echo "--- a recommendation comes back: one priced model with 30 checked runs is HOLD"
+api /v1/jobs/invoice-extract/recommendation | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+print("verdict:", d["verdict"], "| progress:", d["progress"], "| next step:", d["next_step"], "| warnings:", d["warnings"])
+for m in d["models"]:
+    print(" ", m["model"], m["status"], m["n_runs"], "runs, weight", m["evidence_weight"], "|", m["why"])
+assert d["verdict"] == "HOLD", d["verdict"]'
 
 echo "--- every service is still running"
 if docker compose --profile full ps --status exited --status restarting --format '{{.Service}}' | grep .; then
