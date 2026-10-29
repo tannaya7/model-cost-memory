@@ -47,3 +47,21 @@ jobs:
       # The frontend's API types must match contract/openapi.json; regenerate and fail on any difference.
       - run: npm run gen:types && git diff --exit-code -- src/shared/api/generated.ts
       - run: npm run build
+
+  # The server setup, end to end, on a throwaway machine: build every image, migrate, start the whole
+  # stack behind Caddy (HTTPS for localhost), record runs through it, and prove a backup restores.
+  deploy-dry-run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci && npm run build
+        working-directory: frontend
+      - run: ./deploy/dry_run.sh
+      - if: failure()
+        run: docker compose --profile full logs --tail 200
