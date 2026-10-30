@@ -56,6 +56,22 @@ for attempt in $(seq 1 90); do
   sleep 2
 done
 echo "all 30 runs INDEXED"
+
+echo "--- record to searchable, with the embedding model loaded (target about 30 s)"
+started=$(date +%s.%N)
+elapsed() { python3 -c 'import sys, time; print(f"{time.time() - float(sys.argv[1]):.1f}")' "$started"; }
+for i in $(seq 31 40); do
+  api /v1/runs -X POST -H 'content-type: application/json' -d "{\"run_id\": \"$(cat /proc/sys/kernel/random/uuid)\",
+    \"job\": \"invoice-extract\", \"prompt\": \"Invoice $i: extract the total\", \"model\": \"gemini-2.5-flash\",
+    \"model_version\": \"gemini-2.5-flash\", \"provider\": \"gemini\", \"output\": \"{\\\"total\\\": 120.5}\",
+    \"expected\": {\"total\": 120.5}}" > /dev/null
+done
+until [ "$(api '/v1/runs?job=invoice-extract&limit=200' | python3 -c \
+  'import json,sys; print(sum(r["state"] == "INDEXED" for r in json.load(sys.stdin)["items"]))')" = 40 ]; do
+  if python3 -c 'import sys; sys.exit(float(sys.argv[1]) <= 60)' "$(elapsed)"; then echo "10 runs not searchable after 60 s" >&2; exit 1; fi
+  sleep 0.5
+done
+echo "10 new runs searchable in $(elapsed) s"
 api '/v1/runs?job=invoice-extract&outcome=FAIL' | python3 -c \
   'import json,sys; n=len(json.load(sys.stdin)["items"]); assert n == 3, n; print("3 runs checked FAIL")'
 
@@ -76,7 +92,7 @@ fi
 echo "--- backup and restore (deploy/README.md: proving the backups work)"
 ./deploy/backup.sh
 ./deploy/restore.sh "$(ls -t backups/mcm-*.dump | head -1)" | tee /tmp/restore.log
-grep -q '^runs: 30$' /tmp/restore.log
+grep -q '^runs: 40$' /tmp/restore.log
 
 docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep -v '<none>'
 echo "dry run passed"

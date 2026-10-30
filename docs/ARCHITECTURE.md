@@ -30,7 +30,7 @@ The illustrated version, with a walkthrough and glossary, is
 | Path | Trigger | Steps |
 |---|---|---|
 | **Write** | Every model call | Validate → pass/fail check (answer key, tests in a sandbox, or schema) → run + outbox row in one transaction → `202` → worker indexes it |
-| **Read** | Someone asks | Load checked runs → weight by freshness → group by model, drop retired models → evidence floor → 95% intervals → tolerance rule → lowest cost per success → verdict with failing runs and a savings forecast. Cached for 5 minutes against a fingerprint of the runs. Never writes |
+| **Read** | Someone asks | Load checked runs → weight by freshness → group by model, drop retired models → evidence floor → 95% intervals → tolerance rule → lowest cost per success → verdict with failing runs and a savings forecast. The per-model sums are one Postgres pass in hour buckets, not one Python object per run. Cached for 5 minutes against a fingerprint of the runs; a job slower than 250 ms to compute gets its last verdict (at most a minute old) while the new one is computed in the background. Never writes |
 | **Maintenance** | Scheduler | Decay (hourly) · consolidation and regression sweep (every 15 min) · re-tests (every 30 s, queued) · alert delivery (every minute) · catalog sync (daily) |
 
 They share only the database, so a slow re-test never slows recording and a burst of runs never
