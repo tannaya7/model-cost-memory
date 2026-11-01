@@ -104,6 +104,10 @@ def test_a_cheaper_model_must_be_shown_within_the_margin_of_the_current_one_befo
                           "would settle it"]
     assert d.retest_candidates == ["mini"]
     assert d.next_step == "Re-test mini to settle whether to switch"
+    # Not "good enough": that is next to itself as the reference, not next to the model in use.
+    mini = by_name(d)["mini"]
+    assert (mini.status, mini.eligible) == ("UNSURE", False)
+    assert mini.why == "Not yet sure it is within 3 points of big, the model in use; a re-test would settle it"
 
 
 def test_a_current_model_that_measures_well_below_the_best_asks_for_a_re_test_of_the_best():

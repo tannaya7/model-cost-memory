@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import type { Recommendation } from "../../../shared/api/types";
 import { Card } from "../../../shared/components/Card";
 import { Badge } from "../../../shared/components/Badge";
-import { STATUS_LABELS } from "../evidence";
+import { STATUS_LABELS, range } from "../evidence";
 
 function formatDateTime(iso: string): string {
   try {
@@ -28,7 +28,9 @@ export function JobEvidenceSection({
 }) {
   const { evidence, models, recommended, job } = recommendation;
   const failures = models.reduce((sum, m) => sum + m.failures, 0);
-  const notRecommendable = models.filter((m) => !m.eligible);
+  // Every model but the one recommended. Not "not eligible": when the engine holds the model in use for want
+  // of proof, the kept model is not eligible and the challenger is, and that list showed them the wrong way round.
+  const others = models.filter((m) => m.model !== recommendation.recommended?.model);
 
   return (
     <div className="space-y-6">
@@ -117,14 +119,14 @@ export function JobEvidenceSection({
         </Card>
       )}
 
-      {/* Models that cannot be recommended (yet), and why */}
-      {notRecommendable.length > 0 && (
+      {/* The other models the job has evidence on, and where each stands */}
+      {others.length > 0 && (
         <Card className="space-y-3">
           <h3 className="text-base font-bold tracking-tight text-ink">
-            Not recommended
+            Other models
           </h3>
           <div className="divide-y divide-rule">
-            {notRecommendable.map((item) => (
+            {others.map((item) => (
               <div
                 key={item.model}
                 className="flex flex-col gap-1 py-2.5 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
@@ -134,6 +136,11 @@ export function JobEvidenceSection({
                     {item.model}
                   </span>
                   <Badge tone={STATUS_LABELS[item.status].tone}>{STATUS_LABELS[item.status].label}</Badge>
+                  {item.weighted_pass_rate !== null && (
+                    <span className="font-mono text-xs text-dim">
+                      {(item.weighted_pass_rate * 100).toFixed(1)}%{range(item) ? ` (likely ${range(item)})` : ""}
+                    </span>
+                  )}
                 </div>
                 <span className="text-xs text-dim">{item.why}</span>
               </div>
