@@ -47,8 +47,12 @@ freshness            R(t) = e^(-t / S),  S = importance × 30 × version_factor
 weighted pass rate   Σ(R × passed) / Σ R
 cost per run         usage × catalog price (input, output incl. thinking, cache read, cache write)
 cost per success     mean cost / weighted pass rate
-recommendation       lowest cost per success among models within 2 points of the best
-                     pass rate, never RETIRED; INSUFFICIENT_EVIDENCE below the floor
+pass-rate interval   Wilson 95%, over the Kish effective sample size (Σ R)² / Σ R²
+tolerance rule       a model is GOOD_ENOUGH when we are 95% sure it is at most 3 points worse
+                     than the best (Newcombe interval of the difference), CLEARLY_WORSE when sure
+                     it is more, UNSURE otherwise (a re-test settles it)
+recommendation       lowest cost per success among GOOD_ENOUGH models, never RETIRED;
+                     INSUFFICIENT_EVIDENCE until a model reaches the evidence floor
 regression           two-proportion test across a version change: p < 0.05 AND drop ≥ minimum
 ```
 

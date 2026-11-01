@@ -42,13 +42,13 @@ def family_key(model: str, model_version: str) -> str:
     return family(model_version or model)
 
 
-async def current_versions(session: AsyncSession) -> dict[tuple, str]:
-    """For every (job, model family): the version production is using now."""
+async def current_versions(session: AsyncSession, job_id=None) -> dict[tuple, str]:
+    """For every (job, model family), or only one job's: the version production is using now."""
+    query = select(Run.job_id, Run.model, Run.model_version, Run.run_kind, func.max(Run.created_at))
+    if job_id is not None:
+        query = query.where(Run.job_id == job_id)
     rows = (
-        await session.execute(
-            select(Run.job_id, Run.model, Run.model_version, Run.run_kind, func.max(Run.created_at))
-            .group_by(Run.job_id, Run.model, Run.model_version, Run.run_kind)
-        )
+        await session.execute(query.group_by(Run.job_id, Run.model, Run.model_version, Run.run_kind))
     ).all()
     best: dict[tuple, tuple[tuple, str]] = {}
     for job_id, model, version, kind, last_seen in rows:

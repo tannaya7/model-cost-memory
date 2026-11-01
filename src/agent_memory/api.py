@@ -19,21 +19,29 @@ from sqlalchemy import func, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import __version__, ingest
+from .insights.service import spend_by_job
 from .db import dispose_engine, get_session
 from .logging_config import configure_logging, set_context
 from .models import CatalogEntry, Job, Project, Run
+from .recommend.engine import JobRecommendation, ModelEvidence, recommend
 from .schemas import (
     Health,
     JobCreate,
     JobOut,
     LabelCreate,
+    ModelEvidenceOut,
     ModelOut,
     ModelPage,
+    ModelRef,
+    RecommendationEvidence,
+    RecommendationOut,
+    RecommendationRules,
     RunAccepted,
     RunCreate,
     RunDetail,
     RunOut,
     RunPage,
+    SpendOut,
 )
 from .security import extract_key, hash_key
 from .versions import normalize
@@ -285,3 +293,64 @@ async def list_models(
     if more:
         next_cursor = base64.urlsafe_b64encode(f"{page[-1].model}|{page[-1].model_version}".encode()).decode()
     return ModelPage(items=items, next_cursor=next_cursor)
+
+
+def _ref(m: ModelEvidence | None) -> ModelRef | None:
+    return ModelRef(model=m.model, model_version=m.model_version) if m else None
+
+
+def _recommendation_out(r: JobRecommendation) -> RecommendationOut:
+    d = r.decision
+    return RecommendationOut(
+        job=r.job, verdict=d.verdict, current=_ref(d.current), recommended=_ref(d.recommended),
+        reference=d.reference.model if d.reference else None,
+        rules=RecommendationRules(
+            confidence=r.settings.confidence_level, margin=r.settings.tolerance_points,
+            evidence_floor=r.settings.evidence_floor,
+        ),
+        models=[
+            ModelEvidenceOut(
+                model=m.model, model_version=m.model_version, catalog_status=m.catalog_status,
+                shutdown_date=m.shutdown_date, n_runs=m.n_runs, failures=m.failures,
+                evidence_weight=m.sample.evidence_weight if m.sample else 0.0,
+                effective_n=m.sample.effective_n if m.sample else None,
+                weighted_pass_rate=m.sample.pass_rate if m.sample else None,
+                pass_rate_low=m.pass_rate_low, pass_rate_high=m.pass_rate_high, mean_cost_usd=m.mean_cost_usd,
+                cost_per_success_usd=m.cost_per_success_usd, status=m.status, eligible=m.eligible, why=m.why,
+            )
+            for m in d.models
+        ],
+        evidence=RecommendationEvidence(
+            n_runs=r.n_runs, evidence_weight=r.evidence_weight, floor=r.settings.evidence_floor,
+            failing_runs=[vars(f) for f in r.failing_runs],
+        ),
+        progress=d.progress, retest_candidates=d.retest_candidates, warnings=d.warnings, next_step=d.next_step,
+        computed_at=r.computed_at,
+    )
+
+
+@app.get("/v1/jobs/{job}/recommendation", response_model=RecommendationOut, tags=["recommendations"])
+async def get_recommendation(
+    job: str, project: Project = Depends(current_project), session: AsyncSession = Depends(get_session)
+) -> RecommendationOut:
+    """The cheapest model that does this job properly, with the evidence and failing runs behind it.
+
+    Refuses with INSUFFICIENT_EVIDENCE, and progress toward the floor, until there is enough to judge.
+    """
+    found = (
+        await session.execute(select(Job).where(Job.project_id == project.project_id, Job.name == job))
+    ).scalar_one_or_none()
+    if found is None:
+        raise HTTPException(404, f"Unknown job '{job}'")
+    set_context(job_id=str(found.job_id))
+    return _recommendation_out(await recommend(session, found))
+
+
+@app.get("/v1/insights/spend", response_model=list[SpendOut], tags=["insights"])
+async def get_spend(
+    days: int = Query(default=30, ge=1, le=365, description="How many days back to count"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> list[SpendOut]:
+    """Production spend per job over the last `days` days, most expensive first."""
+    return [SpendOut(**vars(s)) for s in await spend_by_job(session, project.project_id, days=days)]

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import type { Recommendation } from "../../../shared/api/types";
 import { Card } from "../../../shared/components/Card";
 import { Badge } from "../../../shared/components/Badge";
+import { STATUS_LABELS } from "../evidence";
 
 function formatDateTime(iso: string): string {
   try {
@@ -25,7 +26,9 @@ export function JobEvidenceSection({
 }: {
   recommendation: Recommendation;
 }) {
-  const { evidence, excluded, recommended, job } = recommendation;
+  const { evidence, models, recommended, job } = recommendation;
+  const failures = models.reduce((sum, m) => sum + m.failures, 0);
+  const notRecommendable = models.filter((m) => !m.eligible);
 
   return (
     <div className="space-y-6">
@@ -46,7 +49,7 @@ export function JobEvidenceSection({
           {/* n_runs, failures, evidence_weight */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="rounded-card border border-rule bg-bg p-3">
-              <div className="text-xs text-dim">Total runs</div>
+              <div className="text-xs text-dim">Checked runs</div>
               <div className="font-mono text-xl font-bold text-ink">
                 {evidence.n_runs.toLocaleString()}
               </div>
@@ -54,7 +57,7 @@ export function JobEvidenceSection({
             <div className="rounded-card border border-rule bg-bg p-3">
               <div className="text-xs text-dim">Failures</div>
               <div className="font-mono text-xl font-bold text-ink">
-                {evidence.failures.toLocaleString()}
+                {failures.toLocaleString()}
               </div>
             </div>
             <div className="rounded-card border border-rule bg-bg p-3">
@@ -81,9 +84,9 @@ export function JobEvidenceSection({
               </Link>
             </div>
 
-            {evidence.recent_failing_runs && evidence.recent_failing_runs.length > 0 ? (
+            {evidence.failing_runs.length > 0 ? (
               <div className="space-y-2">
-                {evidence.recent_failing_runs.map((run) => (
+                {evidence.failing_runs.map((run) => (
                   <Link
                     key={run.run_id}
                     to={`/runs?job=${encodeURIComponent(job)}&outcome=FAIL`}
@@ -98,7 +101,7 @@ export function JobEvidenceSection({
                       </span>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-[11px] text-dim">
-                      <span>version: {run.model_version}</span>
+                      <span>{run.model_version}</span>
                       <span>•</span>
                       <span>{formatDateTime(run.created_at)}</span>
                     </div>
@@ -114,25 +117,23 @@ export function JobEvidenceSection({
         </Card>
       )}
 
-      {/* Excluded models: Not considered */}
-      {excluded && excluded.length > 0 && (
+      {/* Models that cannot be recommended (yet), and why */}
+      {notRecommendable.length > 0 && (
         <Card className="space-y-3">
           <h3 className="text-base font-bold tracking-tight text-ink">
-            Not considered
+            Not recommended
           </h3>
           <div className="divide-y divide-rule">
-            {excluded.map((item, index) => (
+            {notRecommendable.map((item) => (
               <div
-                key={index}
+                key={item.model}
                 className="flex flex-col gap-1 py-2.5 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs font-semibold text-ink">
                     {item.model}
                   </span>
-                  {item.catalog_status && item.catalog_status !== "ACTIVE" && (
-                    <Badge tone="neutral">{item.catalog_status}</Badge>
-                  )}
+                  <Badge tone={STATUS_LABELS[item.status].tone}>{STATUS_LABELS[item.status].label}</Badge>
                 </div>
                 <span className="text-xs text-dim">{item.why}</span>
               </div>

@@ -1,12 +1,9 @@
-import type { ModelStat, Recommendation } from "../../../shared/api/types";
+import type { ModelEvidence, Recommendation } from "../../../shared/api/types";
 import { Badge } from "../../../shared/components/Badge";
 import { Table, type Column } from "../../../shared/components/Table";
+import { STATUS_LABELS, percent, range, ruleSentence } from "../evidence";
 
-interface ModelRow extends ModelStat {
-  why?: string;
-}
-
-function getStatusBadge(status: ModelStat["catalog_status"]) {
+function getStatusBadge(status: ModelEvidence["catalog_status"]) {
   switch (status) {
     case "ACTIVE":
       return <Badge tone="ok">ACTIVE</Badge>;
@@ -15,7 +12,7 @@ function getStatusBadge(status: ModelStat["catalog_status"]) {
     case "RETIRED":
       return <Badge tone="neutral">RETIRED</Badge>;
     default:
-      return <Badge tone="neutral">{status}</Badge>;
+      return <Badge tone="neutral">Not in catalog</Badge>;
   }
 }
 
@@ -24,29 +21,15 @@ export function JobCompareTable({
 }: {
   recommendation: Recommendation;
 }) {
-  const { candidates = [], excluded = [], rules, recommended, current_model, verdict } = recommendation;
-  const tolerancePoints = Math.round((rules?.tolerance ?? 0.02) * 100);
-  const evidenceFloor = rules?.evidence_floor ?? 25;
+  const { models, rules, recommended, current, verdict } = recommendation;
+  const evidenceFloor = rules.evidence_floor;
 
-  // Combine candidates and excluded with no duplicate models
-  const modelMap = new Map<string, ModelRow>();
-  for (const c of candidates) {
-    modelMap.set(c.model, { ...c });
-  }
-  for (const e of excluded) {
-    if (modelMap.has(e.model)) {
-      modelMap.set(e.model, { ...modelMap.get(e.model)!, ...e });
-    } else {
-      modelMap.set(e.model, { ...e });
-    }
-  }
-
-  // Sort by pass rate high to low
-  const rows = Array.from(modelMap.values()).sort(
-    (a, b) => (b.weighted_pass_rate ?? 0) - (a.weighted_pass_rate ?? 0),
+  // Sort by pass rate high to low; models without checked runs last
+  const rows = [...models].sort(
+    (a, b) => (b.weighted_pass_rate ?? -1) - (a.weighted_pass_rate ?? -1),
   );
 
-  const columns: Column<ModelRow>[] = [
+  const columns: Column<ModelEvidence>[] = [
     {
       key: "model",
       header: "Model",
@@ -57,15 +40,11 @@ export function JobCompareTable({
             {recommended?.model === row.model && (
               <Badge tone="accent">Recommended</Badge>
             )}
-            {current_model === row.model && (
+            {current?.model === row.model && (
               <Badge tone="neutral">Current</Badge>
             )}
           </div>
-          {row.latest_version && (
-            <span className="font-mono text-xs text-dim">
-              v: {row.latest_version}
-            </span>
-          )}
+          <span className="font-mono text-xs text-dim">{row.model_version}</span>
         </div>
       ),
     },
@@ -109,9 +88,10 @@ export function JobCompareTable({
       key: "pass_rate",
       header: "Pass rate",
       render: (row) => (
-        <span className="font-mono text-ink">
-          {(row.weighted_pass_rate * 100).toFixed(1)}%
-        </span>
+        <div className="flex flex-col">
+          <span className="font-mono text-ink">{percent(row.weighted_pass_rate)}</span>
+          {range(row) && <span className="font-mono text-[11px] text-dim">{range(row)}</span>}
+        </div>
       ),
     },
     {
@@ -119,42 +99,21 @@ export function JobCompareTable({
       header: "Cost per success",
       render: (row) => (
         <span className="font-mono text-ink">
-          {row.cost_per_success_usd !== null && row.cost_per_success_usd !== undefined
-            ? `$${row.cost_per_success_usd.toFixed(4)}`
-            : "-"}
+          {row.cost_per_success_usd !== null ? `$${row.cost_per_success_usd.toFixed(4)}` : "-"}
         </span>
       ),
     },
     {
-      key: "eligible",
-      header: "Eligible",
-      render: (row) => {
-        if (verdict === "INSUFFICIENT_EVIDENCE") {
-          return (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Badge tone="neutral">No</Badge>
-              <span className="text-xs text-dim">
-                {row.why || "Not enough evidence yet"}
-              </span>
-            </div>
-          );
-        }
-
-        if (row.eligible) {
-          return <Badge tone="ok">Yes</Badge>;
-        }
-
-        const reason =
-          row.why ||
-          `More than ${tolerancePoints} points below the best pass rate`;
-
-        return (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Badge tone="neutral">No</Badge>
-            <span className="text-xs text-dim">{reason}</span>
+      key: "judgement",
+      header: "Judgement",
+      render: (row) => (
+        <div className="flex flex-col gap-1">
+          <div>
+            <Badge tone={STATUS_LABELS[row.status].tone}>{STATUS_LABELS[row.status].label}</Badge>
           </div>
-        );
-      },
+          <span className="text-xs text-dim">{row.why}</span>
+        </div>
+      ),
     },
   ];
 
@@ -163,7 +122,7 @@ export function JobCompareTable({
       {verdict === "INSUFFICIENT_EVIDENCE" && (
         <div className="rounded-md border border-rule bg-surface p-3 text-xs text-dim">
           <span className="font-semibold text-ink">Gathering evidence: </span>
-          No model is eligible yet because none have reached the evidence floor of {evidenceFloor} weighted runs.
+          No model can be judged yet because none has reached the evidence floor of {evidenceFloor} weighted runs.
         </div>
       )}
 
@@ -177,9 +136,8 @@ export function JobCompareTable({
       />
 
       <p className="text-xs text-dim">
-        A model is eligible if it has at least {evidenceFloor} weighted runs and is
-        within {tolerancePoints} points of the best pass rate. The cheapest
-        eligible model per successful run is recommended.
+        {ruleSentence(recommendation)} The range under each pass rate is where the true rate
+        likely lies.
       </p>
     </div>
   );

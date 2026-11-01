@@ -198,3 +198,79 @@ class RunAccepted(Model):
     status: Literal["accepted", "duplicate"] = Field(
         description="'duplicate' means this run_id was already recorded; nothing changed"
     )
+
+
+Verdict = Literal["HOLD", "DOWNGRADE", "SWITCH", "INSUFFICIENT_EVIDENCE"]
+CatalogStatus = Literal["ACTIVE", "DEPRECATED", "RETIRED", "UNKNOWN"]
+
+
+class ModelRef(Model):
+    model: str = Field(description="The model family, without its date suffix")
+    model_version: str = Field(description="The version in use now")
+
+
+class ModelEvidenceOut(ModelRef):
+    """What the runs say about one model in this job, and how the tolerance rule judged it."""
+
+    catalog_status: CatalogStatus = Field(description="UNKNOWN when the model is not in the catalog")
+    shutdown_date: date | None
+    n_runs: int = Field(description="Checked runs counted (PASS or FAIL, not archived)")
+    failures: int
+    evidence_weight: float = Field(description="Sum of freshness weights; judged once it reaches the floor")
+    effective_n: float | None = Field(description="Kish effective sample size of the weighted runs")
+    weighted_pass_rate: float | None
+    pass_rate_low: float | None = Field(description="Lower end of the pass-rate interval")
+    pass_rate_high: float | None = Field(description="Upper end of the pass-rate interval")
+    mean_cost_usd: float | None = Field(description="Freshness-weighted mean cost per run; null when unpriced")
+    cost_per_success_usd: float | None = Field(description="Mean cost divided by pass rate")
+    status: Literal["GOOD_ENOUGH", "UNSURE", "CLEARLY_WORSE", "BELOW_FLOOR", "RETIRED"]
+    eligible: bool = Field(description="Good enough, priced and not retired: it can be recommended")
+    why: str
+
+
+class RecommendationRules(Model):
+    confidence: float = Field(description="Confidence of the intervals, e.g. 0.95")
+    margin: float = Field(description="How much worse (0.03 = 3 points) a cheaper model may be and still qualify")
+    evidence_floor: float
+
+
+class FailingRunOut(Model):
+    run_id: uuid.UUID
+    model: str
+    model_version: str
+    outcome_reason: str | None
+    created_at: datetime
+
+
+class RecommendationEvidence(Model):
+    n_runs: int = Field(description="Checked runs counted across every model")
+    evidence_weight: float
+    floor: float
+    failing_runs: list[FailingRunOut] = Field(
+        description="The most recent failures of the recommended and the current model: the receipt"
+    )
+
+
+class RecommendationOut(Model):
+    """The cheapest model that does this job properly, with the evidence behind it."""
+
+    job: str
+    verdict: Verdict
+    current: ModelRef | None = Field(description="The model production used most recently")
+    recommended: ModelRef | None
+    reference: str | None = Field(description="The model every other one was compared with")
+    rules: RecommendationRules
+    models: list[ModelEvidenceOut]
+    evidence: RecommendationEvidence
+    progress: float = Field(description="Progress toward the evidence floor, 0..1; below 1 only when insufficient")
+    retest_candidates: list[str] = Field(description="Cheaper models a re-test could qualify")
+    warnings: list[str]
+    next_step: str | None
+    computed_at: datetime
+
+
+class SpendOut(Model):
+    job: str
+    runs: int = Field(description="Production runs in the window")
+    spend_usd: float
+    share: float = Field(description="Share of the project's spend in the window, 0..1")

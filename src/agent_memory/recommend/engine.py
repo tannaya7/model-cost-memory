@@ -1,6 +1,288 @@
-"""Cheapest model that passes, per job.
+"""Cheapest model that passes, per job (technical plan 3.4).
 
-Weights runs by freshness, drops RETIRED models, refuses below the evidence floor
-(INSUFFICIENT_EVIDENCE), and picks the lowest cost per successful run within tolerance of the
-best pass rate. Returns the failing run ids with every verdict. Week 7.
+Every checked run (PASS or FAIL, not archived) counts as evidence for its model family, weighted by
+freshness R(t), so evidence about a superseded version fades about four times faster. For each model:
+
+    weighted pass rate, with a 95% interval        stats.py
+    cost per success = mean cost / pass rate       a cheap model that fails often is not cheap
+
+A model needs `evidence_floor` of weight before it is judged. The judged model with the highest
+lower bound is the reference, and every other one is tested against it with the tolerance rule
+(stats.assess). Of those GOOD_ENOUGH and not RETIRED, the lowest cost per success is recommended.
+The verdict compares that with the model production uses now:
+
+    HOLD                   keep the current model
+    DOWNGRADE              a cheaper model is good enough
+    SWITCH                 the current model is clearly worse or retired
+    INSUFFICIENT_EVIDENCE  no model has enough evidence yet; refusing is a required answer
+
+`decide` is pure (no database), so the rule can be tested and swapped on its own; `recommend` loads a
+job's runs and calls it. Recommendations are computed on read; storing them with their lineage is
+Week 8.
 """
+
+from __future__ import annotations
+
+from collections import defaultdict
+from dataclasses import dataclass, field
+from datetime import UTC, date, datetime
+from typing import Literal
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..config import Settings, get_settings
+from ..models import CatalogEntry, Job, Run
+from ..pipeline.decay import current_versions, family_key
+from ..pipeline.scoring import age_days, freshness, importance, stability_days
+from ..versions import normalize
+from .stats import Sample, assess, sample, wilson, z_for
+
+Verdict = Literal["HOLD", "DOWNGRADE", "SWITCH", "INSUFFICIENT_EVIDENCE"]
+Status = Literal["GOOD_ENOUGH", "UNSURE", "CLEARLY_WORSE", "BELOW_FLOOR", "RETIRED"]
+FAILING_RUNS_SHOWN = 5
+COUNTED_OUTCOMES = ("PASS", "FAIL")
+UNCOUNTED_STATES = ("ARCHIVED", "INGESTION_FAILED")
+
+
+@dataclass
+class ModelInput:
+    """What the runs say about one model family in one job."""
+
+    model: str
+    model_version: str
+    n_runs: int
+    failures: int
+    sample: Sample | None
+    mean_cost_usd: float | None  # None when no price is known
+    catalog_status: str = "UNKNOWN"
+    shutdown_date: date | None = None
+
+
+@dataclass
+class ModelEvidence(ModelInput):
+    pass_rate_low: float | None = None
+    pass_rate_high: float | None = None
+    cost_per_success_usd: float | None = None
+    status: Status = "BELOW_FLOOR"
+    eligible: bool = False
+    why: str = ""
+
+
+@dataclass
+class Decision:
+    verdict: Verdict
+    current: ModelEvidence | None
+    recommended: ModelEvidence | None
+    reference: ModelEvidence | None
+    models: list[ModelEvidence]
+    progress: float = 1.0  # toward the evidence floor; below 1.0 only for INSUFFICIENT_EVIDENCE
+    retest_candidates: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    next_step: str | None = None
+
+
+def _points(x: float) -> str:
+    return f"{x * 100:g} points"
+
+
+def _cheaper(a: ModelEvidence, b: ModelEvidence) -> bool:
+    """Only when both costs are known."""
+    return (
+        a.cost_per_success_usd is not None and b.cost_per_success_usd is not None
+        and a.cost_per_success_usd < b.cost_per_success_usd
+    )
+
+
+def decide(
+    inputs: list[ModelInput], current_model: str | None, *, floor: float, margin: float, confidence: float
+) -> Decision:
+    """The verdict for one job, from per-model evidence and the model production uses now."""
+    z = z_for(confidence)
+    models = [ModelEvidence(**vars(m)) for m in inputs]
+    judged: list[ModelEvidence] = []
+    for m in models:
+        if m.sample is not None:
+            m.pass_rate_low, m.pass_rate_high = wilson(m.sample.pass_rate, m.sample.effective_n, z)
+            if m.mean_cost_usd is not None and m.sample.pass_rate > 0:
+                m.cost_per_success_usd = m.mean_cost_usd / m.sample.pass_rate
+        weight = m.sample.evidence_weight if m.sample else 0.0
+        if m.catalog_status == "RETIRED":
+            m.status, m.why = "RETIRED", "Retired by the provider, so it is never recommended"
+        elif weight < floor:
+            m.status, m.why = "BELOW_FLOOR", f"Evidence {weight:.1f} of the {floor:g} needed to judge it"
+        else:
+            judged.append(m)
+
+    by_name = {m.model: m for m in models}
+    current = by_name.get(current_model) if current_model else None
+    if not judged:
+        best = max((m.sample.evidence_weight for m in models if m.sample), default=0.0)
+        return Decision(
+            "INSUFFICIENT_EVIDENCE", current, None, None, models, progress=min(1.0, best / floor) if floor else 1.0,
+            next_step="Record more runs, or run a re-test to gather evidence sooner",
+        )
+
+    reference = max(judged, key=lambda m: (m.pass_rate_low, m.sample.pass_rate))
+    for m in judged:
+        if m is reference:
+            m.status, m.why = "GOOD_ENOUGH", "Highest pass rate we can be sure of"
+            continue
+        m.status = assess(m.sample, reference.sample, margin=margin, z=z)
+        m.why = {
+            "GOOD_ENOUGH": f"At most {_points(margin)} worse than {reference.model}, {confidence:.0%} sure",
+            "CLEARLY_WORSE": f"More than {_points(margin)} worse than {reference.model}",
+            "UNSURE": f"Not yet sure it is within {_points(margin)} of {reference.model}; a re-test would settle it",
+        }[m.status]
+    for m in judged:
+        if m.status == "GOOD_ENOUGH" and m.cost_per_success_usd is None:
+            m.why = "Good enough, but no price is known, so its cost cannot be compared"
+        m.eligible = m.status == "GOOD_ENOUGH" and m.cost_per_success_usd is not None
+
+    warnings: list[str] = []
+    eligible = [m for m in judged if m.eligible]
+    if eligible:
+        recommended = min(eligible, key=lambda m: (m.cost_per_success_usd, -m.sample.pass_rate))
+    else:
+        recommended = reference
+        warnings.append("No price is known for the models that qualify, so this is chosen by pass rate alone")
+
+    if current is None:
+        return Decision(
+            "INSUFFICIENT_EVIDENCE", None, recommended, reference, models,
+            next_step="Record production runs, so the engine knows which model this job uses now",
+        )
+
+    if recommended is current:
+        verdict: Verdict = "HOLD"
+    elif current.status in ("RETIRED", "CLEARLY_WORSE"):
+        verdict = "SWITCH"
+    elif current.status == "GOOD_ENOUGH" or _cheaper(recommended, current):
+        verdict = "DOWNGRADE"  # what qualifies and costs less per success
+    else:
+        # The current model is not proven good enough, but nothing cheaper is either.
+        verdict, recommended = "HOLD", current
+        warnings.append(
+            f"{current.model} has too little evidence to judge yet" if current.status == "BELOW_FLOOR"
+            else f"Not yet sure {current.model} is within {_points(margin)} of {reference.model}; "
+            "a re-test on more of its prompts would settle it"
+        )
+
+    if recommended.catalog_status == "DEPRECATED":
+        warnings.append(f"{recommended.model} is deprecated and shuts down on {recommended.shutdown_date}")
+        others = [m for m in eligible if m is not recommended and m.catalog_status != "DEPRECATED"]
+        if others:
+            alternative = min(others, key=lambda m: m.cost_per_success_usd)
+            warnings.append(f"The next cheapest model that qualifies is {alternative.model}")
+
+    retest = [
+        m.model for m in models
+        if m.status in ("UNSURE", "BELOW_FLOOR") and m is not recommended and _cheaper(m, recommended)
+    ]
+    next_step = f"Re-test {', '.join(retest)}: cheaper, but not enough evidence yet" if retest else None
+    return Decision(verdict, current, recommended, reference, models, retest_candidates=retest,
+                    warnings=warnings, next_step=next_step)
+
+
+@dataclass
+class FailingRun:
+    run_id: object
+    model: str
+    model_version: str
+    outcome_reason: str | None
+    created_at: datetime
+
+
+@dataclass
+class JobRecommendation:
+    job: str
+    decision: Decision
+    n_runs: int
+    evidence_weight: float
+    failing_runs: list[FailingRun]
+    computed_at: datetime
+    settings: Settings
+
+
+async def _catalog(session: AsyncSession, names: set[str]) -> dict[str, CatalogEntry]:
+    rows = (await session.execute(select(CatalogEntry).where(CatalogEntry.model.in_(names or {""})))).scalars()
+    return {row.model: row for row in rows}
+
+
+async def recommend(
+    session: AsyncSession, job: Job, *, now: datetime | None = None, settings: Settings | None = None
+) -> JobRecommendation:
+    """Load a job's evidence, weight it as of `now`, and decide."""
+    settings = settings or get_settings()
+    now = now or datetime.now(UTC)
+
+    runs = (
+        await session.execute(
+            select(Run.run_id, Run.model, Run.model_version, Run.outcome, Run.outcome_reason, Run.cost_usd,
+                   Run.created_at)
+            .where(Run.job_id == job.job_id, Run.outcome.in_(COUNTED_OUTCOMES), Run.state.not_in(UNCOUNTED_STATES),
+                   Run.invalid_at.is_(None))
+        )
+    ).all()
+    job_mean_cost = float(
+        (await session.execute(select(func.avg(Run.cost_usd)).where(Run.job_id == job.job_id))).scalar() or 0
+    )
+    current_version = await current_versions(session, job.job_id)
+
+    weights: dict[str, list[tuple[float, bool]]] = defaultdict(list)
+    weighted_cost: dict[str, float] = defaultdict(float)
+    failures: dict[str, list] = defaultdict(list)
+    for run in runs:
+        name = family_key(run.model, run.model_version)
+        superseded = normalize(run.model_version) != current_version[(job.job_id, name)]
+        cost = float(run.cost_usd)
+        stab = stability_days(
+            importance(run.outcome, cost, job_mean_cost), superseded=superseded,
+            base_days=settings.decay_base_days, superseded_factor=settings.version_factor_superseded,
+        )
+        w = freshness(age_days(run.created_at, now), stab)
+        weights[name].append((w, run.outcome == "PASS"))
+        weighted_cost[name] += w * cost
+        if run.outcome == "FAIL":
+            failures[name].append(run)
+
+    latest = (
+        await session.execute(
+            select(Run.model, Run.model_version)
+            .where(Run.job_id == job.job_id, Run.run_kind == "PRODUCTION", Run.state.not_in(UNCOUNTED_STATES))
+            .order_by(Run.created_at.desc()).limit(1)
+        )
+    ).first()
+    current_model = family_key(*latest) if latest else None
+
+    # The current model is listed even when none of its runs is checked yet (e.g. awaiting labels).
+    names = set(weights) | ({current_model} if current_model else set())
+    versions = {name: current_version[(job.job_id, name)] for name in names}
+    catalog = await _catalog(session, names | set(versions.values()))
+    inputs = []
+    for name in sorted(names):
+        pairs = weights.get(name, [])
+        s = sample(pairs)
+        entry = catalog.get(versions[name]) or catalog.get(name)
+        mean_cost = weighted_cost[name] / s.evidence_weight if s else 0.0
+        inputs.append(ModelInput(
+            model=name, model_version=versions[name], n_runs=len(pairs), failures=len(failures[name]), sample=s,
+            mean_cost_usd=mean_cost if mean_cost > 0 else None,
+            catalog_status=entry.status if entry else "UNKNOWN", shutdown_date=entry.shutdown_date if entry else None,
+        ))
+    decision = decide(
+        inputs, current_model, floor=settings.evidence_floor,
+        margin=settings.tolerance_points, confidence=settings.confidence_level,
+    )
+
+    shown = {m.model for m in (decision.recommended, decision.current) if m is not None}
+    failing = sorted((r for name in shown for r in failures[name]), key=lambda r: r.created_at, reverse=True)
+    return JobRecommendation(
+        job=job.name, decision=decision, n_runs=len(runs),
+        evidence_weight=sum(w for pairs in weights.values() for w, _ in pairs),
+        failing_runs=[
+            FailingRun(r.run_id, family_key(r.model, r.model_version), r.model_version, r.outcome_reason, r.created_at)
+            for r in failing[:FAILING_RUNS_SHOWN]
+        ],
+        computed_at=now, settings=settings,
+    )

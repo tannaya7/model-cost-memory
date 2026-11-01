@@ -7,6 +7,9 @@ The backend and the web app meet here. Nothing in this folder is edited by hand.
 | `openapi.json` | The OpenAPI schema FastAPI publishes. The frontend generates its TypeScript types from it. |
 | `samples/jobs.json` | An example `GET /v1/jobs` response. The frontend's mock server serves it. |
 | `samples/runs.json` | An example `GET /v1/runs` response. |
+| `samples/models.json` | An example `GET /v1/models` response. |
+| `samples/recommendation.json` | An example `GET /v1/jobs/{job}/recommendation` response, produced by the engine itself. |
+| `samples/spend.json` | An example `GET /v1/insights/spend` response. |
 
 ## How it is used each week
 

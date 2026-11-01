@@ -21,6 +21,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/insights/spend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Spend
+         * @description Production spend per job over the last `days` days, most expensive first.
+         */
+        get: operations["get_spend_v1_insights_spend_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/jobs": {
         parameters: {
             query?: never;
@@ -39,6 +59,28 @@ export interface paths {
          * @description Define a job and how a correct answer is recognised.
          */
         post: operations["create_job_endpoint_v1_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job}/recommendation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Recommendation
+         * @description The cheapest model that does this job properly, with the evidence and failing runs behind it.
+         *
+         *     Refuses with INSUFFICIENT_EVIDENCE, and progress toward the floor, until there is enough to judge.
+         */
+        get: operations["get_recommendation_v1_jobs__job__recommendation_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -133,6 +175,25 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** FailingRunOut */
+        FailingRunOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Model */
+            model: string;
+            /** Model Version */
+            model_version: string;
+            /** Outcome Reason */
+            outcome_reason: string | null;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -226,6 +287,81 @@ export interface components {
             reason?: string | null;
         };
         /**
+         * ModelEvidenceOut
+         * @description What the runs say about one model in this job, and how the tolerance rule judged it.
+         */
+        ModelEvidenceOut: {
+            /**
+             * Catalog Status
+             * @description UNKNOWN when the model is not in the catalog
+             * @enum {string}
+             */
+            catalog_status: "ACTIVE" | "DEPRECATED" | "RETIRED" | "UNKNOWN";
+            /**
+             * Cost Per Success Usd
+             * @description Mean cost divided by pass rate
+             */
+            cost_per_success_usd: number | null;
+            /**
+             * Effective N
+             * @description Kish effective sample size of the weighted runs
+             */
+            effective_n: number | null;
+            /**
+             * Eligible
+             * @description Good enough, priced and not retired: it can be recommended
+             */
+            eligible: boolean;
+            /**
+             * Evidence Weight
+             * @description Sum of freshness weights; judged once it reaches the floor
+             */
+            evidence_weight: number;
+            /** Failures */
+            failures: number;
+            /**
+             * Mean Cost Usd
+             * @description Freshness-weighted mean cost per run; null when unpriced
+             */
+            mean_cost_usd: number | null;
+            /**
+             * Model
+             * @description The model family, without its date suffix
+             */
+            model: string;
+            /**
+             * Model Version
+             * @description The version in use now
+             */
+            model_version: string;
+            /**
+             * N Runs
+             * @description Checked runs counted (PASS or FAIL, not archived)
+             */
+            n_runs: number;
+            /**
+             * Pass Rate High
+             * @description Upper end of the pass-rate interval
+             */
+            pass_rate_high: number | null;
+            /**
+             * Pass Rate Low
+             * @description Lower end of the pass-rate interval
+             */
+            pass_rate_low: number | null;
+            /** Shutdown Date */
+            shutdown_date: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "GOOD_ENOUGH" | "UNSURE" | "CLEARLY_WORSE" | "BELOW_FLOOR" | "RETIRED";
+            /** Weighted Pass Rate */
+            weighted_pass_rate: number | null;
+            /** Why */
+            why: string;
+        };
+        /**
          * ModelOut
          * @description One model in the catalog.
          */
@@ -283,6 +419,95 @@ export interface components {
              * @description Pass as ?cursor= for the next page; null on the last page
              */
             next_cursor: string | null;
+        };
+        /** ModelRef */
+        ModelRef: {
+            /**
+             * Model
+             * @description The model family, without its date suffix
+             */
+            model: string;
+            /**
+             * Model Version
+             * @description The version in use now
+             */
+            model_version: string;
+        };
+        /** RecommendationEvidence */
+        RecommendationEvidence: {
+            /** Evidence Weight */
+            evidence_weight: number;
+            /**
+             * Failing Runs
+             * @description The most recent failures of the recommended and the current model: the receipt
+             */
+            failing_runs: components["schemas"]["FailingRunOut"][];
+            /** Floor */
+            floor: number;
+            /**
+             * N Runs
+             * @description Checked runs counted across every model
+             */
+            n_runs: number;
+        };
+        /**
+         * RecommendationOut
+         * @description The cheapest model that does this job properly, with the evidence behind it.
+         */
+        RecommendationOut: {
+            /**
+             * Computed At
+             * Format: date-time
+             */
+            computed_at: string;
+            /** @description The model production used most recently */
+            current: components["schemas"]["ModelRef"] | null;
+            evidence: components["schemas"]["RecommendationEvidence"];
+            /** Job */
+            job: string;
+            /** Models */
+            models: components["schemas"]["ModelEvidenceOut"][];
+            /** Next Step */
+            next_step: string | null;
+            /**
+             * Progress
+             * @description Progress toward the evidence floor, 0..1; below 1 only when insufficient
+             */
+            progress: number;
+            recommended: components["schemas"]["ModelRef"] | null;
+            /**
+             * Reference
+             * @description The model every other one was compared with
+             */
+            reference: string | null;
+            /**
+             * Retest Candidates
+             * @description Cheaper models a re-test could qualify
+             */
+            retest_candidates: string[];
+            rules: components["schemas"]["RecommendationRules"];
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "HOLD" | "DOWNGRADE" | "SWITCH" | "INSUFFICIENT_EVIDENCE";
+            /** Warnings */
+            warnings: string[];
+        };
+        /** RecommendationRules */
+        RecommendationRules: {
+            /**
+             * Confidence
+             * @description Confidence of the intervals, e.g. 0.95
+             */
+            confidence: number;
+            /** Evidence Floor */
+            evidence_floor: number;
+            /**
+             * Margin
+             * @description How much worse (0.03 = 3 points) a cheaper model may be and still qualify
+             */
+            margin: number;
         };
         /** RunAccepted */
         RunAccepted: {
@@ -536,6 +761,23 @@ export interface components {
              */
             next_cursor: string | null;
         };
+        /** SpendOut */
+        SpendOut: {
+            /** Job */
+            job: string;
+            /**
+             * Runs
+             * @description Production runs in the window
+             */
+            runs: number;
+            /**
+             * Share
+             * @description Share of the project's spend in the window, 0..1
+             */
+            share: number;
+            /** Spend Usd */
+            spend_usd: number;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -574,6 +816,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+        };
+    };
+    get_spend_v1_insights_spend_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back to count */
+                days?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpendOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -633,6 +910,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_recommendation_v1_jobs__job__recommendation_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendationOut"];
                 };
             };
             /** @description Validation Error */
