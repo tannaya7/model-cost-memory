@@ -295,7 +295,8 @@ class RunRecorder:
         `response` is the provider response; usage, resolved model and output are read from it.
         `prompt` is the text that was sent. `model` is the model that was asked for (defaults to the
         resolved one). Anything the response does not carry can be passed as a keyword: tokens_in,
-        tokens_out, cache_read_tokens, cache_write_tokens, cost_usd, output, tool_calls, latency_ms, provider.
+        tokens_out, cache_read_tokens, cache_write_tokens, cost_usd, output, tool_calls, latency_ms, provider,
+        effort (the reasoning effort the call asked for, e.g. "low", so it is compared as its own option).
         """
         try:
             data = read_response(response, include_arguments=self.send_tool_arguments) if response is not None else {}

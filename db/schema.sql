@@ -59,7 +59,7 @@ CREATE TABLE retests (                              -- replaying sampled past ru
     job_id          UUID NOT NULL REFERENCES jobs(job_id),
     project_id      TEXT NOT NULL REFERENCES projects(project_id),
     candidate_model TEXT NOT NULL,
-    trigger         TEXT NOT NULL CHECK (trigger IN ('MANUAL','NEW_MODEL','UNSURE')),
+    trigger         TEXT NOT NULL CHECK (trigger IN ('MANUAL','NEW_MODEL','UNSURE','FIRST_KEY')),
     status          TEXT NOT NULL DEFAULT 'QUEUED' CHECK (status IN
                       ('QUEUED','RUNNING','DONE','STOPPED_BUDGET','STOPPED_CAP','FAILED')),
     budget_usd      NUMERIC(10,4) NOT NULL CHECK (budget_usd > 0),
@@ -86,6 +86,7 @@ CREATE TABLE runs (
     model             TEXT NOT NULL,
     model_version     TEXT NOT NULL,                -- provider-resolved; what decay is keyed to
     prompt_version    TEXT,                         -- optional template version (Should)
+    effort            TEXT,                         -- reasoning effort the call asked for, e.g. low (0013)
     tokens_in         INT NOT NULL DEFAULT 0,
     tokens_out        INT NOT NULL DEFAULT 0,      -- includes thinking tokens (billed as output)
     cache_read_tokens  INT NOT NULL DEFAULT 0,     -- priced lower than normal input
@@ -204,6 +205,22 @@ CREATE TABLE alerts (
 );
 CREATE UNIQUE INDEX idx_alerts_open ON alerts(job_id, dedupe_key) WHERE resolved_at IS NULL;
 CREATE INDEX idx_alerts_undelivered ON alerts(next_attempt_at) WHERE delivered_at IS NULL;
+
+CREATE TABLE usage_limits (                         -- limits the project works under (0013)
+    limit_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id    TEXT NOT NULL REFERENCES projects(project_id),
+    name          TEXT NOT NULL,                    -- e.g. Weekly, Session (5h), one model's limit
+    window_hours  INTEGER NOT NULL CHECK (window_hours > 0),
+    resets_at     TIMESTAMPTZ NOT NULL,             -- end of a window; the next ones follow every window_hours
+    measure       TEXT NOT NULL CHECK (measure IN ('USD','TOKENS','REQUESTS','PERCENT')),
+    size          NUMERIC(16,4),                    -- in the measure's unit; none for PERCENT
+    model         TEXT,                             -- only this model family counts
+    reported_used NUMERIC(5,4) CHECK (reported_used IS NULL OR (reported_used >= 0 AND reported_used <= 1)),
+    reported_at   TIMESTAMPTZ,                      -- PERCENT: when the user last read the share used
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (measure = 'PERCENT' OR size > 0)
+);
+CREATE INDEX idx_usage_limits_project ON usage_limits(project_id);
 
 CREATE TABLE flow_events (                          -- the live data-flow view; deleted after a day
     event_id   BIGSERIAL PRIMARY KEY,

@@ -27,10 +27,13 @@ export function range(m: ModelEvidence): string {
 
 /** The rule, in one sentence, from the numbers the server used. */
 export function ruleSentence(rec: Recommendation): string {
-  const { confidence, margin, evidence_floor } = rec.rules;
+  const { confidence, margin, evidence_floor, switch_confidence } = rec.rules;
+  const pct = (x: number) => `${Math.round(x * 100)}%`;
   return (
     `A model is judged once it has ${evidence_floor} weighted runs. It qualifies when we are ` +
-    `${Math.round(confidence * 100)}% sure it is at most ${Math.round(margin * 100)} points worse than ` +
-    `the best; of those, the cheapest per successful run is recommended.`
+    `${pct(confidence)} sure it is at most ${Math.round(margin * 100)} points worse than ` +
+    `the best; of those, the cheapest per successful run is recommended. Advising a move to it needs ` +
+    `${pct(switch_confidence)} certainty that it is within ${Math.round(margin * 100)} points of the model in use, ` +
+    `so the advice does not flip on day-to-day noise.`
   );
 }

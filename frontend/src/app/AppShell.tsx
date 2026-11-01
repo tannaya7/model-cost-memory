@@ -10,6 +10,7 @@ import { useMe, useLogout } from "../features/auth/hooks/useAuth";
 export const NAV = [
   { to: "/", label: "Overview", end: true },
   { to: "/spend", label: "Spend" },
+  { to: "/limits", label: "Limits" },
   { to: "/flow", label: "Live flow" },
   { to: "/runs", label: "Runs" },
   { to: "/jobs", label: "Jobs" },

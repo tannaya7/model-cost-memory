@@ -137,6 +137,7 @@ class Run(Base):
     model: Mapped[str] = mapped_column(Text)
     model_version: Mapped[str] = mapped_column(Text)
     prompt_version: Mapped[str | None] = mapped_column(Text)
+    effort: Mapped[str | None] = mapped_column(Text)  # reasoning effort the call asked for, e.g. "low" (0013)
     tokens_in: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     tokens_out: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     cache_read_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"))
@@ -166,7 +167,7 @@ class Retest(Base):
 
     __tablename__ = "retests"
     __table_args__ = (
-        CheckConstraint("trigger IN ('MANUAL','NEW_MODEL','UNSURE')", name="retests_trigger_check"),
+        CheckConstraint("trigger IN ('MANUAL','NEW_MODEL','UNSURE','FIRST_KEY')", name="retests_trigger_check"),
         CheckConstraint(
             "status IN ('QUEUED','RUNNING','DONE','STOPPED_BUDGET','STOPPED_CAP','FAILED')",
             name="retests_status_check",
@@ -324,3 +325,30 @@ class FlowEvent(Base):
     message: Mapped[str] = mapped_column(Text)
     data: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     ts: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+
+
+class UsageLimit(Base):
+    """A usage limit the project works under: a window that resets (a 5-hour session, a 7-day week, a day's
+    quota), how its use is measured, and optionally the one model it applies to (0013)."""
+
+    __tablename__ = "usage_limits"
+    __table_args__ = (
+        CheckConstraint("measure IN ('USD','TOKENS','REQUESTS','PERCENT')", name="usage_limits_measure_check"),
+        CheckConstraint("window_hours > 0", name="usage_limits_window_check"),
+        CheckConstraint("measure = 'PERCENT' OR size > 0", name="usage_limits_size_check"),
+        CheckConstraint("reported_used IS NULL OR (reported_used >= 0 AND reported_used <= 1)",
+                        name="usage_limits_reported_check"),
+        Index("idx_usage_limits_project", "project_id"),
+    )
+
+    limit_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=NEW_UUID)
+    project_id: Mapped[str] = mapped_column(Text, ForeignKey("projects.project_id"))
+    name: Mapped[str] = mapped_column(Text)
+    window_hours: Mapped[int] = mapped_column(Integer)
+    resets_at: Mapped[datetime] = mapped_column(Timestamp)  # the end of a window; later ones follow every window_hours
+    measure: Mapped[str] = mapped_column(Text)
+    size: Mapped[Decimal | None] = mapped_column(Numeric(16, 4))  # in the measure's unit; none for PERCENT
+    model: Mapped[str | None] = mapped_column(Text)  # only this model family counts, e.g. a per-model limit
+    reported_used: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))  # PERCENT: the share the user last saw
+    reported_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)

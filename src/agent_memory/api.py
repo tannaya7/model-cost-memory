@@ -19,6 +19,7 @@ import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -30,12 +31,13 @@ from . import __version__, ingest
 from .db import dispose_engine, get_session
 from .insights.service import job_insights, spend_by_job
 from .logging_config import configure_logging, set_context
-from .models import Alert, CatalogEntry, Job, Project, ProviderKey, Retest, Run
+from .limits import forecast as limit_forecast
+from .models import Alert, CatalogEntry, Job, Project, ProviderKey, Retest, Run, UsageLimit
 from .recommend.cache import cached_recommend
 from .recommend.engine import JobRecommendation, ModelEvidence
 from .recommend.summary import summarize
 from .retest import keys as provider_keys
-from .retest.runner import RetestRefused, enqueue, spent_this_month
+from .retest.runner import RetestRefused, enqueue, spent_this_month, start_on_first_key
 from .schemas import (
     AlertOut,
     BreakdownOut,
@@ -48,6 +50,7 @@ from .schemas import (
     JobInsightsOut,
     JobOut,
     LabelCreate,
+    LimitSuggestionOut,
     ModelEvidenceOut,
     ModelOut,
     ModelPage,
@@ -67,6 +70,9 @@ from .schemas import (
     RunOut,
     RunPage,
     SpendOut,
+    UsageLimitIn,
+    UsageLimitOut,
+    UsedPercentIn,
 )
 from .auth import routes as auth_routes
 from .auth.access import current_project
@@ -143,7 +149,7 @@ async def list_jobs(
 def _run_fields(r: Run, job_name: str) -> dict:
     return dict(
         run_id=r.run_id, job_id=r.job_id, job=job_name, model=r.model, model_version=r.model_version,
-        prompt_version=r.prompt_version, tokens_in=r.tokens_in, tokens_out=r.tokens_out,
+        prompt_version=r.prompt_version, effort=r.effort, tokens_in=r.tokens_in, tokens_out=r.tokens_out,
         cache_read_tokens=r.cache_read_tokens, cache_write_tokens=r.cache_write_tokens,
         cost_usd=float(r.cost_usd) if r.cost_usd is not None else None, latency_ms=r.latency_ms, outcome=r.outcome,
         outcome_reason=r.outcome_reason, run_kind=r.run_kind, state=r.state, created_at=r.created_at,
@@ -343,6 +349,7 @@ def _recommendation_out(r: JobRecommendation, summary: str | None = None,
         rules=RecommendationRules(
             confidence=r.settings.confidence_level, margin=r.settings.tolerance_points,
             evidence_floor=r.settings.evidence_floor,
+            switch_confidence=max(r.settings.switch_confidence, r.settings.confidence_level),
         ),
         models=[
             ModelEvidenceOut(
@@ -581,6 +588,12 @@ async def put_provider_key(
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     await session.commit()
+    # A job that has only used one model is compared with a cheaper one now, once per job.
+    try:
+        await start_on_first_key(session, project)
+    except Exception:  # the key is saved either way; the scheduler's triggers still run
+        await session.rollback()
+        log.exception("first-key re-tests were not started", extra={"project_id": project.project_id})
     return _key_out(key)
 
 
@@ -668,3 +681,79 @@ async def stream_flow(
 
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+
+# --- Usage limits (limits.py) ---
+
+async def _limit_out(session: AsyncSession, limit: UsageLimit) -> UsageLimitOut:
+    f = await limit_forecast(session, limit)
+    return UsageLimitOut(
+        limit_id=limit.limit_id, name=limit.name, window_hours=limit.window_hours, measure=limit.measure,
+        size=float(limit.size) if limit.size is not None else None, model=limit.model,
+        window_start=f.window_start, resets_at=f.resets_at, used=f.used, share_used=f.share_used,
+        rate_per_hour=f.rate_per_hour, hours_to_reset=f.hours_to_reset, hours_to_full=f.hours_to_full,
+        state=f.state, message=f.message,
+        suggestions=[LimitSuggestionOut(job=x.job, current=x.current, suggested=x.suggested,
+                                        share_of_use=x.share_of_use, reduction=x.reduction, note=x.note)
+                     for x in f.suggestions],
+        hours_to_full_after=f.hours_to_full_after, lasts_after=f.lasts_after,
+    )
+
+
+async def _own_limit(session: AsyncSession, project: Project, limit_id: uuid.UUID) -> UsageLimit:
+    limit = await session.get(UsageLimit, limit_id)
+    if limit is None or limit.project_id != project.project_id:
+        raise HTTPException(404, "No such limit in this project")
+    return limit
+
+
+@app.get("/v1/limits", response_model=list[UsageLimitOut], tags=["limits"])
+async def list_limits(
+    project: Project = Depends(current_project), session: AsyncSession = Depends(get_session)
+) -> list[UsageLimitOut]:
+    """Every usage limit of the project, with whether it runs out before it resets at the current pace and,
+    if so, what to change per job."""
+    limits = (await session.execute(
+        select(UsageLimit).where(UsageLimit.project_id == project.project_id).order_by(UsageLimit.created_at)
+    )).scalars().all()
+    return [await _limit_out(session, limit) for limit in limits]
+
+
+@app.post("/v1/limits", response_model=UsageLimitOut, status_code=201, tags=["limits"])
+async def create_limit(
+    body: UsageLimitIn, project: Project = Depends(current_project), session: AsyncSession = Depends(get_session)
+) -> UsageLimitOut:
+    now = datetime.now(UTC)
+    limit = UsageLimit(
+        project_id=project.project_id, name=body.name.strip(), window_hours=body.window_hours,
+        resets_at=body.resets_at, measure=body.measure, model=body.model.strip() if body.model else None,
+        size=Decimal(str(body.size)) if body.size is not None else None,
+        reported_used=Decimal(str(round(body.used_percent / 100, 4))) if body.used_percent is not None else None,
+        reported_at=now if body.used_percent is not None else None,
+    )
+    session.add(limit)
+    await session.commit()
+    return await _limit_out(session, limit)
+
+
+@app.put("/v1/limits/{limit_id}/used", response_model=UsageLimitOut, tags=["limits"])
+async def report_limit_used(
+    limit_id: uuid.UUID, body: UsedPercentIn, project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> UsageLimitOut:
+    """For a plan that only shows a percentage: the share used now, as the plan shows it."""
+    limit = await _own_limit(session, project, limit_id)
+    if limit.measure != "PERCENT":
+        raise HTTPException(422, "Only a PERCENT limit is reported by hand; the others are counted from runs")
+    limit.reported_used, limit.reported_at = Decimal(str(round(body.used_percent / 100, 4))), datetime.now(UTC)
+    await session.commit()
+    return await _limit_out(session, limit)
+
+
+@app.delete("/v1/limits/{limit_id}", status_code=204, tags=["limits"])
+async def delete_limit(
+    limit_id: uuid.UUID, project: Project = Depends(current_project), session: AsyncSession = Depends(get_session)
+) -> None:
+    await session.delete(await _own_limit(session, project, limit_id))
+    await session.commit()

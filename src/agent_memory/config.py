@@ -68,6 +68,10 @@ class Settings:
     evidence_floor: float = 25.0
     tolerance_points: float = 0.03
     confidence_level: float = 0.95
+    # Advising a move to a cheaper model asks more: the verdict is recomputed every day, and each day is
+    # another chance for a lucky streak to pass at 95%. Advice already given is kept at confidence_level,
+    # so a model must clear the higher bar to be advised and fall below the usual one to be withdrawn.
+    switch_confidence: float = 0.99
     # Decay: stability S = importance x base_days x version_factor.
     decay_base_days: float = 30.0
     version_factor_superseded: float = 0.25
@@ -119,6 +123,7 @@ class Settings:
             evidence_floor=_float("EVIDENCE_FLOOR", 25.0),
             tolerance_points=_float("TOLERANCE_POINTS", 0.03),
             confidence_level=_float("CONFIDENCE_LEVEL", 0.95),
+            switch_confidence=_float("SWITCH_CONFIDENCE", 0.99),
             decay_base_days=_float("DECAY_BASE_DAYS", 30.0),
             version_factor_superseded=_float("VERSION_FACTOR_SUPERSEDED", 0.25),
             archive_below_weight=_float("ARCHIVE_BELOW_WEIGHT", 0.05),

@@ -160,7 +160,28 @@ export default function JobDetailPage() {
                 {(recommendation) => (
                   <div className="space-y-6">
                     <RecommendationCard recommendation={recommendation} />
-                    {recommendation.verdict === "INSUFFICIENT_EVIDENCE" && (
+                    {recommendation.retest_candidates.length > 0 && (
+                      <div className="rounded-card border border-accent/20 bg-accent-soft p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-ink">A re-test would settle this</p>
+                          {recommendation.next_step && (
+                            <p className="text-xs text-dim mt-0.5">{recommendation.next_step}</p>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                          {recommendation.retest_candidates.map((model) => (
+                            <Link
+                              key={model}
+                              to={`/retest?job=${encodeURIComponent(recommendation.job)}&model=${encodeURIComponent(model)}`}
+                              className="rounded-md bg-accent px-4 py-2 text-xs font-semibold text-on-accent hover:opacity-90 transition-opacity"
+                            >
+                              Re-test {model} →
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {recommendation.verdict === "INSUFFICIENT_EVIDENCE" && recommendation.retest_candidates.length === 0 && (
                       <div className="rounded-card border border-accent/20 bg-accent-soft p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-ink">

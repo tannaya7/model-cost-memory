@@ -171,7 +171,10 @@ export function RecommendationCard({ recommendation }: { recommendation: Recomme
         </div>
       )}
 
-      {next_step && <p className="text-xs text-dim italic">{next_step}</p>}
+      {/* With re-test candidates the job page shows the next step beside the buttons that start them. */}
+      {next_step && recommendation.retest_candidates.length === 0 && (
+        <p className="text-xs text-dim italic">{next_step}</p>
+      )}
     </Card>
   );
 }

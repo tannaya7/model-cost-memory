@@ -8,6 +8,7 @@ import { StaleDataNotice } from "../shared/components/StaleDataNotice";
 import { useJobs } from "../features/jobs/hooks/useJobs";
 import { useSpendInsights } from "../features/insights/hooks/useSpendInsights";
 import { JobOverviewCard } from "../features/jobs/components/JobOverviewCard";
+import { LimitBanner } from "../features/limits/components/LimitBanner";
 
 export default function HomePage() {
   const jobsQuery = useJobs();
@@ -29,6 +30,8 @@ export default function HomePage() {
           </Link>
         }
       />
+
+      <LimitBanner />
 
       {jobsQuery.isPending && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

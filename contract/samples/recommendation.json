@@ -96,7 +96,8 @@
   "rules": {
     "confidence": 0.95,
     "evidence_floor": 25.0,
-    "margin": 0.03
+    "margin": 0.03,
+    "switch_confidence": 0.99
   },
   "summary": null,
   "summary_prompt_version": null,

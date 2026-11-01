@@ -18,6 +18,8 @@ export function RetestStartPanel() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialJobParam = searchParams.get("job") || "";
+  // The model the engine named for a re-test ("Re-test X to settle it"), passed from the job page.
+  const suggestedModel = searchParams.get("model") || "";
 
   const jobsQuery = useJobs();
   const limitsQuery = useRetestLimits();
@@ -29,7 +31,7 @@ export function RetestStartPanel() {
   const startMutation = useStartRetest();
 
   const [selectedJob, setSelectedJob] = useState<string>(initialJobParam);
-  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [selectedModel, setSelectedModel] = useState<string>(suggestedModel);
   const [budgetUsd, setBudgetUsd] = useState<string>("2.00");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [askForKey, setAskForKey] = useState(false);
@@ -290,15 +292,20 @@ export function RetestStartPanel() {
                 setSelectedModel(e.target.value);
                 setSubmitError(null);
               }}
-              disabled={isLoading || models.length === 0}
+              disabled={isLoading || (models.length === 0 && !suggestedModel)}
               className="w-full rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50"
             >
-              {models.length === 0 ? (
+              {/* The list holds the first 100 catalog models; the engine's suggestion may not be among them. */}
+              {suggestedModel && !models.some((m) => m.model === suggestedModel) && (
+                <option value={suggestedModel}>{suggestedModel} (suggested by the engine)</option>
+              )}
+              {models.length === 0 && !suggestedModel ? (
                 <option value="">Loading models...</option>
               ) : (
                 models.map((m) => (
                   <option key={m.model} value={m.model}>
-                    {m.model} (
+                    {m.model}
+                    {m.model === suggestedModel ? " · suggested by the engine" : ""} (
                     {m.status === "DEPRECATED" ? "Deprecated · " : ""}
                     {formatPrice(m.price_in_per_mtok)}/M in,{" "}
                     {formatPrice(m.price_out_per_mtok)}/M out)

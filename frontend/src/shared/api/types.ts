@@ -40,3 +40,8 @@ export type ProjectPatchInput = components["schemas"]["ProjectPatch"];
 export type ProjectKeyResult = components["schemas"]["ProjectKey"];
 export type JobInsights = components["schemas"]["JobInsightsOut"];
 export type Breakdown = components["schemas"]["BreakdownOut"];
+
+export type UsageLimit = components["schemas"]["UsageLimitOut"];
+export type UsageLimitInput = components["schemas"]["UsageLimitIn"];
+export type LimitSuggestion = components["schemas"]["LimitSuggestionOut"];
+export type LimitState = UsageLimit["state"];

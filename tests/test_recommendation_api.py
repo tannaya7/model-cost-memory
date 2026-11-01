@@ -66,7 +66,7 @@ async def test_a_cheaper_model_proven_by_re_tests_is_a_downgrade_with_its_receip
     assert body["verdict"] == "DOWNGRADE"
     assert body["current"] == {"model": "big", "model_version": "big-2026-09"}
     assert body["recommended"] == {"model": "mini", "model_version": "mini"}
-    assert body["rules"] == {"confidence": 0.95, "margin": 0.03, "evidence_floor": 25.0}
+    assert body["rules"] == {"confidence": 0.95, "margin": 0.03, "evidence_floor": 25.0, "switch_confidence": 0.99}
     mini = next(m for m in body["models"] if m["model"] == "mini")
     assert (mini["status"], mini["eligible"], mini["n_runs"], mini["failures"]) == ("GOOD_ENOUGH", True, 400, 4)
     assert mini["pass_rate_low"] < mini["weighted_pass_rate"] < mini["pass_rate_high"]
