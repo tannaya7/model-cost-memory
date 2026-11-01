@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .checks import Outcome, check_run
 from .costing import Price, compute_cost
 from .pipeline import flow
+from .options import normalize_effort
 from .models import CatalogEntry, Job, OutboxRow, Project, ProviderPrice, Run
 from .privacy import sanitize_tool_calls
 from .schemas import JobCreate, RunCreate
@@ -135,7 +136,7 @@ async def record_run(
             .values(
                 run_id=body.run_id, job_id=job.job_id, project_id=project.project_id, prompt=body.prompt,
                 prompt_hash=digest, model=body.model, model_version=body.model_version,
-                prompt_version=body.prompt_version, tokens_in=body.tokens_in, tokens_out=body.tokens_out,
+                prompt_version=body.prompt_version, effort=normalize_effort(body.effort), tokens_in=body.tokens_in, tokens_out=body.tokens_out,
                 cache_read_tokens=body.cache_read_tokens, cache_write_tokens=body.cache_write_tokens,
                 cost_usd=cost, latency_ms=body.latency_ms, output=body.output,
                 tool_calls=sanitize_tool_calls(body.tool_calls, keep_arguments=project.store_tool_arguments),

@@ -25,8 +25,8 @@ class ProviderError(RuntimeError):
 
 
 class ProviderClient(Protocol):
-    async def complete(self, model: str, prompt: str) -> Any:
-        """Send one prompt; return the provider's response (OpenAI-shaped)."""
+    async def complete(self, model: str, prompt: str, *, effort: str | None = None) -> Any:
+        """Send one prompt, at the given reasoning effort if any; return the provider's response (OpenAI-shaped)."""
 
 
 class OpenAICompatible:
@@ -36,13 +36,14 @@ class OpenAICompatible:
         self._client = AsyncOpenAI(base_url=base_url, api_key=api_key, max_retries=0, timeout=60)
         self._sleep = sleep
 
-    async def complete(self, model: str, prompt: str) -> Any:
+    async def complete(self, model: str, prompt: str, *, effort: str | None = None) -> Any:
         import openai
 
+        extra = {"reasoning_effort": effort} if effort else {}
         for attempt in range(RATE_LIMIT_RETRIES + 1):
             try:
                 return await self._client.chat.completions.create(
-                    model=model, messages=[{"role": "user", "content": prompt}]
+                    model=model, messages=[{"role": "user", "content": prompt}], **extra
                 )
             except openai.RateLimitError as exc:
                 if attempt == RATE_LIMIT_RETRIES:

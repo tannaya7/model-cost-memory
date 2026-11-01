@@ -759,6 +759,55 @@
         "title": "LabelCreate",
         "type": "object"
       },
+      "LimitSuggestionOut": {
+        "properties": {
+          "current": {
+            "description": "The option the job uses now, e.g. opus-5-5@medium",
+            "title": "Current",
+            "type": "string"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "reduction": {
+            "description": "Share of the job's use of this limit the move saves (1 = all of it)",
+            "title": "Reduction",
+            "type": "number"
+          },
+          "share_of_use": {
+            "description": "This job's share of the limit's recent use",
+            "title": "Share Of Use",
+            "type": "number"
+          },
+          "suggested": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What to move it to; null when nothing is proven yet",
+            "title": "Suggested"
+          }
+        },
+        "required": [
+          "job",
+          "current",
+          "suggested",
+          "share_of_use",
+          "reduction",
+          "note"
+        ],
+        "title": "LimitSuggestionOut",
+        "type": "object"
+      },
       "ModelEvidenceOut": {
         "description": "What the runs say about one model in this job, and how the tolerance rule judged it.",
         "properties": {
@@ -1844,6 +1893,19 @@
             "description": "Used only when the model catalog has no price; otherwise the server computes it",
             "title": "Cost Usd"
           },
+          "effort": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The reasoning effort the call asked for (e.g. low, medium, high). The same model at different efforts is compared as separate options",
+            "title": "Effort"
+          },
           "expected": {
             "anyOf": [
               {
@@ -2006,6 +2068,17 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
           },
           "job": {
             "description": "The job's name",
@@ -2203,6 +2276,17 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
           },
           "job": {
             "description": "The job's name",
@@ -2404,6 +2488,276 @@
           "share"
         ],
         "title": "SpendOut",
+        "type": "object"
+      },
+      "UsageLimitIn": {
+        "description": "A usage limit the project works under. A plan that shows only a percentage is entered as PERCENT\nand kept current with PUT /v1/limits/{limit_id}/used.",
+        "properties": {
+          "measure": {
+            "description": "USD at list price, TOKENS (all kinds), REQUESTS (calls), or PERCENT for a plan that shows only the share used",
+            "enum": [
+              "USD",
+              "TOKENS",
+              "REQUESTS",
+              "PERCENT"
+            ],
+            "title": "Measure",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only this model family counts",
+            "title": "Model"
+          },
+          "name": {
+            "description": "e.g. Weekly, Session (5h), or one model's limit",
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "resets_at": {
+            "description": "When the current window ends; later ones follow every window_hours",
+            "format": "date-time",
+            "title": "Resets At",
+            "type": "string"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The limit in its measure's unit; not for PERCENT",
+            "title": "Size"
+          },
+          "used_percent": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "PERCENT: the share used now, as the plan shows it",
+            "title": "Used Percent"
+          },
+          "window_hours": {
+            "description": "5 for a 5-hour session, 168 for a 7-day week",
+            "exclusiveMinimum": 0.0,
+            "maximum": 744.0,
+            "title": "Window Hours",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "window_hours",
+          "resets_at",
+          "measure"
+        ],
+        "title": "UsageLimitIn",
+        "type": "object"
+      },
+      "UsageLimitOut": {
+        "properties": {
+          "hours_to_full": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Hours until used up at this pace; null if it is not",
+            "title": "Hours To Full"
+          },
+          "hours_to_full_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Hours until used up if the suggestions are followed",
+            "title": "Hours To Full After"
+          },
+          "hours_to_reset": {
+            "title": "Hours To Reset",
+            "type": "number"
+          },
+          "lasts_after": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether following the suggestions makes it last until the reset",
+            "title": "Lasts After"
+          },
+          "limit_id": {
+            "format": "uuid",
+            "title": "Limit Id",
+            "type": "string"
+          },
+          "measure": {
+            "enum": [
+              "USD",
+              "TOKENS",
+              "REQUESTS",
+              "PERCENT"
+            ],
+            "title": "Measure",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rate_per_hour": {
+            "title": "Rate Per Hour",
+            "type": "number"
+          },
+          "resets_at": {
+            "description": "The end of the current window",
+            "format": "date-time",
+            "title": "Resets At",
+            "type": "string"
+          },
+          "share_used": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share Used"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "state": {
+            "enum": [
+              "OK",
+              "AT_RISK",
+              "EXHAUSTED",
+              "UNKNOWN"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/LimitSuggestionOut"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          },
+          "used": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Used this window, in the measure's unit (list-price dollars for PERCENT)",
+            "title": "Used"
+          },
+          "window_hours": {
+            "title": "Window Hours",
+            "type": "integer"
+          },
+          "window_start": {
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "limit_id",
+          "name",
+          "window_hours",
+          "measure",
+          "size",
+          "model",
+          "window_start",
+          "resets_at",
+          "used",
+          "share_used",
+          "rate_per_hour",
+          "hours_to_reset",
+          "hours_to_full",
+          "state",
+          "message",
+          "suggestions",
+          "hours_to_full_after",
+          "lasts_after"
+        ],
+        "title": "UsageLimitOut",
+        "type": "object"
+      },
+      "UsedPercentIn": {
+        "properties": {
+          "used_percent": {
+            "description": "The share of the limit used now, as the plan shows it",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Used Percent",
+            "type": "number"
+          }
+        },
+        "required": [
+          "used_percent"
+        ],
+        "title": "UsedPercentIn",
         "type": "object"
       },
       "UserOut": {
@@ -4015,6 +4369,367 @@
         "summary": "List Retests",
         "tags": [
           "retests"
+        ]
+      }
+    },
+    "/v1/limits": {
+      "get": {
+        "description": "Every usage limit of the project, with whether it runs out before it resets at the current pace and,\nif so, what to change per job.",
+        "operationId": "list_limits_v1_limits_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UsageLimitOut"
+                  },
+                  "title": "Response List Limits V1 Limits Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Limits",
+        "tags": [
+          "limits"
+        ]
+      },
+      "post": {
+        "operationId": "create_limit_v1_limits_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsageLimitIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageLimitOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Limit",
+        "tags": [
+          "limits"
+        ]
+      }
+    },
+    "/v1/limits/{limit_id}": {
+      "delete": {
+        "operationId": "delete_limit_v1_limits__limit_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "limit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Limit Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Limit",
+        "tags": [
+          "limits"
+        ]
+      }
+    },
+    "/v1/limits/{limit_id}/used": {
+      "put": {
+        "description": "For a plan that only shows a percentage: the share used now, as the plan shows it.",
+        "operationId": "report_limit_used_v1_limits__limit_id__used_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "limit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Limit Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsedPercentIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageLimitOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Limit Used",
+        "tags": [
+          "limits"
         ]
       }
     },

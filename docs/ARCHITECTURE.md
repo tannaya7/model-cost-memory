@@ -63,6 +63,15 @@ switch confidence    advising a move to a cheaper model not advised before needs
                      keeping advice already given 95%: the verdict is recomputed daily, and at 95%
                      alone a world where nothing changed saw ~6 changes of advice per 120 days and,
                      on 0.5% of days, a model outside the margin; at 99%, 2-3 changes and none
+options              a run may name its reasoning effort; each model + effort is its own option
+                     ("sonnet-5@low" next to "opus-5-5@medium"), runs without one are the model alone
+usage limit          window = [resets_at − window_hours, resets_at), rolled forward by whole windows;
+                     use = list-price $, tokens or requests in the window (only one model's, if scoped);
+                     pace = use over the last 1/7 of a window (a day of a week); runs out early when
+                     (size − used) / pace < hours to the reset. A plan shown only as a percentage is
+                     calibrated from the user's reading: size = $ recorded in that window before the
+                     reading ÷ the share read. Suggestions: the engine's DOWNGRADE (99%) per job, or, for
+                     a one-model limit, the cheapest other option judged good enough
 savings forecast     saving = (cost per success now − recommended) × successes per month;
                      extra failures = (pass rate now − recommended) × runs per month, with its interval
 regression           one-sided two-proportion z-test, the current version against the one it replaced:
@@ -169,6 +178,9 @@ The machine-readable contract is [`contract/openapi.json`](../contract/openapi.j
 | `GET` | `/v1/jobs/{job}/retests` | The job's re-tests | W10 |
 | `GET` | `/v1/retest/limits` | Monthly cap, spend this month, and whether the provider key is given | W10 |
 | `PUT` / `DELETE` | `/v1/provider-key` | Give or remove the key re-tests use (asked for when first needed) | W10 |
+| `GET` / `POST` | `/v1/limits` | Usage limits, each with its forecast (runs out before the reset?) and what to change per job | after W12 |
+| `PUT` | `/v1/limits/{id}/used` | A plan shown only as a percentage: the share used now | after W12 |
+| `DELETE` | `/v1/limits/{id}` | Remove a limit | after W12 |
 | `GET` | `/auth/config` | Which sign-in this server offers | W11 |
 | `GET` | `/auth/google/login`, `/auth/google/callback` | Google sign-in; sets the session cookie | W11 |
 | `POST` | `/auth/dev/login` | Development only (`DEV_LOGIN=true`): sign in by email | W11 |

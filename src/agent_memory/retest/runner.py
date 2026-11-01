@@ -47,6 +47,7 @@ from ..config import Settings, get_settings
 from ..costing import compute_cost
 from ..ingest import find_price, record_run
 from ..models import Job, Project, ProviderKey, ProviderPrice, Retest, Run
+from ..options import option_name, split_option
 from ..recommend.engine import recommend
 from ..recorder import read_response
 from ..schemas import RunCreate
@@ -104,7 +105,8 @@ async def enqueue(
     key = await session.get(ProviderKey, project.project_id)
     if key is None:
         raise RetestRefused("provider_key_required", "Add the provider key re-tests should use")
-    if await find_price(session, candidate_model, candidate_model, key.provider) is None:
+    model = split_option(candidate_model)[0]  # "sonnet-5@low" is priced as sonnet-5
+    if await find_price(session, model, model, key.provider) is None:
         raise RetestRefused(
             "no_price", f"No price is known for {candidate_model}, so the budget and the monthly cap could not "
             "hold: every call would count as free. Add its price to the catalog first")
@@ -133,8 +135,10 @@ async def sample_sources(
 ) -> list:
     """Up to n past production runs to replay, one per prompt, weighted by importance, skipping prompts
     already replayed on this candidate."""
+    model, effort = split_option(candidate_model)
     already = select(Run.prompt_hash).where(
-        Run.job_id == job.job_id, Run.run_kind == "RETEST", func.lower(Run.model) == normalize(candidate_model)
+        Run.job_id == job.job_id, Run.run_kind == "RETEST", func.lower(Run.model) == normalize(model),
+        Run.effort.is_(None) if effort is None else Run.effort == effort,
     )
     query = (
         select(Run.run_id, Run.prompt, Run.prompt_hash, Run.expected, Run.tokens_in, Run.tokens_out,
@@ -174,8 +178,8 @@ async def run_retest(
         key = await session.get(ProviderKey, retest.project_id)
         wanted = sample_size or retest.runs_planned or settings.retest_default_sample
         sources = await sample_sources(session, job, retest.candidate_model, wanted, seed=retest_id.int % 2**32)
-        price = await find_price(session, retest.candidate_model, retest.candidate_model,
-                                 key.provider if key else None)
+        model, effort = split_option(retest.candidate_model)  # "sonnet-5@low": the model, at that effort
+        price = await find_price(session, model, model, key.provider if key else None)
         retest.status, retest.started_at, retest.runs_planned = "RUNNING", datetime.now(UTC), len(sources)
         await session.commit()
         budget, cap = Decimal(retest.budget_usd), Decimal(project.retest_monthly_cap_usd)
@@ -192,7 +196,7 @@ async def run_retest(
     progress = _Progress()
     lock = asyncio.Lock()
     gate = asyncio.Semaphore(max(settings.retest_concurrency, 1))
-    candidate_family = family(retest.candidate_model)
+    candidate_family = option_name(family(model), effort)
 
     async def one(src) -> None:
         # The slot comes first: every source is queued at once, so a stop or budget check made before
@@ -219,7 +223,7 @@ async def run_retest(
             progress.reserved += cost
         try:
             started = datetime.now(UTC)
-            response = await client.complete(retest.candidate_model, src.prompt)
+            response = await client.complete(model, src.prompt, **({"effort": effort} if effort else {}))
             latency = int((datetime.now(UTC) - started).total_seconds() * 1000)
         except (RateLimited, ProviderError) as exc:
             async with lock:
@@ -234,8 +238,8 @@ async def run_retest(
 
         parsed = read_response(response)
         body = RunCreate(
-            run_id=uuid.uuid4(), job=job.name, prompt=src.prompt, model=retest.candidate_model, provider=key.provider,
-            model_version=parsed.get("model_version") or retest.candidate_model,
+            run_id=uuid.uuid4(), job=job.name, prompt=src.prompt, model=model, provider=key.provider, effort=effort,
+            model_version=parsed.get("model_version") or model,
             tokens_in=parsed.get("tokens_in", 0), tokens_out=parsed.get("tokens_out", 0),
             cache_read_tokens=parsed.get("cache_read_tokens", 0), cache_write_tokens=parsed.get("cache_write_tokens", 0),
             latency_ms=latency, output=parsed.get("output"), expected=src.expected,
@@ -458,14 +462,16 @@ async def start_when_unsure(session: AsyncSession, *, settings: Settings | None 
     for project, job, _ in await _eligible_jobs(session):
         result = await recommend(session, job, settings=settings)
         for candidate in result.decision.retest_candidates:
-            requested = (
+            base, effort = split_option(candidate)
+            asked = (
                 await session.execute(
                     select(Run.model).where(Run.job_id == job.job_id).order_by(Run.created_at.desc())
-                    .where(func.lower(Run.model_version).like(f"{candidate.lower()}%")
-                           | (func.lower(Run.model) == candidate.lower()))
+                    .where(func.lower(Run.model_version).like(f"{base.lower()}%")
+                           | (func.lower(Run.model) == base.lower()))
                     .limit(1)
                 )
-            ).scalar_one_or_none() or candidate
+            ).scalar_one_or_none() or base
+            requested = option_name(asked, effort)
             recent = (
                 await session.execute(
                     select(Retest.retest_id).where(Retest.job_id == job.job_id, Retest.created_at >= since,

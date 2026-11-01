@@ -25,6 +25,9 @@ recommended and why it changed.
 - Scheduled jobs store each changed verdict with its lineage, detect regressions across version changes (and
   silent drops under an unchanged name), alert a signed webhook, track model retirements, and **re-test**
   cheaper candidates on the customer's own key, always within a budget and a monthly cap.
+- **Usage limits**: a plan's 5-hour or weekly limit, a one-model limit, an API budget or daily quota. From the
+  recorded runs it forecasts whether a limit runs out before it resets and, if so, names per job the cheaper
+  option proven to still do it, at a model and reasoning effort (`sonnet-5@low` instead of `opus-5-5@medium`).
 - A React web app: Google sign-in, projects and keys, recommendations, evidence, history, alerts, re-tests,
   spend, breakdowns and a live view of runs crossing the pipeline.
 

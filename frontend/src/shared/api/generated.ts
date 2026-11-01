@@ -384,6 +384,65 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Limits
+         * @description Every usage limit of the project, with whether it runs out before it resets at the current pace and,
+         *     if so, what to change per job.
+         */
+        get: operations["list_limits_v1_limits_get"];
+        put?: never;
+        /** Create Limit */
+        post: operations["create_limit_v1_limits_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/limits/{limit_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Limit */
+        delete: operations["delete_limit_v1_limits__limit_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/limits/{limit_id}/used": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Report Limit Used
+         * @description For a plan that only shows a percentage: the share used now, as the plan shows it.
+         */
+        put: operations["report_limit_used_v1_limits__limit_id__used_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me": {
         parameters: {
             query?: never;
@@ -947,6 +1006,33 @@ export interface components {
             /** Reason */
             reason?: string | null;
         };
+        /** LimitSuggestionOut */
+        LimitSuggestionOut: {
+            /**
+             * Current
+             * @description The option the job uses now, e.g. opus-5-5@medium
+             */
+            current: string;
+            /** Job */
+            job: string;
+            /** Note */
+            note: string;
+            /**
+             * Reduction
+             * @description Share of the job's use of this limit the move saves (1 = all of it)
+             */
+            reduction: number;
+            /**
+             * Share Of Use
+             * @description This job's share of the limit's recent use
+             */
+            share_of_use: number;
+            /**
+             * Suggested
+             * @description What to move it to; null when nothing is proven yet
+             */
+            suggested: string | null;
+        };
         /**
          * ModelEvidenceOut
          * @description What the runs say about one model in this job, and how the tolerance rule judged it.
@@ -1431,6 +1517,11 @@ export interface components {
              */
             cost_usd?: number | null;
             /**
+             * Effort
+             * @description The reasoning effort the call asked for (e.g. low, medium, high). The same model at different efforts is compared as separate options
+             */
+            effort?: string | null;
+            /**
              * Expected
              * @description The correct values for an ANSWER_KEY job, used to check this run. Stored only when the job has re-test consent, so a re-test can check the replayed run against the same answers
              */
@@ -1509,6 +1600,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Effort */
+            effort?: string | null;
             /**
              * Job
              * @description The job's name
@@ -1591,6 +1684,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Effort */
+            effort?: string | null;
             /**
              * Job
              * @description The job's name
@@ -1681,6 +1776,125 @@ export interface components {
              * @default 0
              */
             unpriced_runs: number;
+        };
+        /**
+         * UsageLimitIn
+         * @description A usage limit the project works under. A plan that shows only a percentage is entered as PERCENT
+         *     and kept current with PUT /v1/limits/{limit_id}/used.
+         */
+        UsageLimitIn: {
+            /**
+             * Measure
+             * @description USD at list price, TOKENS (all kinds), REQUESTS (calls), or PERCENT for a plan that shows only the share used
+             * @enum {string}
+             */
+            measure: "USD" | "TOKENS" | "REQUESTS" | "PERCENT";
+            /**
+             * Model
+             * @description Only this model family counts
+             */
+            model?: string | null;
+            /**
+             * Name
+             * @description e.g. Weekly, Session (5h), or one model's limit
+             */
+            name: string;
+            /**
+             * Resets At
+             * Format: date-time
+             * @description When the current window ends; later ones follow every window_hours
+             */
+            resets_at: string;
+            /**
+             * Size
+             * @description The limit in its measure's unit; not for PERCENT
+             */
+            size?: number | null;
+            /**
+             * Used Percent
+             * @description PERCENT: the share used now, as the plan shows it
+             */
+            used_percent?: number | null;
+            /**
+             * Window Hours
+             * @description 5 for a 5-hour session, 168 for a 7-day week
+             */
+            window_hours: number;
+        };
+        /** UsageLimitOut */
+        UsageLimitOut: {
+            /**
+             * Hours To Full
+             * @description Hours until used up at this pace; null if it is not
+             */
+            hours_to_full: number | null;
+            /**
+             * Hours To Full After
+             * @description Hours until used up if the suggestions are followed
+             */
+            hours_to_full_after: number | null;
+            /** Hours To Reset */
+            hours_to_reset: number;
+            /**
+             * Lasts After
+             * @description Whether following the suggestions makes it last until the reset
+             */
+            lasts_after: boolean | null;
+            /**
+             * Limit Id
+             * Format: uuid
+             */
+            limit_id: string;
+            /**
+             * Measure
+             * @enum {string}
+             */
+            measure: "USD" | "TOKENS" | "REQUESTS" | "PERCENT";
+            /** Message */
+            message: string;
+            /** Model */
+            model: string | null;
+            /** Name */
+            name: string;
+            /** Rate Per Hour */
+            rate_per_hour: number;
+            /**
+             * Resets At
+             * Format: date-time
+             * @description The end of the current window
+             */
+            resets_at: string;
+            /** Share Used */
+            share_used: number | null;
+            /** Size */
+            size: number | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "OK" | "AT_RISK" | "EXHAUSTED" | "UNKNOWN";
+            /** Suggestions */
+            suggestions: components["schemas"]["LimitSuggestionOut"][];
+            /**
+             * Used
+             * @description Used this window, in the measure's unit (list-price dollars for PERCENT)
+             */
+            used: number | null;
+            /** Window Hours */
+            window_hours: number;
+            /**
+             * Window Start
+             * Format: date-time
+             */
+            window_start: string;
+        };
+        /** UsedPercentIn */
+        UsedPercentIn: {
+            /**
+             * Used Percent
+             * @description The share of the limit used now, as the plan shows it
+             */
+            used_percent: number;
         };
         /** UserOut */
         UserOut: {
@@ -2348,6 +2562,148 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RetestOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_limits_v1_limits_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageLimitOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_limit_v1_limits_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsageLimitIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageLimitOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_limit_v1_limits__limit_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                limit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_limit_used_v1_limits__limit_id__used_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                limit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsedPercentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageLimitOut"];
                 };
             };
             /** @description Validation Error */

@@ -89,6 +89,7 @@ class RunOut(Model):
     model: str
     model_version: str
     prompt_version: str | None
+    effort: str | None = None
     tokens_in: int
     tokens_out: int
     cache_read_tokens: int
@@ -136,6 +137,11 @@ class RunCreate(Model):
                     "default price for the model is used",
     )
     prompt_version: str | None = Field(default=None, max_length=64)
+    effort: str | None = Field(
+        default=None, max_length=20,
+        description="The reasoning effort the call asked for (e.g. low, medium, high). The same model at different "
+                    "efforts is compared as separate options",
+    )
     tokens_in: int = Field(default=0, ge=0, le=MAX_TOKENS, description="Uncached input tokens")
     tokens_out: int = Field(default=0, ge=0, le=MAX_TOKENS, description="Output tokens, thinking included")
     cache_read_tokens: int = Field(default=0, ge=0, le=MAX_TOKENS)
@@ -500,3 +506,61 @@ class FlowEventOut(Model):
 
 
 RecommendationOut.model_rebuild()  # it refers to ForecastOut, defined after it
+
+
+class UsageLimitIn(Model):
+    """A usage limit the project works under. A plan that shows only a percentage is entered as PERCENT
+    and kept current with PUT /v1/limits/{limit_id}/used."""
+
+    name: str = Field(min_length=1, max_length=60, description="e.g. Weekly, Session (5h), or one model's limit")
+    window_hours: int = Field(gt=0, le=24 * 31, description="5 for a 5-hour session, 168 for a 7-day week")
+    resets_at: datetime = Field(description="When the current window ends; later ones follow every window_hours")
+    measure: Literal["USD", "TOKENS", "REQUESTS", "PERCENT"] = Field(
+        description="USD at list price, TOKENS (all kinds), REQUESTS (calls), or PERCENT for a plan that shows "
+                    "only the share used")
+    size: float | None = Field(default=None, gt=0, description="The limit in its measure's unit; not for PERCENT")
+    model: str | None = Field(default=None, max_length=200, description="Only this model family counts")
+    used_percent: float | None = Field(default=None, ge=0, le=100,
+                                       description="PERCENT: the share used now, as the plan shows it")
+
+    @model_validator(mode="after")
+    def _size_matches_measure(self) -> UsageLimitIn:
+        if self.measure != "PERCENT" and self.size is None:
+            raise ValueError("size is required unless the measure is PERCENT")
+        if self.measure == "PERCENT" and self.size is not None:
+            raise ValueError("a PERCENT limit has no size: enter the share used instead")
+        return self
+
+
+class UsedPercentIn(Model):
+    used_percent: float = Field(ge=0, le=100, description="The share of the limit used now, as the plan shows it")
+
+
+class LimitSuggestionOut(Model):
+    job: str
+    current: str = Field(description="The option the job uses now, e.g. opus-5-5@medium")
+    suggested: str | None = Field(description="What to move it to; null when nothing is proven yet")
+    share_of_use: float = Field(description="This job's share of the limit's recent use")
+    reduction: float = Field(description="Share of the job's use of this limit the move saves (1 = all of it)")
+    note: str
+
+
+class UsageLimitOut(Model):
+    limit_id: uuid.UUID
+    name: str
+    window_hours: int
+    measure: Literal["USD", "TOKENS", "REQUESTS", "PERCENT"]
+    size: float | None
+    model: str | None
+    window_start: datetime
+    resets_at: datetime = Field(description="The end of the current window")
+    used: float | None = Field(description="Used this window, in the measure's unit (list-price dollars for PERCENT)")
+    share_used: float | None
+    rate_per_hour: float
+    hours_to_reset: float
+    hours_to_full: float | None = Field(description="Hours until used up at this pace; null if it is not")
+    state: Literal["OK", "AT_RISK", "EXHAUSTED", "UNKNOWN"]
+    message: str
+    suggestions: list[LimitSuggestionOut]
+    hours_to_full_after: float | None = Field(description="Hours until used up if the suggestions are followed")
+    lasts_after: bool | None = Field(description="Whether following the suggestions makes it last until the reset")

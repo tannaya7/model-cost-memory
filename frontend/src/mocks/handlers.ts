@@ -1,5 +1,6 @@
 import { delay, http, HttpResponse } from "msw";
 import type {
+  UsageLimit,
   LabelCreate,
   Job,
   Model,
@@ -689,6 +690,47 @@ export const handlers = [
     }
 
     return HttpResponse.json({ detail: "Job not found" }, { status: 404 });
+  }),
+
+  // GET /v1/limits: one plan limit about to run out, with a proven cheaper option
+  http.get("/v1/limits", async ({ request }) => {
+    await delay(300);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+    const now = Date.now();
+    const limits: UsageLimit[] = [
+      {
+        limit_id: "11111111-1111-4111-8111-111111111111",
+        name: "Weekly",
+        window_hours: 168,
+        measure: "PERCENT",
+        size: null,
+        model: null,
+        window_start: new Date(now - 144 * 3_600_000).toISOString(),
+        resets_at: new Date(now + 24 * 3_600_000).toISOString(),
+        used: 33.6,
+        share_used: 0.84,
+        rate_per_hour: 0.62,
+        hours_to_reset: 24,
+        hours_to_full: 10.3,
+        state: "AT_RISK",
+        message: "At this pace Weekly runs out in 10 h, 14 h before it resets. With the suggested changes it lasts until the reset",
+        suggestions: [
+          {
+            job: "invoice-extract",
+            current: "opus-5-5@medium",
+            suggested: "sonnet-5@low",
+            share_of_use: 0.72,
+            reduction: 0.81,
+            note: "Shown within 3 points of opus-5-5@medium at 99% confidence; it uses 81% less of this limit per run",
+          },
+        ],
+        hours_to_full_after: null,
+        lasts_after: true,
+      },
+    ];
+    return HttpResponse.json(limits);
   }),
 
   // GET /v1/retest/limits

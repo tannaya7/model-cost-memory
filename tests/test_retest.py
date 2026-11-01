@@ -35,9 +35,11 @@ class FakeProvider:
 
     def __init__(self, accuracy=1.0, fail_after=None):
         self.accuracy, self.fail_after, self.calls = accuracy, fail_after, 0
+        self.efforts = []
 
-    async def complete(self, model, prompt):
+    async def complete(self, model, prompt, effort=None):
         self.calls += 1
+        self.efforts.append(effort)
         if self.fail_after is not None and self.calls > self.fail_after:
             raise RateLimited("429")
         right = (self.calls % 10) < self.accuracy * 10  # e.g. 0.9: every tenth answer is wrong
@@ -306,3 +308,19 @@ async def test_a_job_that_already_compares_models_gets_no_first_key_re_test(sess
     await session.flush()
     assert await start_on_first_key(session, project, settings=SETTINGS) == []
 
+
+async def test_a_model_at_a_reasoning_effort_is_re_tested_at_that_effort(engine, session, world):
+    _, project, job = world
+    retest = await enqueue(session, project, job, "mini@low", 1.0, "MANUAL")  # priced as mini
+    await session.commit()
+    provider = FakeProvider()
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    done = await run_retest(sessions, retest.retest_id, settings=SETTINGS, client_factory=factory(provider),
+                            sample_size=5)
+    assert (done.status, done.runs_done) == ("DONE", 5) and set(provider.efforts) == {"low"}
+    session.expunge_all()
+    replayed = (await session.execute(select(Run).where(Run.retest_id == retest.retest_id))).scalars().all()
+    assert {(r.model, r.effort) for r in replayed} == {("mini", "low")}
+    # The same prompts may still be replayed on mini at another effort, never again at this one.
+    assert len(await sample_sources(session, job, "mini@low", 60)) == 55
+    assert len(await sample_sources(session, job, "mini@high", 60)) == 60

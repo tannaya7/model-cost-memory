@@ -43,6 +43,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..catalog.lifecycle import UNKNOWN, lifecycles
 from ..config import Settings, get_settings
 from ..models import Job, Recommendation, Run
+from ..options import option_name, split_option
 from ..pipeline.decay import current_versions, family_key
 from ..pipeline.scoring import stability_days
 from ..versions import normalize
@@ -328,13 +329,14 @@ def _weighted(s: str) -> str:
 # raises on underflow; e^-700 is zero for every purpose here.
 EVIDENCE = text(f"""
 WITH buckets AS (
-    SELECT model, model_version, provider, passed, cost IS NOT NULL AS priced, b,
+    SELECT model, model_version, provider, effort, passed, cost IS NOT NULL AS priced, b,
            count(*) AS n, sum(d) AS sd, sum(d * d) AS sdd,
            coalesce(sum(cost), 0) AS sc, coalesce(sum(cost * d), 0) AS scd, coalesce(sum(cost * d * d), 0) AS scdd
     FROM (
-        SELECT model, model_version, provider, passed, cost, floor(age * 24) / 24 AS b, age - floor(age * 24) / 24 AS d
+        SELECT model, model_version, provider, effort, passed, cost, floor(age * 24) / 24 AS b,
+               age - floor(age * 24) / 24 AS d
         FROM (
-            SELECT model, model_version, provider, outcome = 'PASS' AS passed, cost_usd::float8 AS cost,
+            SELECT model, model_version, provider, effort, outcome = 'PASS' AS passed, cost_usd::float8 AS cost,
                    greatest(extract(epoch FROM (:now - created_at))::float8 / 86400.0, 0) AS age
             FROM runs
             WHERE job_id = :job AND outcome IN ('PASS', 'FAIL') AND state NOT IN ('ARCHIVED', 'INGESTION_FAILED')
@@ -343,12 +345,12 @@ WITH buckets AS (
         ) AS aged
         OFFSET 0
     ) AS split
-    GROUP BY 1, 2, 3, 4, 5, 6
+    GROUP BY 1, 2, 3, 4, 5, 6, 7
 )
-SELECT model, model_version, provider, sum(n) AS n, coalesce(sum(n) FILTER (WHERE NOT passed), 0) AS failures,
+SELECT model, model_version, provider, effort, sum(n) AS n, coalesce(sum(n) FILTER (WHERE NOT passed), 0) AS failures,
        {_weighted("s_current")}, {_weighted("s_superseded")}
 FROM buckets
-GROUP BY 1, 2, 3
+GROUP BY 1, 2, 3, 4
 """).bindparams(bindparam("now", type_=TIMESTAMP(timezone=True)), bindparam("job", type_=UUID(as_uuid=True)),
                 bindparam("s_current", type_=Float), bindparam("s_superseded", type_=Float))
 
@@ -396,11 +398,13 @@ async def recommend(
     ).all()
     current_version = await current_versions(session, job.job_id)
 
+    # One entry per option: a model family, at the reasoning effort its runs name (options.py).
     families: dict[str, _Family] = defaultdict(_Family)
     for r in rows:
-        name = family_key(r.model, r.model_version)
+        base = family_key(r.model, r.model_version)
+        name = option_name(base, r.effort)
         # An unrecognised version is treated as current (TIP 3.7): never discount evidence by accident.
-        superseded = normalize(r.model_version) != current_version.get((job.job_id, name), normalize(r.model_version))
+        superseded = normalize(r.model_version) != current_version.get((job.job_id, base), normalize(r.model_version))
         f = families[name]
         f.n_runs += r.n
         f.failures += r.failures
@@ -416,27 +420,28 @@ async def recommend(
 
     latest = (
         await session.execute(
-            select(Run.model, Run.model_version)
+            select(Run.model, Run.model_version, Run.effort)
             .where(Run.job_id == job.job_id, Run.run_kind == "PRODUCTION", Run.state.not_in(UNCOUNTED_STATES))
             .order_by(Run.created_at.desc()).limit(1)
         )
     ).first()
-    current_model = family_key(*latest) if latest else None
+    current_model = option_name(family_key(latest.model, latest.model_version), latest.effort) if latest else None
 
     # The current model is listed even when none of its runs is checked yet (e.g. awaiting labels).
     names = set(families) | ({current_model} if current_model else set())
-    versions = {name: current_version.get((job.job_id, name), name) for name in names}
+    bases = {name: split_option(name)[0] for name in names}
+    versions = {name: current_version.get((job.job_id, bases[name]), bases[name]) for name in names}
     # Status for the provider this job's runs name: providers retire the same model on different dates.
     served_by = {name: (families[name].providers.most_common(1)[0][0] if families[name].providers else None)
                  for name in names}
-    status = await lifecycles(session, {**{n: served_by[n] for n in names},
+    status = await lifecycles(session, {**{bases[n]: served_by[n] for n in names},
                                         **{versions[n]: served_by[n] for n in names}}, today=now.date())
     inputs = []
     for name in sorted(names):
         f = families[name]
         s = Sample(pass_rate=f.passing / f.total, effective_n=f.total * f.total / f.squares,
                    evidence_weight=f.total) if f.total > 0 else None
-        life = status[versions[name]] if status[versions[name]] is not UNKNOWN else status[name]
+        life = status[versions[name]] if status[versions[name]] is not UNKNOWN else status[bases[name]]
         # Mean over priced runs; a model with no priced run has no cost, so it can never look cheapest.
         mean_cost = f.cost / f.priced if f.priced else None
         inputs.append(ModelInput(
