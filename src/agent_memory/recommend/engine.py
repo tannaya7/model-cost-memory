@@ -31,21 +31,22 @@ The Consolidator (pipeline/consolidation.py) stores each changed verdict with th
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
-from sqlalchemy import func, select
+from sqlalchemy import Float, bindparam, func, select, text, tuple_
+from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..catalog.lifecycle import UNKNOWN, lifecycles, most_used
+from ..catalog.lifecycle import UNKNOWN, lifecycles
 from ..config import Settings, get_settings
 from ..models import Job, Run
 from ..pipeline.decay import current_versions, family_key
-from ..pipeline.scoring import age_days, freshness, stability_days
+from ..pipeline.scoring import stability_days
 from ..versions import normalize
-from .stats import Sample, assess, difference, sample, wilson, z_for
+from .stats import Sample, assess, difference, wilson, z_for
 
 Verdict = Literal["HOLD", "DOWNGRADE", "SWITCH", "INSUFFICIENT_EVIDENCE"]
 Status = Literal["GOOD_ENOUGH", "UNSURE", "CLEARLY_WORSE", "BELOW_FLOOR", "RETIRED"]
@@ -279,50 +280,116 @@ class JobRecommendation:
     forecast: Forecast | None = None
 
 
+def _weighted(s: str) -> str:
+    """Freshness-weighted sums for stability `s`, from each hour bucket's counts.
+
+    A run of age b + d (b the bucket's start, 0 <= d < 1 hour) weighs e^(-b/s) e^(-d/s), and
+    e^(-d/s) = 1 - d/s + d^2/(2s^2) to within (d/s)^3/6: under 3e-8 at the default 7.5-day stability.
+    So Postgres only counts and sums d and d^2 per bucket, and exp() runs once per bucket, not per run.
+    """
+    w = f"exp(-least(b / :{s}, 700))"
+    w2 = f"exp(-least(2 * b / :{s}, 700))"
+    total = f"{w} * (n - sd / :{s} + sdd / (2 * :{s} * :{s}))"
+    return (f"sum({total}) AS total_{s}, "
+            f"sum({w2} * (n - 2 * sd / :{s} + 2 * sdd / (:{s} * :{s}))) AS squares_{s}, "
+            f"coalesce(sum({total}) FILTER (WHERE passed), 0) AS passing_{s}, "
+            f"coalesce(sum({w} * (sc - scd / :{s} + scdd / (2 * :{s} * :{s}))), 0) AS cost_{s}, "
+            f"coalesce(sum({total}) FILTER (WHERE priced), 0) AS priced_{s}")
+
+
+# Each version's evidence, summed in Postgres, in one pass over the job's runs: a job with half a million
+# runs returns a few rows (reports/speed.md). Every run is weighted under both stabilities, as a current
+# version and as a superseded one; which applies is decided per version in Python, where the family and
+# the current version are known. The OFFSET 0 subqueries stop Postgres from inlining them, which made it
+# recompute each run's age once for every expression that used it. exp() is capped because Postgres
+# raises on underflow; e^-700 is zero for every purpose here.
+EVIDENCE = text(f"""
+WITH buckets AS (
+    SELECT model, model_version, provider, passed, cost IS NOT NULL AS priced, b,
+           count(*) AS n, sum(d) AS sd, sum(d * d) AS sdd,
+           coalesce(sum(cost), 0) AS sc, coalesce(sum(cost * d), 0) AS scd, coalesce(sum(cost * d * d), 0) AS scdd
+    FROM (
+        SELECT model, model_version, provider, passed, cost, floor(age * 24) / 24 AS b, age - floor(age * 24) / 24 AS d
+        FROM (
+            SELECT model, model_version, provider, outcome = 'PASS' AS passed, cost_usd::float8 AS cost,
+                   greatest(extract(epoch FROM (:now - created_at))::float8 / 86400.0, 0) AS age
+            FROM runs
+            WHERE job_id = :job AND outcome IN ('PASS', 'FAIL') AND state NOT IN ('ARCHIVED', 'INGESTION_FAILED')
+              AND invalid_at IS NULL
+            OFFSET 0
+        ) AS aged
+        OFFSET 0
+    ) AS split
+    GROUP BY 1, 2, 3, 4, 5, 6
+)
+SELECT model, model_version, provider, sum(n) AS n, coalesce(sum(n) FILTER (WHERE NOT passed), 0) AS failures,
+       {_weighted("s_current")}, {_weighted("s_superseded")}
+FROM buckets
+GROUP BY 1, 2, 3
+""").bindparams(bindparam("now", type_=TIMESTAMP(timezone=True)), bindparam("job", type_=UUID(as_uuid=True)),
+                bindparam("s_current", type_=Float), bindparam("s_superseded", type_=Float))
+
+
+@dataclass
+class _Family:
+    """One model family's evidence, added up over its versions."""
+
+    n_runs: int = 0
+    failures: int = 0
+    total: float = 0.0  # sum of weights
+    squares: float = 0.0  # sum of squared weights, for the effective sample size
+    passing: float = 0.0
+    cost: float = 0.0  # weighted, over priced runs only
+    priced: float = 0.0
+    providers: Counter = field(default_factory=Counter)
+    versions: list[tuple[str, str]] = field(default_factory=list)
+
+
+def _counted(job: Job):
+    return (Run.job_id == job.job_id, Run.outcome.in_(COUNTED_OUTCOMES), Run.state.not_in(UNCOUNTED_STATES),
+            Run.invalid_at.is_(None))
+
+
 async def recommend(
-    session: AsyncSession, job: Job, *, now: datetime | None = None, settings: Settings | None = None
+    session: AsyncSession, job: Job, *, now: datetime | None = None, settings: Settings | None = None,
+    with_run_ids: bool = False,
 ) -> JobRecommendation:
-    """Load a job's evidence, weight it as of `now`, and decide."""
+    """Load a job's evidence, weight it as of `now`, and decide. `with_run_ids` also lists every counted
+    run, which only the Consolidator needs (a stored verdict records the runs it rests on)."""
     settings = settings or get_settings()
     now = now or datetime.now(UTC)
 
-    runs = (
-        await session.execute(
-            select(Run.run_id, Run.model, Run.model_version, Run.outcome, Run.outcome_reason, Run.cost_usd,
-                   Run.created_at, Run.provider)
-            .where(Run.job_id == job.job_id, Run.outcome.in_(COUNTED_OUTCOMES), Run.state.not_in(UNCOUNTED_STATES),
-                   Run.invalid_at.is_(None))
-        )
+    # The averaging weight must not depend on the outcome: if failures were remembered longer than
+    # passes of the same age, every pass rate would be biased down, most for models with old failures
+    # (a superseded version's failures outliving its passes). Importance keeps doing its two jobs,
+    # deciding what is archived (decay.py) and what re-tests sample first; here only age and
+    # version currency count.
+    stab = {superseded: stability_days(1.0, superseded=superseded, base_days=settings.decay_base_days,
+                                       superseded_factor=settings.version_factor_superseded)
+            for superseded in (False, True)}
+    rows = (
+        await session.execute(EVIDENCE, {"job": job.job_id, "now": now, "s_current": stab[False],
+                                         "s_superseded": stab[True]})
     ).all()
     current_version = await current_versions(session, job.job_id)
 
-    weights: dict[str, list[tuple[float, bool]]] = defaultdict(list)
-    weighted_cost: dict[str, float] = defaultdict(float)  # over priced runs only
-    priced_weight: dict[str, float] = defaultdict(float)
-    failures: dict[str, list] = defaultdict(list)
-    providers: dict[str, list] = defaultdict(list)
-    for run in runs:
-        name = family_key(run.model, run.model_version)
-        providers[name].append(run.provider)
+    families: dict[str, _Family] = defaultdict(_Family)
+    for r in rows:
+        name = family_key(r.model, r.model_version)
         # An unrecognised version is treated as current (TIP 3.7): never discount evidence by accident.
-        superseded = normalize(run.model_version) != current_version.get((job.job_id, name), normalize(run.model_version))
-        cost = float(run.cost_usd) if run.cost_usd is not None else None  # None: price unknown
-        # The averaging weight must not depend on the outcome: if failures were remembered longer than
-        # passes of the same age, every pass rate would be biased down, most for models with old failures
-        # (a superseded version's failures outliving its passes). Importance keeps doing its two jobs,
-        # deciding what is archived (decay.py) and what re-tests sample first; here only age and
-        # version currency count.
-        stab = stability_days(
-            1.0, superseded=superseded,
-            base_days=settings.decay_base_days, superseded_factor=settings.version_factor_superseded,
-        )
-        w = freshness(age_days(run.created_at, now), stab)
-        weights[name].append((w, run.outcome == "PASS"))
-        if cost is not None:
-            weighted_cost[name] += w * cost
-            priced_weight[name] += w
-        if run.outcome == "FAIL":
-            failures[name].append(run)
+        superseded = normalize(r.model_version) != current_version.get((job.job_id, name), normalize(r.model_version))
+        f = families[name]
+        f.n_runs += r.n
+        f.failures += r.failures
+        sums = ((r.total_s_superseded, r.squares_s_superseded, r.passing_s_superseded, r.cost_s_superseded,
+                 r.priced_s_superseded) if superseded
+                else (r.total_s_current, r.squares_s_current, r.passing_s_current, r.cost_s_current, r.priced_s_current))
+        f.total, f.squares, f.passing, f.cost, f.priced = (
+            a + b for a, b in zip((f.total, f.squares, f.passing, f.cost, f.priced), sums, strict=True))
+        if r.provider:
+            f.providers[r.provider.lower()] += r.n
+        if (r.model, r.model_version) not in f.versions:
+            f.versions.append((r.model, r.model_version))
 
     latest = (
         await session.execute(
@@ -334,21 +401,23 @@ async def recommend(
     current_model = family_key(*latest) if latest else None
 
     # The current model is listed even when none of its runs is checked yet (e.g. awaiting labels).
-    names = set(weights) | ({current_model} if current_model else set())
+    names = set(families) | ({current_model} if current_model else set())
     versions = {name: current_version.get((job.job_id, name), name) for name in names}
     # Status for the provider this job's runs name: providers retire the same model on different dates.
-    served_by = {name: most_used(providers.get(name, [])) for name in names}
+    served_by = {name: (families[name].providers.most_common(1)[0][0] if families[name].providers else None)
+                 for name in names}
     status = await lifecycles(session, {**{n: served_by[n] for n in names},
                                         **{versions[n]: served_by[n] for n in names}}, today=now.date())
     inputs = []
     for name in sorted(names):
-        pairs = weights.get(name, [])
-        s = sample(pairs)
+        f = families[name]
+        s = Sample(pass_rate=f.passing / f.total, effective_n=f.total * f.total / f.squares,
+                   evidence_weight=f.total) if f.total > 0 else None
         life = status[versions[name]] if status[versions[name]] is not UNKNOWN else status[name]
         # Mean over priced runs; a model with no priced run has no cost, so it can never look cheapest.
-        mean_cost = weighted_cost[name] / priced_weight[name] if priced_weight[name] else None
+        mean_cost = f.cost / f.priced if f.priced else None
         inputs.append(ModelInput(
-            model=name, model_version=versions[name], n_runs=len(pairs), failures=len(failures[name]), sample=s,
+            model=name, model_version=versions[name], n_runs=f.n_runs, failures=f.failures, sample=s,
             mean_cost_usd=mean_cost,
             catalog_status=life.status, shutdown_date=life.shutdown_date, catalog_note=life.note,
         ))
@@ -366,14 +435,22 @@ async def recommend(
     ).scalar_one()
 
     shown = {m.model for m in (decision.recommended, decision.current) if m is not None}
-    failing = sorted((r for name in shown for r in failures[name]), key=lambda r: r.created_at, reverse=True)
+    shown_versions = [v for name in shown for v in families[name].versions] if shown else []
+    failing = (
+        await session.execute(
+            select(Run.run_id, Run.model, Run.model_version, Run.outcome_reason, Run.created_at)
+            .where(*_counted(job), Run.outcome == "FAIL", tuple_(Run.model, Run.model_version).in_(shown_versions))
+            .order_by(Run.created_at.desc()).limit(FAILING_RUNS_SHOWN)
+        )
+    ).all() if shown_versions else []
+    run_ids = (await session.execute(select(Run.run_id).where(*_counted(job)))).scalars().all() if with_run_ids else []
     return JobRecommendation(
-        job=job.name, decision=decision, n_runs=len(runs),
-        evidence_weight=sum(w for pairs in weights.values() for w, _ in pairs),
+        job=job.name, decision=decision, n_runs=sum(f.n_runs for f in families.values()),
+        evidence_weight=sum(f.total for f in families.values()),
         failing_runs=[
             FailingRun(r.run_id, family_key(r.model, r.model_version), r.model_version, r.outcome_reason, r.created_at)
-            for r in failing[:FAILING_RUNS_SHOWN]
+            for r in failing
         ],
-        computed_at=now, settings=settings, run_ids=[r.run_id for r in runs],
+        computed_at=now, settings=settings, run_ids=list(run_ids),
         forecast=forecast(decision, runs_per_month, confidence=settings.confidence_level),
     )

@@ -110,7 +110,7 @@ async def consolidate_job(
     reason: str | None = None, force: bool = False,
 ) -> Recommendation | None:
     now = now or datetime.now(UTC)
-    result = await recommend(session, job, now=now, settings=settings or get_settings())
+    result = await recommend(session, job, now=now, settings=settings or get_settings(), with_run_ids=True)
     new = await store(session, job, result, now=now, reason=reason, force=force)
     await session.commit()
     return new

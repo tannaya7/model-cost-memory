@@ -57,12 +57,15 @@ Simulated data, run through the production engine, decay, consolidation and regr
   caught 96% of the time and 10 points always, the day after it lands, with 1 false alarm in 50 unchanged
   upgrades. A silent drop under an unchanged name is caught 68% of the time at 5 points and always at 10, with
   no false alarms.
+- **Speed** ([report](reports/speed.md)): a recommendation for a job with 100,000 runs in under 300 ms, and
+  for 500,000 runs about 1 s cold and under 100 ms under live traffic; recording adds about 0.01 ms (p99
+  0.2 ms) to the application's own call, whether the API is up or not.
 - **Held-out check** ([report](reports/holdout_check.md)): on simulated answers at real Gemini prices, every
   model the engine moves a job to is truly within 3 points of the best, at every amount of evidence. The cost
   is caution: a cheaper model only 1.4 points worse takes several hundred runs per model to prove.
 
 Reproduce with `python scripts/staleness_experiment.py`, `python scripts/simulate.py` (an embedded Postgres
-is started for them) and `python scripts/holdout_check.py --simulated`.
+is started for them), `python scripts/holdout_check.py --simulated` and `python scripts/benchmark.py`.
 
 ## Getting started
 
