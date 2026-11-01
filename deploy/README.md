@@ -1,7 +1,9 @@
 # Deploying to a server
 
-> **Status: written, not yet run on a real server.** Everything here is checked for syntax only.
-> The first real deployment is Week 7; treat this as a checklist to follow and correct, not a guarantee.
+> **Status: dry-run in CI, not yet run on a real server.** On every pull request the `deploy-dry-run` job
+> follows this guide on a throwaway machine (`deploy/dry_run.sh`, with `DOMAIN=localhost`): it builds every image,
+> migrates, starts the stack behind Caddy, records runs through it, and restores a backup. What only a real server
+> can prove is still open: the public domain and its certificate, Google sign-in, and running on 4 GB of memory.
 
 Laptops need none of this: development uses a free hosted Neon database. Docker is for the server only.
 

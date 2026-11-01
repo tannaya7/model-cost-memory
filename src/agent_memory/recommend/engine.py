@@ -39,8 +39,9 @@ from typing import Literal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..catalog.lifecycle import UNKNOWN, lifecycles, most_used
 from ..config import Settings, get_settings
-from ..models import CatalogEntry, Job, Run
+from ..models import Job, Run
 from ..pipeline.decay import current_versions, family_key
 from ..pipeline.scoring import age_days, freshness, stability_days
 from ..versions import normalize
@@ -65,6 +66,7 @@ class ModelInput:
     mean_cost_usd: float | None  # None when no price is known
     catalog_status: str = "UNKNOWN"
     shutdown_date: date | None = None
+    catalog_note: str | None = None  # set when providers disagree on the model's shutdown
 
 
 @dataclass
@@ -204,7 +206,8 @@ def decide(
         settle.append(reference.model)
 
     if recommended.catalog_status == "DEPRECATED":
-        warnings.append(f"{recommended.model} is deprecated and shuts down on {recommended.shutdown_date}")
+        warnings.append(recommended.catalog_note
+                        or f"{recommended.model} is deprecated and shuts down on {recommended.shutdown_date}")
         others = [m for m in eligible if m is not recommended and m.catalog_status != "DEPRECATED"]
         if others:
             alternative = min(others, key=lambda m: m.cost_per_success_usd)
@@ -276,11 +279,6 @@ class JobRecommendation:
     forecast: Forecast | None = None
 
 
-async def _catalog(session: AsyncSession, names: set[str]) -> dict[str, CatalogEntry]:
-    rows = (await session.execute(select(CatalogEntry).where(CatalogEntry.model.in_(names or {""})))).scalars()
-    return {row.model: row for row in rows}
-
-
 async def recommend(
     session: AsyncSession, job: Job, *, now: datetime | None = None, settings: Settings | None = None
 ) -> JobRecommendation:
@@ -291,7 +289,7 @@ async def recommend(
     runs = (
         await session.execute(
             select(Run.run_id, Run.model, Run.model_version, Run.outcome, Run.outcome_reason, Run.cost_usd,
-                   Run.created_at)
+                   Run.created_at, Run.provider)
             .where(Run.job_id == job.job_id, Run.outcome.in_(COUNTED_OUTCOMES), Run.state.not_in(UNCOUNTED_STATES),
                    Run.invalid_at.is_(None))
         )
@@ -302,8 +300,10 @@ async def recommend(
     weighted_cost: dict[str, float] = defaultdict(float)  # over priced runs only
     priced_weight: dict[str, float] = defaultdict(float)
     failures: dict[str, list] = defaultdict(list)
+    providers: dict[str, list] = defaultdict(list)
     for run in runs:
         name = family_key(run.model, run.model_version)
+        providers[name].append(run.provider)
         # An unrecognised version is treated as current (TIP 3.7): never discount evidence by accident.
         superseded = normalize(run.model_version) != current_version.get((job.job_id, name), normalize(run.model_version))
         cost = float(run.cost_usd) if run.cost_usd is not None else None  # None: price unknown
@@ -336,18 +336,21 @@ async def recommend(
     # The current model is listed even when none of its runs is checked yet (e.g. awaiting labels).
     names = set(weights) | ({current_model} if current_model else set())
     versions = {name: current_version.get((job.job_id, name), name) for name in names}
-    catalog = await _catalog(session, names | set(versions.values()))
+    # Status for the provider this job's runs name: providers retire the same model on different dates.
+    served_by = {name: most_used(providers.get(name, [])) for name in names}
+    status = await lifecycles(session, {**{n: served_by[n] for n in names},
+                                        **{versions[n]: served_by[n] for n in names}}, today=now.date())
     inputs = []
     for name in sorted(names):
         pairs = weights.get(name, [])
         s = sample(pairs)
-        entry = catalog.get(versions[name]) or catalog.get(name)
+        life = status[versions[name]] if status[versions[name]] is not UNKNOWN else status[name]
         # Mean over priced runs; a model with no priced run has no cost, so it can never look cheapest.
         mean_cost = weighted_cost[name] / priced_weight[name] if priced_weight[name] else None
         inputs.append(ModelInput(
             model=name, model_version=versions[name], n_runs=len(pairs), failures=len(failures[name]), sample=s,
             mean_cost_usd=mean_cost,
-            catalog_status=entry.status if entry else "UNKNOWN", shutdown_date=entry.shutdown_date if entry else None,
+            catalog_status=life.status, shutdown_date=life.shutdown_date, catalog_note=life.note,
         ))
     decision = decide(
         inputs, current_model, floor=settings.evidence_floor,

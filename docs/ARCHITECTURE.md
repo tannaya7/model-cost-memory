@@ -113,6 +113,10 @@ The authoritative schema is [`db/schema.sql`](../db/schema.sql): `users`, `proje
 - `model_catalog` has one row per model name; `model_prices` has each provider's own price for it, because the
   same open-weight model is sold by several providers at different prices. A run that names its `provider` is
   priced from `model_prices`; one that does not, from the catalog. A hand-entered (MANUAL) catalog price wins.
+- Providers also retire the same model on different dates (Vertex AI retired gemini-2.5-flash on 20 Oct 2026; the
+  Gemini API still serves it), so `model_prices` keeps each provider's shutdown date and a job's model status is
+  read for the provider its runs name (`catalog/lifecycle.py`). Without a provider, a model one provider retired
+  but others still serve is DEPRECATED with a note, never RETIRED.
 - `runs.cost_usd` is NULL when the model has no catalog price and the client sent none: unknown, never "free".
   Costs are averaged over priced runs only, and spend reports how many runs it could not price.
 - `runs.embedding_model` names the embedder with its pinned weights (`minilm@<revision>`), so upgrading the model

@@ -183,6 +183,7 @@ CREATE TABLE model_prices (
     provider           TEXT NOT NULL,
     price_in_per_mtok  NUMERIC(10,4),
     price_out_per_mtok NUMERIC(10,4),
+    shutdown_date      DATE,                        -- this provider's own date; providers differ (0011)
     first_seen_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (model, provider)
 );
