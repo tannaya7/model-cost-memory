@@ -12,8 +12,13 @@ Laptops need none of this: development uses a free hosted Neon database. Docker 
    Google sign-in both need a real domain name.
 3. **Install Docker** with the official convenience script, then log in again so your user can run it.
 4. **Get the code:** `git clone <repo> /opt/model-cost-memory && cd /opt/model-cost-memory`, then check out `POC`.
-5. **Configure:** `cp .env.example .env` and set `POSTGRES_PASSWORD` (long and random) and `DOMAIN`.
-6. **Build the web app** (once the frontend exists) so `frontend/dist` is present: `npm ci && npm run build` in `frontend/`.
+5. **Configure:** `cp .env.example .env` and set `POSTGRES_PASSWORD` (long and random), `DOMAIN`, `SECRET_KEY`
+   (long and random; it encrypts stored provider keys and signs sign-in cookies, so keep it stable) and
+   `PUBLIC_URL=https://<DOMAIN>`. For Google sign-in, create an OAuth client (Web application) with the redirect
+   URI `https://<DOMAIN>/auth/google/callback` and set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Leave
+   `DEV_LOGIN` false. Optional: `ANTHROPIC_API_KEY` for recommendation summaries, `DEMO_PROJECT_ID` for a public
+   read-only demo (fill it with `python scripts/seed_demo.py`).
+6. **Build the web app** so `frontend/dist` is present: `npm ci && npm run build` in `frontend/`.
 7. **First deploy:** `./deploy/deploy.sh`. It builds, runs `alembic upgrade head`, starts everything and checks `/healthz`.
 8. **Create the first project:** `docker compose run --rm api python scripts/create_project.py my-company`.
    It prints the project key once; copy it somewhere safe.

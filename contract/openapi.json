@@ -1,6 +1,209 @@
 {
   "components": {
     "schemas": {
+      "AlertOut": {
+        "description": "A regression, silent drop or deprecation that needs a person's attention.",
+        "properties": {
+          "alert_id": {
+            "format": "uuid",
+            "title": "Alert Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the webhook accepted it; null if not (yet)",
+            "title": "Delivered At"
+          },
+          "delivery_attempts": {
+            "title": "Delivery Attempts",
+            "type": "integer"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "description": "VERSION_REGRESSION: model, old_version, new_version, old_pass_rate, new_pass_rate, n_old, n_new, drop, p_value, failing_run_ids. SILENT_DROP: model, model_version, before_pass_rate, after_pass_rate, n_before, n_after, drop, p_value. MODEL_DEPRECATED: model, model_version, status.",
+            "title": "Detail",
+            "type": "object"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "VERSION_REGRESSION",
+              "SILENT_DROP",
+              "MODEL_DEPRECATED"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "summary": {
+            "description": "One sentence; the figures are in `detail`",
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alert_id",
+          "job",
+          "kind",
+          "summary",
+          "detail",
+          "created_at",
+          "delivered_at",
+          "delivery_attempts",
+          "resolved_at"
+        ],
+        "title": "AlertOut",
+        "type": "object"
+      },
+      "AuthConfig": {
+        "properties": {
+          "demo_project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A project anyone may read without signing in",
+            "title": "Demo Project Id"
+          },
+          "dev_login": {
+            "description": "Development-only sign-in by email; never on in production",
+            "title": "Dev Login",
+            "type": "boolean"
+          },
+          "google": {
+            "description": "Google sign-in is configured on this server",
+            "title": "Google",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "google",
+          "dev_login",
+          "demo_project_id"
+        ],
+        "title": "AuthConfig",
+        "type": "object"
+      },
+      "BreakdownOut": {
+        "properties": {
+          "cost_per_success_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Per Success Usd"
+          },
+          "group": {
+            "description": "'all', an input-size band ('under 8k', '8k to 32k', 'over 32k') or a prompt version",
+            "title": "Group",
+            "type": "string"
+          },
+          "mean_cost_usd": {
+            "title": "Mean Cost Usd",
+            "type": "number"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "pass_rate": {
+            "title": "Pass Rate",
+            "type": "number"
+          },
+          "pass_rate_high": {
+            "title": "Pass Rate High",
+            "type": "number"
+          },
+          "pass_rate_low": {
+            "title": "Pass Rate Low",
+            "type": "number"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model",
+          "group",
+          "runs",
+          "passed",
+          "pass_rate",
+          "pass_rate_low",
+          "pass_rate_high",
+          "mean_cost_usd",
+          "cost_per_success_usd"
+        ],
+        "title": "BreakdownOut",
+        "type": "object"
+      },
+      "DevLogin": {
+        "properties": {
+          "email": {
+            "maxLength": 200,
+            "minLength": 3,
+            "pattern": "^[^@\\s]+@[^@\\s]+$",
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "DevLogin",
+        "type": "object"
+      },
       "FailingRunOut": {
         "properties": {
           "created_at": {
@@ -43,6 +246,108 @@
         "title": "FailingRunOut",
         "type": "object"
       },
+      "FlowEventOut": {
+        "description": "One step of a run through the pipeline, for the live data-flow view.",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "event_id": {
+            "description": "Increasing; resume with ?after= or the SSE Last-Event-ID",
+            "title": "Event Id",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "stage": {
+            "enum": [
+              "sdk",
+              "api",
+              "check",
+              "index",
+              "consolidate"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "ts": {
+            "format": "date-time",
+            "title": "Ts",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "ts",
+          "run_id",
+          "stage",
+          "message",
+          "data"
+        ],
+        "title": "FlowEventOut",
+        "type": "object"
+      },
+      "ForecastOut": {
+        "description": "What switching would change per month, if next month looks like the last 30 days.",
+        "properties": {
+          "extra_failures_high": {
+            "title": "Extra Failures High",
+            "type": "number"
+          },
+          "extra_failures_low": {
+            "description": "Lower end of the interval, in failures per month",
+            "title": "Extra Failures Low",
+            "type": "number"
+          },
+          "extra_failures_per_month": {
+            "description": "Negative means fewer failures",
+            "title": "Extra Failures Per Month",
+            "type": "number"
+          },
+          "monthly_saving_usd": {
+            "description": "Negative means switching costs more",
+            "title": "Monthly Saving Usd",
+            "type": "number"
+          },
+          "runs_per_month": {
+            "description": "Production runs in the last 30 days",
+            "title": "Runs Per Month",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "runs_per_month",
+          "monthly_saving_usd",
+          "extra_failures_per_month",
+          "extra_failures_low",
+          "extra_failures_high"
+        ],
+        "title": "ForecastOut",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -68,6 +373,186 @@
           "status"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "HistoryEntryOut": {
+        "description": "One stored recommendation: what was decided, on how much evidence, and what replaced it.",
+        "properties": {
+          "cost_per_success_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Per Success Usd"
+          },
+          "current_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What production used when this was decided",
+            "title": "Current Model"
+          },
+          "evidence_weight": {
+            "title": "Evidence Weight",
+            "type": "number"
+          },
+          "invalid_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null while it is the current recommendation",
+            "title": "Invalid At"
+          },
+          "mean_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Cost Usd"
+          },
+          "model": {
+            "description": "The recommended model (the current one for HOLD); empty if none",
+            "title": "Model",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "n_runs": {
+            "description": "Runs it rests on; GET /v1/runs?recommendation= lists them",
+            "title": "N Runs",
+            "type": "integer"
+          },
+          "recommendation_id": {
+            "format": "uuid",
+            "title": "Recommendation Id",
+            "type": "string"
+          },
+          "superseded_by_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By Id"
+          },
+          "supersession_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "NEW_EVIDENCE",
+                  "MODEL_UPGRADE",
+                  "EVIDENCE_DECAYED",
+                  "REGRESSION",
+                  "MODEL_RETIRED"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersession Reason"
+          },
+          "valid_at": {
+            "format": "date-time",
+            "title": "Valid At",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "HOLD",
+              "DOWNGRADE",
+              "SWITCH",
+              "INSUFFICIENT_EVIDENCE"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          },
+          "weighted_pass_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weighted Pass Rate"
+          }
+        },
+        "required": [
+          "recommendation_id",
+          "verdict",
+          "model",
+          "model_version",
+          "current_model",
+          "weighted_pass_rate",
+          "mean_cost_usd",
+          "cost_per_success_usd",
+          "n_runs",
+          "evidence_weight",
+          "valid_at",
+          "invalid_at",
+          "superseded_by_id",
+          "supersession_reason"
+        ],
+        "title": "HistoryEntryOut",
+        "type": "object"
+      },
+      "HistoryOut": {
+        "properties": {
+          "entries": {
+            "description": "Newest first; the first is current unless invalidated",
+            "items": {
+              "$ref": "#/components/schemas/HistoryEntryOut"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "versions": {
+            "description": "Every model version this job has run on",
+            "items": {
+              "$ref": "#/components/schemas/ModelVersionSeen"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "job",
+          "entries",
+          "versions"
+        ],
+        "title": "HistoryOut",
         "type": "object"
       },
       "JobCreate": {
@@ -123,6 +608,50 @@
           "check_kind"
         ],
         "title": "JobCreate",
+        "type": "object"
+      },
+      "JobInsightsOut": {
+        "description": "Where a job's money goes and where each model is weak. Groupings and statistics only.",
+        "properties": {
+          "by_input_size": {
+            "items": {
+              "$ref": "#/components/schemas/BreakdownOut"
+            },
+            "title": "By Input Size",
+            "type": "array"
+          },
+          "by_prompt_version": {
+            "items": {
+              "$ref": "#/components/schemas/BreakdownOut"
+            },
+            "title": "By Prompt Version",
+            "type": "array"
+          },
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "overall": {
+            "description": "Cost per success per model",
+            "items": {
+              "$ref": "#/components/schemas/BreakdownOut"
+            },
+            "title": "Overall",
+            "type": "array"
+          }
+        },
+        "required": [
+          "job",
+          "days",
+          "overall",
+          "by_input_size",
+          "by_prompt_version"
+        ],
+        "title": "JobInsightsOut",
         "type": "object"
       },
       "JobOut": {
@@ -531,6 +1060,285 @@
         "title": "ModelRef",
         "type": "object"
       },
+      "ModelVersionSeen": {
+        "properties": {
+          "first_seen": {
+            "format": "date-time",
+            "title": "First Seen",
+            "type": "string"
+          },
+          "last_seen": {
+            "format": "date-time",
+            "title": "Last Seen",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model",
+          "model_version",
+          "runs",
+          "first_seen",
+          "last_seen"
+        ],
+        "title": "ModelVersionSeen",
+        "type": "object"
+      },
+      "ProjectCreate": {
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ProjectCreate",
+        "type": "object"
+      },
+      "ProjectCreated": {
+        "properties": {
+          "api_key": {
+            "description": "Shown once. Put it in the SDK as MCM_API_KEY",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectOut"
+          }
+        },
+        "required": [
+          "project",
+          "api_key"
+        ],
+        "title": "ProjectCreated",
+        "type": "object"
+      },
+      "ProjectKey": {
+        "properties": {
+          "api_key": {
+            "description": "Shown once; the previous key stops working immediately",
+            "title": "Api Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "title": "ProjectKey",
+        "type": "object"
+      },
+      "ProjectOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "key_prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first characters of the live project key",
+            "title": "Key Prefix"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "retest_allowed": {
+            "title": "Retest Allowed",
+            "type": "boolean"
+          },
+          "retest_monthly_cap_usd": {
+            "title": "Retest Monthly Cap Usd",
+            "type": "number"
+          },
+          "webhook_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Verify X-MCM-Signature on webhook payloads with it",
+            "title": "Webhook Secret"
+          },
+          "webhook_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Url"
+          }
+        },
+        "required": [
+          "project_id",
+          "name",
+          "webhook_url",
+          "webhook_secret",
+          "retest_monthly_cap_usd",
+          "retest_allowed",
+          "key_prefix",
+          "created_at"
+        ],
+        "title": "ProjectOut",
+        "type": "object"
+      },
+      "ProjectPatch": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "retest_allowed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retest Allowed"
+          },
+          "retest_monthly_cap_usd": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retest Monthly Cap Usd"
+          },
+          "webhook_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "pattern": "^https://",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Must be https; send null to remove",
+            "title": "Webhook Url"
+          }
+        },
+        "title": "ProjectPatch",
+        "type": "object"
+      },
+      "ProviderKeyIn": {
+        "description": "The key re-tests use. Encrypted at rest; only its last four characters are shown again.",
+        "properties": {
+          "api_key": {
+            "maxLength": 500,
+            "minLength": 8,
+            "title": "Api Key",
+            "type": "string"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "pattern": "^https?://",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An OpenAI-compatible endpoint; known providers fill it in",
+            "title": "Base Url"
+          },
+          "provider": {
+            "description": "e.g. openai, gemini, groq",
+            "maxLength": 40,
+            "minLength": 2,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "api_key"
+        ],
+        "title": "ProviderKeyIn",
+        "type": "object"
+      },
+      "ProviderKeyOut": {
+        "properties": {
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "key_hint": {
+            "description": "The key's last four characters",
+            "title": "Key Hint",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "base_url",
+          "key_hint",
+          "created_at"
+        ],
+        "title": "ProviderKeyOut",
+        "type": "object"
+      },
       "RecommendationEvidence": {
         "properties": {
           "evidence_weight": {
@@ -585,6 +1393,17 @@
           },
           "evidence": {
             "$ref": "#/components/schemas/RecommendationEvidence"
+          },
+          "forecast": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ForecastOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set for DOWNGRADE and SWITCH when both costs are known"
           },
           "job": {
             "title": "Job",
@@ -646,6 +1465,30 @@
           "rules": {
             "$ref": "#/components/schemas/RecommendationRules"
           },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional two sentences written from the figures above; never decides anything",
+            "title": "Summary"
+          },
+          "summary_prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Git blob hash of the prompt file used",
+            "title": "Summary Prompt Version"
+          },
           "verdict": {
             "enum": [
               "HOLD",
@@ -675,6 +1518,7 @@
           "evidence",
           "progress",
           "retest_candidates",
+          "forecast",
           "warnings",
           "next_step",
           "computed_at"
@@ -705,6 +1549,229 @@
           "evidence_floor"
         ],
         "title": "RecommendationRules",
+        "type": "object"
+      },
+      "RetestCreate": {
+        "description": "Replay past runs of this job on a candidate model, spending at most `budget_usd`.",
+        "properties": {
+          "budget_usd": {
+            "description": "Required: the re-test stops before going over it",
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000.0,
+            "title": "Budget Usd",
+            "type": "number"
+          },
+          "candidate_model": {
+            "description": "The model name to call",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Candidate Model",
+            "type": "string"
+          },
+          "sample_size": {
+            "anyOf": [
+              {
+                "maximum": 500.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Prompts to replay (default 50)",
+            "title": "Sample Size"
+          }
+        },
+        "required": [
+          "candidate_model",
+          "budget_usd"
+        ],
+        "title": "RetestCreate",
+        "type": "object"
+      },
+      "RetestLimits": {
+        "properties": {
+          "cap_remaining_usd": {
+            "title": "Cap Remaining Usd",
+            "type": "number"
+          },
+          "monthly_cap_usd": {
+            "title": "Monthly Cap Usd",
+            "type": "number"
+          },
+          "provider_key": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProviderKeyOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null until the key is given"
+          },
+          "retest_allowed": {
+            "title": "Retest Allowed",
+            "type": "boolean"
+          },
+          "spent_this_month_usd": {
+            "description": "At catalog list price, so it counts free keys too",
+            "title": "Spent This Month Usd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "monthly_cap_usd",
+          "spent_this_month_usd",
+          "cap_remaining_usd",
+          "retest_allowed",
+          "provider_key"
+        ],
+        "title": "RetestLimits",
+        "type": "object"
+      },
+      "RetestOut": {
+        "properties": {
+          "budget_usd": {
+            "title": "Budget Usd",
+            "type": "number"
+          },
+          "candidate_model": {
+            "title": "Candidate Model",
+            "type": "string"
+          },
+          "cap_remaining_usd": {
+            "title": "Cap Remaining Usd",
+            "type": "number"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "monthly_cap_usd": {
+            "title": "Monthly Cap Usd",
+            "type": "number"
+          },
+          "pass_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pass Rate"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "retest_id": {
+            "format": "uuid",
+            "title": "Retest Id",
+            "type": "string"
+          },
+          "runs_done": {
+            "title": "Runs Done",
+            "type": "integer"
+          },
+          "runs_planned": {
+            "title": "Runs Planned",
+            "type": "integer"
+          },
+          "spent_usd": {
+            "title": "Spent Usd",
+            "type": "number"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "QUEUED",
+              "RUNNING",
+              "DONE",
+              "STOPPED_BUDGET",
+              "STOPPED_CAP",
+              "FAILED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trigger": {
+            "enum": [
+              "MANUAL",
+              "NEW_MODEL",
+              "UNSURE"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "retest_id",
+          "job",
+          "candidate_model",
+          "trigger",
+          "status",
+          "budget_usd",
+          "spent_usd",
+          "runs_planned",
+          "runs_done",
+          "passed",
+          "failed",
+          "pass_rate",
+          "monthly_cap_usd",
+          "cap_remaining_usd",
+          "message",
+          "created_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "RetestOut",
         "type": "object"
       },
       "RunAccepted": {
@@ -772,7 +1839,7 @@
                 "type": "null"
               }
             ],
-            "description": "The correct values for an ANSWER_KEY job, used to check this run and not stored",
+            "description": "The correct values for an ANSWER_KEY job, used to check this run. Stored only when the job has re-test consent, so a re-test can check the replayed run against the same answers",
             "title": "Expected"
           },
           "job": {
@@ -1288,6 +2355,49 @@
         "title": "SpendOut",
         "type": "object"
       },
+      "UserOut": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture Url"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "email",
+          "name",
+          "picture_url"
+        ],
+        "title": "UserOut",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -1336,6 +2446,149 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/auth/config": {
+      "get": {
+        "operationId": "auth_config_auth_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthConfig"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Auth Config",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/dev/login": {
+      "post": {
+        "description": "Local development only: sign in as any email. Off unless DEV_LOGIN=true.",
+        "operationId": "dev_login_auth_dev_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DevLogin"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dev Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/google/callback": {
+      "get": {
+        "operationId": "google_callback_auth_google_callback_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Google Callback",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/google/login": {
+      "get": {
+        "operationId": "google_login_auth_google_login_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "next",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Next"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Google Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logout_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/healthz": {
       "get": {
         "operationId": "healthz_healthz_get",
@@ -1354,6 +2607,396 @@
         "summary": "Healthz",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/v1/alerts": {
+      "get": {
+        "description": "Every job's alerts in the project, newest first: open ones by default.",
+        "operationId": "list_alerts_v1_alerts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_resolved",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Resolved",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AlertOut"
+                  },
+                  "title": "Response List Alerts V1 Alerts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Alerts",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/v1/alerts/{alert_id}/resolve": {
+      "post": {
+        "description": "Mark an alert handled. The same finding can raise a new alert later.",
+        "operationId": "resolve_alert_v1_alerts__alert_id__resolve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alert_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Alert Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Alert",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/v1/flow": {
+      "get": {
+        "description": "The live data-flow view, polled: each run's steps, oldest first.",
+        "operationId": "get_flow_v1_flow_get",
+        "parameters": [
+          {
+            "description": "Only events after this event_id; 0 = the latest ones",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Only events after this event_id; 0 = the latest ones",
+              "minimum": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FlowEventOut"
+                  },
+                  "title": "Response Get Flow V1 Flow Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Flow",
+        "tags": [
+          "flow"
+        ]
+      }
+    },
+    "/v1/flow/stream": {
+      "get": {
+        "description": "Server-Sent Events: each run's steps as they happen. The browser reconnects by itself and\nresumes from Last-Event-ID. Read-only, one short query a second, no WebSockets.",
+        "operationId": "stream_flow_v1_flow_stream_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "last-event-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Flow",
+        "tags": [
+          "flow"
         ]
       }
     },
@@ -1406,6 +3049,22 @@
                 }
               ],
               "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
             }
           }
         ],
@@ -1477,6 +3136,22 @@
               ],
               "title": "Authorization"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
           }
         ],
         "responses": {
@@ -1545,6 +3220,22 @@
               ],
               "title": "Authorization"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
           }
         ],
         "requestBody": {
@@ -1582,6 +3273,202 @@
         "summary": "Create Job Endpoint",
         "tags": [
           "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{job}/history": {
+      "get": {
+        "description": "Every recommendation the job has had, newest first: what changed, when and why.\n\nFollowed through `superseded_by_id` with a recursive query; each entry's runs are listed by\n`GET /v1/runs?recommendation=<id>`.",
+        "operationId": "get_history_v1_jobs__job__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get History",
+        "tags": [
+          "recommendations"
+        ]
+      }
+    },
+    "/v1/jobs/{job}/insights": {
+      "get": {
+        "description": "Cost per success per model, and pass rate per model by input-size band and by prompt version,\neach with its run count and 95% interval.",
+        "operationId": "get_job_insights_v1_jobs__job__insights_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "description": "How many days back to count",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 90,
+              "description": "How many days back to count",
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobInsightsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Job Insights",
+        "tags": [
+          "insights"
         ]
       }
     },
@@ -1630,6 +3517,22 @@
               ],
               "title": "Authorization"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
           }
         ],
         "responses": {
@@ -1657,6 +3560,431 @@
         "summary": "Get Recommendation",
         "tags": [
           "recommendations"
+        ]
+      }
+    },
+    "/v1/jobs/{job}/regressions": {
+      "get": {
+        "description": "The job's alerts, newest first: open ones by default.",
+        "operationId": "get_regressions_v1_jobs__job__regressions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Also return alerts already resolved",
+            "in": "query",
+            "name": "include_resolved",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Also return alerts already resolved",
+              "title": "Include Resolved",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AlertOut"
+                  },
+                  "title": "Response Get Regressions V1 Jobs  Job  Regressions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Regressions",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/v1/jobs/{job}/retest": {
+      "post": {
+        "description": "Queue a re-test: replay sampled past runs on `candidate_model`, spending at most `budget_usd`.\n\n409 with `{\"code\", \"message\"}` when it cannot start; `code` is one of consent_off, project_off,\nnot_checkable, provider_key_required (ask for the key, then try again), cap_reached, already_running.\nPoll `GET /v1/jobs/{job}/retest/{id}` for progress.",
+        "operationId": "start_retest_v1_jobs__job__retest_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetestCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Retest",
+        "tags": [
+          "retests"
+        ]
+      }
+    },
+    "/v1/jobs/{job}/retest/{retest_id}": {
+      "get": {
+        "description": "One re-test's progress and spend so far; the web app polls it every 2 s while it runs.",
+        "operationId": "get_retest_v1_jobs__job__retest__retest_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "retest_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Retest Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Retest",
+        "tags": [
+          "retests"
+        ]
+      }
+    },
+    "/v1/jobs/{job}/retests": {
+      "get": {
+        "description": "The job's re-tests, newest first.",
+        "operationId": "list_retests_v1_jobs__job__retests_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RetestOut"
+                  },
+                  "title": "Response List Retests V1 Jobs  Job  Retests Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Retests",
+        "tags": [
+          "retests"
+        ]
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "operationId": "me_v1_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Me",
+        "tags": [
+          "auth"
         ]
       }
     },
@@ -1772,6 +4100,22 @@
               ],
               "title": "Authorization"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
           }
         ],
         "responses": {
@@ -1799,6 +4143,453 @@
         "summary": "List Models",
         "tags": [
           "models"
+        ]
+      }
+    },
+    "/v1/projects": {
+      "get": {
+        "operationId": "list_projects_v1_projects_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectOut"
+                  },
+                  "title": "Response List Projects V1 Projects Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Projects",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "description": "Create a project you own. Its key is in the response once; copy it into the SDK.",
+        "operationId": "new_project_v1_projects_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "New Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}": {
+      "get": {
+        "operationId": "get_project_v1_projects__project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Project",
+        "tags": [
+          "projects"
+        ]
+      },
+      "patch": {
+        "description": "Change the name, the alert webhook (https only; null removes it), the monthly re-test cap or\nthe project-wide re-test switch. Only the fields sent change.",
+        "operationId": "patch_project_v1_projects__project_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/key": {
+      "post": {
+        "operationId": "new_project_key_v1_projects__project_id__key_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectKey"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "New Project Key",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/v1/provider-key": {
+      "delete": {
+        "description": "Remove the key. Running re-tests finish the call in flight; no new ones start.",
+        "operationId": "delete_provider_key_v1_provider_key_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Provider Key",
+        "tags": [
+          "retests"
+        ]
+      },
+      "put": {
+        "description": "Give (or replace) the key re-tests use. With the monthly cap, this is standing permission for\nre-tests to run within the cap. Encrypted at rest; never returned again.",
+        "operationId": "put_provider_key_v1_provider_key_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderKeyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Provider Key",
+        "tags": [
+          "retests"
+        ]
+      }
+    },
+    "/v1/retest/limits": {
+      "get": {
+        "description": "This month's re-test cap, what is spent, and whether the provider key has been given.",
+        "operationId": "get_retest_limits_v1_retest_limits_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetestLimits"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Retest Limits",
+        "tags": [
+          "retests"
         ]
       }
     },
@@ -1859,6 +4650,25 @@
             }
           },
           {
+            "description": "Only the runs this verdict rests on",
+            "in": "query",
+            "name": "recommendation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the runs this verdict rests on",
+              "title": "Recommendation"
+            }
+          },
+          {
             "in": "query",
             "name": "limit",
             "required": false,
@@ -1916,6 +4726,22 @@
                 }
               ],
               "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
             }
           }
         ],
@@ -1980,6 +4806,22 @@
                 }
               ],
               "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
             }
           }
         ],
@@ -2067,6 +4909,22 @@
               ],
               "title": "Authorization"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
           }
         ],
         "responses": {
@@ -2142,6 +5000,22 @@
                 }
               ],
               "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
             }
           }
         ],

@@ -5,6 +5,7 @@ export interface FetchRunsParams {
   job?: string;
   model?: string;
   outcome?: string;
+  recommendation?: string;
   limit?: number;
   cursor?: string;
 }
@@ -15,6 +16,7 @@ export async function fetchRuns(params: FetchRunsParams = {}): Promise<RunPage> 
   if (params.job) search.set("job", params.job);
   if (params.model) search.set("model", params.model);
   if (params.outcome && params.outcome !== "ALL") search.set("outcome", params.outcome);
+  if (params.recommendation) search.set("recommendation", params.recommendation);
   if (params.cursor) search.set("cursor", params.cursor);
 
   const query = search.toString();

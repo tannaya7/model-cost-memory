@@ -1,11 +1,6 @@
-// TEMPORARY: backend not published yet; from poc/poc_engine/trace.py and GET /v1/flow
-export interface FlowEvent {
-  event_id: number;
-  ts: string;
-  run_id: string | null;
-  stage: string;
-  message: string;
-  data: Record<string, unknown> | null;
-}
+import type { components } from "../../shared/api/generated";
+
+/** One step of a run through the pipeline: GET /v1/flow and the /v1/flow/stream events. */
+export type FlowEvent = components["schemas"]["FlowEventOut"];
 
 export type FlowConnectionStatus = "live" | "reconnecting" | "polling";

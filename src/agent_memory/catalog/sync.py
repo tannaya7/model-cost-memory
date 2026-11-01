@@ -53,6 +53,7 @@ class SyncResult:
     unchanged: int = 0
     skipped_manual: int = 0
     status_changes: list[tuple[str, str, str]] = field(default_factory=list)  # (model, old, new)
+    added_models: list[CatalogRecord] = field(default_factory=list)  # new models: candidates for re-tests
 
 
 def _per_mtok(per_token: Any) -> Decimal | None:
@@ -127,6 +128,7 @@ async def sync_catalog(session: AsyncSession, data: dict[str, Any], *, today: da
                 price_out_per_mtok=rec.price_out_per_mtok, source="SYNC",
             ))
             result.added += 1
+            result.added_models.append(rec)
             continue
         if row.source == "MANUAL":
             result.skipped_manual += 1

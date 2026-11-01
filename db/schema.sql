@@ -9,13 +9,37 @@
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
+CREATE TABLE users (                                -- Google sign-in; no passwords are stored
+    user_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    google_sub  TEXT NOT NULL UNIQUE,               -- Google's stable account id
+    email       TEXT NOT NULL,
+    name        TEXT,
+    picture_url TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE projects (
     project_id    TEXT PRIMARY KEY,
     api_key_hash  TEXT NOT NULL,                    -- the key itself is shown once, never stored
     webhook_url   TEXT,                             -- regression alerts; optional
     store_tool_arguments BOOLEAN NOT NULL DEFAULT false,  -- opt in to keeping tool-call arguments
     retest_monthly_cap_usd NUMERIC(8,2) NOT NULL DEFAULT 10,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    webhook_secret TEXT,                            -- signs webhook payloads (HMAC-SHA256)
+    retest_allowed BOOLEAN NOT NULL DEFAULT true,   -- project-wide switch, on top of each job's consent
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    owner_user_id UUID REFERENCES users(user_id),   -- NULL = created by the operator script
+    name          TEXT,                             -- display name chosen in the web app
+    key_prefix    TEXT                              -- first characters of the live key, for display
+);
+CREATE INDEX idx_projects_owner ON projects(owner_user_id);
+
+CREATE TABLE provider_keys (                        -- the customer's key for re-tests, asked for when first needed
+    project_id   TEXT PRIMARY KEY REFERENCES projects(project_id),
+    provider     TEXT NOT NULL,                     -- matches model_catalog.provider, e.g. 'openai', 'gemini'
+    base_url     TEXT NOT NULL,                     -- an OpenAI-compatible endpoint
+    key_encrypted TEXT NOT NULL,                    -- encrypted with the server's SECRET_KEY
+    key_hint     TEXT NOT NULL,                     -- last four characters, for display
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE jobs (
@@ -29,6 +53,28 @@ CREATE TABLE jobs (
     retest_consent BOOLEAN NOT NULL DEFAULT false, -- may prompts go to another provider?
     UNIQUE (project_id, name)
 );
+
+CREATE TABLE retests (                              -- replaying sampled past runs on a candidate model
+    retest_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id          UUID NOT NULL REFERENCES jobs(job_id),
+    project_id      TEXT NOT NULL REFERENCES projects(project_id),
+    candidate_model TEXT NOT NULL,
+    trigger         TEXT NOT NULL CHECK (trigger IN ('MANUAL','NEW_MODEL','UNSURE')),
+    status          TEXT NOT NULL DEFAULT 'QUEUED' CHECK (status IN
+                      ('QUEUED','RUNNING','DONE','STOPPED_BUDGET','STOPPED_CAP','FAILED')),
+    budget_usd      NUMERIC(10,4) NOT NULL CHECK (budget_usd > 0),
+    spent_usd       NUMERIC(12,6) NOT NULL DEFAULT 0,
+    runs_planned    INT NOT NULL DEFAULT 0,
+    runs_done       INT NOT NULL DEFAULT 0,
+    passed          INT NOT NULL DEFAULT 0,
+    failed          INT NOT NULL DEFAULT 0,
+    message         TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at      TIMESTAMPTZ,
+    finished_at     TIMESTAMPTZ
+);
+CREATE INDEX idx_retests_queued ON retests(created_at) WHERE status = 'QUEUED';
+CREATE INDEX idx_retests_job ON retests(job_id, created_at DESC);
 
 CREATE TABLE runs (
     run_id            UUID PRIMARY KEY,                  -- supplied by the SDK, so a retried send
@@ -63,8 +109,11 @@ CREATE TABLE runs (
                         CHECK (state IN ('CAPTURED','CHECKED','INDEXED',
                                          'CONSOLIDATED','ARCHIVED','INGESTION_FAILED')),
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-    invalid_at        TIMESTAMPTZ
+    invalid_at        TIMESTAMPTZ,
+    retest_id         UUID REFERENCES retests(retest_id),  -- which re-test produced a RETEST run
+    expected          JSONB                         -- answer key, kept only for jobs with re-test consent
 );
+CREATE INDEX idx_runs_retest ON runs(retest_id) WHERE retest_id IS NOT NULL;
 CREATE INDEX idx_runs_job_model ON runs(job_id, model, model_version);
 CREATE INDEX idx_runs_job_created ON runs(job_id, created_at DESC);   -- "recent runs for this job"
 CREATE INDEX idx_runs_prompt_hash ON runs(prompt_hash);
@@ -84,7 +133,8 @@ CREATE TABLE recommendations (
     evidence_weight    REAL NOT NULL,               -- sum of R(t)
     consolidated_from  UUID[] NOT NULL DEFAULT '{}',-- the proof
     superseded_by_id   UUID REFERENCES recommendations(recommendation_id),
-    supersession_reason TEXT,                       -- MODEL_UPGRADE | EVIDENCE_DECAYED | REGRESSION
+    supersession_reason TEXT,                       -- NEW_EVIDENCE | MODEL_UPGRADE | EVIDENCE_DECAYED | REGRESSION | MODEL_RETIRED
+    current_model      TEXT,                            -- what production used when this was decided
     memory_type        TEXT NOT NULL DEFAULT 'SEMANTIC',  -- derived from many
     valid_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
     invalid_at         TIMESTAMPTZ
@@ -133,5 +183,23 @@ CREATE TABLE alerts (
     detail         JSONB NOT NULL,                  -- rates before/after, p-value, run ids
     delivered_at   TIMESTAMPTZ,                     -- null until the webhook accepts it
     resolved_at    TIMESTAMPTZ,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    dedupe_key     TEXT NOT NULL DEFAULT '',        -- one open alert per finding
+    delivery_attempts INT NOT NULL DEFAULT 0,
+    next_attempt_at TIMESTAMPTZ,                    -- webhook retry with backoff
+    last_error     TEXT
 );
+CREATE UNIQUE INDEX idx_alerts_open ON alerts(job_id, dedupe_key) WHERE resolved_at IS NULL;
+CREATE INDEX idx_alerts_undelivered ON alerts(next_attempt_at) WHERE delivered_at IS NULL;
+
+CREATE TABLE flow_events (                          -- the live data-flow view; deleted after a day
+    event_id   BIGSERIAL PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(project_id),
+    run_id     UUID,
+    stage      TEXT NOT NULL CHECK (stage IN ('sdk','api','check','index','consolidate')),
+    message    TEXT NOT NULL,
+    data       JSONB,
+    ts         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_flow_events_project ON flow_events(project_id, event_id);
+CREATE INDEX idx_flow_events_ts ON flow_events(ts);

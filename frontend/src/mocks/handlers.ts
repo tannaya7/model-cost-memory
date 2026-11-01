@@ -7,7 +7,10 @@ import type {
   RunDetail,
   Recommendation,
   SpendInsight,
-  RegressionAlert,
+  Alert,
+  AuthConfig,
+  JobInsights,
+  History,
   HistoryEntry,
   RetestStatus,
   RetestLimits,
@@ -55,6 +58,7 @@ const projects: Project[] = [
     project_id: "00000000-0000-0000-0000-000000000001",
     name: "production",
     webhook_url: "https://alerts.example.com/webhook",
+    webhook_secret: "whsec_mock_secret",
     retest_monthly_cap_usd: 10,
     retest_allowed: true,
     key_prefix: "mcm_live_prod",
@@ -64,6 +68,7 @@ const projects: Project[] = [
     project_id: "00000000-0000-0000-0000-000000000002",
     name: "staging",
     webhook_url: null,
+    webhook_secret: "whsec_mock_secret",
     retest_monthly_cap_usd: 50,
     retest_allowed: false,
     key_prefix: "mcm_live_stag",
@@ -74,6 +79,7 @@ const projects: Project[] = [
 // In-memory jobs list seeded from jobs.sample.json
 const jobs: Job[] = [...(initialJobs as Job[])];
 const retests = new Map<string, RetestStatus>();
+let mockProviderKey: RetestLimits["provider_key"] = null;
 
 // Generate ~300 mock runs seeded with realistic data
 const outcomes: Array<"PASS" | "FAIL" | "UNKNOWN"> = [
@@ -91,6 +97,51 @@ const failReasons = [
 
 const now = Date.now();
 const runs: RunDetail[] = [];
+
+const mockAlerts: Alert[] = [
+  {
+    alert_id: "00000000-0000-0000-0004-000000000001",
+    job: "invoice-extract",
+    kind: "VERSION_REGRESSION",
+    summary: "acme-large: pass rate fell from 97.5% to 90.9% after acme-large-2026-01-10 was replaced by acme-large-2026-06-01",
+    detail: {
+      model: "acme-large",
+      old_version: "acme-large-2026-01-10",
+      new_version: "acme-large-2026-06-01",
+      old_pass_rate: 0.975,
+      new_pass_rate: 0.909,
+      n_old: 360,
+      n_new: 450,
+      drop: 0.066,
+      p_value: 0.0004,
+      failing_run_ids: [],
+    },
+    created_at: "2026-10-15T09:00:00Z",
+    delivered_at: "2026-10-15T09:01:00Z",
+    delivery_attempts: 1,
+    resolved_at: null,
+  },
+  {
+    alert_id: "00000000-0000-0000-0004-000000000002",
+    job: "invoice-extract",
+    kind: "SILENT_DROP",
+    summary: "acme-mini-2026-08-15: pass rate fell from 99.0% to 92.0% with no version change",
+    detail: {
+      model: "acme-mini",
+      model_version: "acme-mini-2026-08-15",
+      before_pass_rate: 0.99,
+      after_pass_rate: 0.92,
+      n_before: 300,
+      n_after: 300,
+      drop: 0.07,
+      p_value: 0.0001,
+    },
+    created_at: "2026-09-15T10:00:00Z",
+    delivered_at: null,
+    delivery_attempts: 3,
+    resolved_at: "2026-09-18T14:00:00Z",
+  },
+];
 
 // First seed sample runs if any
 for (const sample of sampleRunsData.items) {
@@ -474,6 +525,36 @@ export const handlers = [
     return HttpResponse.json({ detail: "Job not found" }, { status: 404 });
   }),
 
+  // GET /auth/config
+  http.get("/auth/config", () =>
+    HttpResponse.json({ google: true, dev_login: false, demo_project_id: null } satisfies AuthConfig),
+  ),
+
+  // GET /v1/jobs/:job/insights
+  http.get("/v1/jobs/:job/insights", async ({ request, params }) => {
+    await delay(300);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+    const row = (model: string, group: string, runs: number, rate: number, cost: number) => ({
+      model, group, runs, passed: Math.round(runs * rate), pass_rate: rate,
+      pass_rate_low: Math.max(0, rate - 0.04), pass_rate_high: Math.min(1, rate + 0.03),
+      mean_cost_usd: cost, cost_per_success_usd: cost / rate,
+    });
+    const insights: JobInsights = {
+      job: decodeURIComponent(String(params.job)),
+      days: 90,
+      overall: [row("acme-large", "all", 640, 0.991, 0.0347), row("acme-mini", "all", 420, 0.99, 0.0031)],
+      by_input_size: [
+        row("acme-large", "under 8k", 500, 0.994, 0.03), row("acme-large", "8k to 32k", 140, 0.98, 0.05),
+        row("acme-mini", "under 8k", 330, 0.997, 0.0025), row("acme-mini", "8k to 32k", 90, 0.92, 0.0052),
+      ],
+      by_prompt_version: [row("acme-large", "v1", 300, 0.99, 0.0347), row("acme-large", "v2", 340, 0.992, 0.0347),
+        row("acme-mini", "v2", 420, 0.99, 0.0031)],
+    };
+    return HttpResponse.json(insights);
+  }),
+
   // GET /v1/insights/spend
   http.get("/v1/insights/spend", async ({ request }) => {
     await delay(350);
@@ -496,52 +577,33 @@ export const handlers = [
     if (!isAuthorized(request)) {
       return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
     }
-
     const jobName = decodeURIComponent(String(params.job));
+    const all = new URL(request.url).searchParams.get("include_resolved") === "true";
+    return HttpResponse.json(mockAlerts.filter((a) => a.job === jobName && (all || a.resolved_at === null)));
+  }),
 
-    if (jobName === "invoice-extract") {
-      const alerts: RegressionAlert[] = [
-        {
-          alert_id: "alert_reg_001",
-          job_id: "invoice-extract",
-          kind: "VERSION_REGRESSION",
-          detail: {
-            model: "max",
-            old_version: "2026-06",
-            new_version: "2026-09",
-            old_pass_rate: 0.975,
-            new_pass_rate: 0.909,
-            n_old: 360,
-            n_new: 450,
-            p_value: 0.0004,
-            summary: "max dropped from 97.5% to 90.9% when 2026-06 → 2026-09 (p=0.0004)",
-          },
-          resolved_at: null,
-          created_at: "2026-10-15T09:00:00Z",
-        },
-        {
-          alert_id: "alert_reg_002",
-          job_id: "invoice-extract",
-          kind: "VERSION_REGRESSION",
-          detail: {
-            model: "turbo",
-            old_version: "2026-07",
-            new_version: "2026-08",
-            old_pass_rate: 0.960,
-            new_pass_rate: 0.885,
-            n_old: 200,
-            n_new: 210,
-            p_value: 0.0012,
-            summary: "turbo dropped from 96.0% to 88.5% when 2026-07 → 2026-08 (p=0.0012)",
-          },
-          resolved_at: "2026-09-18T14:00:00Z",
-          created_at: "2026-09-15T10:00:00Z",
-        },
-      ];
-      return HttpResponse.json(alerts);
+  // GET /v1/alerts
+  http.get("/v1/alerts", async ({ request }) => {
+    await delay(300);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
     }
+    const all = new URL(request.url).searchParams.get("include_resolved") === "true";
+    return HttpResponse.json(mockAlerts.filter((a) => all || a.resolved_at === null));
+  }),
 
-    return HttpResponse.json([]);
+  // POST /v1/alerts/:alert_id/resolve
+  http.post("/v1/alerts/:alert_id/resolve", async ({ request, params }) => {
+    await delay(300);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+    const alert = mockAlerts.find((a) => a.alert_id === params.alert_id);
+    if (!alert) {
+      return HttpResponse.json({ detail: "Alert not found" }, { status: 404 });
+    }
+    alert.resolved_at ??= new Date().toISOString();
+    return HttpResponse.json(alert);
   }),
 
   // GET /v1/jobs/:job/history
@@ -553,84 +615,77 @@ export const handlers = [
 
     const jobName = decodeURIComponent(String(params.job));
 
+    const entry = (
+      id: number,
+      verdict: HistoryEntry["verdict"],
+      model: string,
+      version: string,
+      current: string,
+      passRate: number,
+      cost: number,
+      runs: number,
+      validAt: string,
+      invalidAt: string | null,
+      supersededBy: number | null,
+      reason: HistoryEntry["supersession_reason"],
+    ): HistoryEntry => ({
+      recommendation_id: `00000000-0000-0000-0003-${String(id).padStart(12, "0")}`,
+      verdict,
+      model,
+      model_version: version,
+      current_model: current,
+      weighted_pass_rate: passRate,
+      mean_cost_usd: cost,
+      cost_per_success_usd: cost / passRate,
+      n_runs: runs,
+      evidence_weight: runs * 0.95,
+      valid_at: validAt,
+      invalid_at: invalidAt,
+      superseded_by_id: supersededBy ? `00000000-0000-0000-0003-${String(supersededBy).padStart(12, "0")}` : null,
+      supersession_reason: reason,
+    });
+    const version = (v: string, runs: number, first: string, last: string) => ({
+      model: v.split("-20")[0],
+      model_version: v,
+      runs,
+      first_seen: first,
+      last_seen: last,
+    });
+
     if (jobName === "invoice-extract") {
-      const history: HistoryEntry[] = [
-        {
-          recommendation_id: "rec_ie_003",
-          job_id: "invoice-extract",
-          model: "mini",
-          model_version: "2026-09",
-          verdict: "DOWNGRADE",
-          weighted_pass_rate: 0.962,
-          cost_per_success: 0.0032,
-          n_runs: 820,
-          evidence_weight: 812.5,
-          n_source_runs: 820,
-          superseded_by_id: null,
-          supersession_reason: null,
-          valid_at: "2026-10-15T09:30:00Z",
-          invalid_at: null,
-        },
-        {
-          recommendation_id: "rec_ie_002",
-          job_id: "invoice-extract",
-          model: "max",
-          model_version: "2026-09",
-          verdict: "HOLD",
-          weighted_pass_rate: 0.909,
-          cost_per_success: 0.0382,
-          n_runs: 450,
-          evidence_weight: 430.2,
-          n_source_runs: 450,
-          superseded_by_id: "rec_ie_003",
-          supersession_reason: "REGRESSION",
-          valid_at: "2026-09-01T12:00:00Z",
-          invalid_at: "2026-10-15T09:30:00Z",
-        },
-        {
-          recommendation_id: "rec_ie_001",
-          job_id: "invoice-extract",
-          model: "max",
-          model_version: "2026-06",
-          verdict: "HOLD",
-          weighted_pass_rate: 0.975,
-          cost_per_success: 0.0356,
-          n_runs: 360,
-          evidence_weight: 350.0,
-          n_source_runs: 360,
-          superseded_by_id: "rec_ie_002",
-          supersession_reason: "MODEL_UPGRADE",
-          valid_at: "2026-06-15T08:00:00Z",
-          invalid_at: "2026-09-01T12:00:00Z",
-        },
-      ];
+      const history: History = {
+        job: jobName,
+        entries: [
+          entry(3, "DOWNGRADE", "acme-mini", "acme-mini-2026-08-15", "acme-large", 0.99, 0.0031, 1084,
+            "2026-10-15T09:30:00Z", null, null, null),
+          entry(2, "HOLD", "acme-large", "acme-large-2026-06-01", "acme-large", 0.909, 0.0347, 450,
+            "2026-09-01T12:00:00Z", "2026-10-15T09:30:00Z", 3, "NEW_EVIDENCE"),
+          entry(1, "HOLD", "acme-large", "acme-large-2026-01-10", "acme-large", 0.975, 0.0347, 360,
+            "2026-06-15T08:00:00Z", "2026-09-01T12:00:00Z", 2, "MODEL_UPGRADE"),
+        ],
+        versions: [
+          version("acme-large-2026-01-10", 360, "2026-02-01T00:00:00Z", "2026-06-01T00:00:00Z"),
+          version("acme-large-2026-06-01", 640, "2026-06-01T00:00:00Z", "2026-10-14T00:00:00Z"),
+          version("acme-mini-2026-08-15", 420, "2026-09-10T00:00:00Z", "2026-10-14T00:00:00Z"),
+        ],
+      };
       return HttpResponse.json(history);
     }
 
     if (jobName === "receipt-scan") {
-      const history: HistoryEntry[] = [
-        {
-          recommendation_id: "rec_rs_001",
-          job_id: "receipt-scan",
-          model: "mini",
-          model_version: "2026-09",
-          verdict: "HOLD",
-          weighted_pass_rate: 0.972,
-          cost_per_success: 0.0029,
-          n_runs: 180,
-          evidence_weight: 175.0,
-          n_source_runs: 180,
-          superseded_by_id: null,
-          supersession_reason: null,
-          valid_at: "2026-09-20T10:00:00Z",
-          invalid_at: null,
-        },
-      ];
+      const history: History = {
+        job: jobName,
+        entries: [
+          entry(4, "HOLD", "acme-mini", "acme-mini-2026-08-15", "acme-mini", 0.972, 0.0028, 180,
+            "2026-09-20T10:00:00Z", null, null, null),
+        ],
+        versions: [version("acme-mini-2026-08-15", 180, "2026-09-01T00:00:00Z", "2026-10-14T00:00:00Z")],
+      };
       return HttpResponse.json(history);
     }
 
     if (jobName === "ticket-classify") {
-      return HttpResponse.json([]);
+      return HttpResponse.json({ job: jobName, entries: [], versions: [] } satisfies History);
     }
 
     return HttpResponse.json({ detail: "Job not found" }, { status: 404 });
@@ -646,8 +701,35 @@ export const handlers = [
       monthly_cap_usd: 10.0,
       spent_this_month_usd: 3.2,
       cap_remaining_usd: 6.8,
+      retest_allowed: true,
+      provider_key: mockProviderKey,
     };
     return HttpResponse.json(limits);
+  }),
+
+  // PUT /v1/provider-key
+  http.put("/v1/provider-key", async ({ request }) => {
+    await delay(300);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+    const body = (await request.json()) as { provider: string; api_key: string; base_url?: string | null };
+    mockProviderKey = {
+      provider: body.provider,
+      base_url: body.base_url || "https://generativelanguage.googleapis.com/v1beta/openai/",
+      key_hint: body.api_key.slice(-4),
+      created_at: new Date().toISOString(),
+    };
+    return HttpResponse.json(mockProviderKey);
+  }),
+
+  // DELETE /v1/provider-key
+  http.delete("/v1/provider-key", async ({ request }) => {
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+    mockProviderKey = null;
+    return new HttpResponse(null, { status: 204 });
   }),
 
   // POST /v1/jobs/:job/retest
@@ -662,8 +744,14 @@ export const handlers = [
 
     if (targetJob && targetJob.retest_consent === false) {
       return HttpResponse.json(
-        { detail: "Re-tests are switched off for this job" },
-        { status: 403 },
+        { detail: { code: "consent_off", message: `Re-tests are off for '${jobName}': turn on its re-test consent first` } },
+        { status: 409 },
+      );
+    }
+    if (mockProviderKey === null) {
+      return HttpResponse.json(
+        { detail: { code: "provider_key_required", message: "Add the provider key re-tests should use" } },
+        { status: 409 },
       );
     }
 
@@ -702,6 +790,8 @@ export const handlers = [
       passed: 0,
       failed: 0,
       pass_rate: null,
+      trigger: "MANUAL",
+      created_at: new Date().toISOString(),
       started_at: new Date().toISOString(),
       finished_at: null,
       message: null,
@@ -847,6 +937,7 @@ export const handlers = [
       project_id: crypto.randomUUID(),
       name,
       webhook_url: null,
+      webhook_secret: "whsec_mock_secret",
       retest_monthly_cap_usd: 10,
       retest_allowed: true,
       key_prefix: keyPrefix,

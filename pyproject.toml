@@ -24,6 +24,9 @@ dependencies = [
     "httpx",
     "anthropic",
     "openai",
+    "cryptography",   # stored provider keys are encrypted (re-tests)
+    "authlib",        # Google sign-in
+    "itsdangerous",   # signed session cookie
 ]
 
 [project.optional-dependencies]
@@ -33,6 +36,9 @@ dev = ["pytest", "pytest-asyncio", "hypothesis", "ruff", "pgserver"]   # pgserve
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+agent_memory = ["prompts/*.md"]   # the recommendation-summary prompt ships with the package
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

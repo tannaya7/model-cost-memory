@@ -1,41 +1,66 @@
 """FastAPI routes: ingest, recommendation, regressions, history, re-test, catalog, insights.
 
-Stateless: every request opens its own database session. Every `/v1` route needs a project key
-(`X-API-Key: <key>` or `Authorization: Bearer <key>`) and only ever sees that project's data.
+Stateless: every request opens its own database session. Every `/v1` route acts on one project and
+only ever sees that project's data: the one whose key is sent (`X-API-Key: <key>` or
+`Authorization: Bearer <key>`), or, for a signed-in user, the one they own named in `X-Project-Id`
+(auth/access.py). Sign-in and project setup routes live in auth/routes.py.
 The endpoints are listed in docs/ARCHITECTURE.md and added week by week.
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
+import json
+import logging
+import secrets
 import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.middleware.sessions import SessionMiddleware
 
 from . import __version__, ingest
-from .insights.service import spend_by_job
 from .db import dispose_engine, get_session
+from .insights.service import job_insights, spend_by_job
 from .logging_config import configure_logging, set_context
-from .models import CatalogEntry, Job, Project, Run
-from .recommend.engine import JobRecommendation, ModelEvidence, recommend
+from .models import Alert, CatalogEntry, Job, Project, ProviderKey, Retest, Run
+from .recommend.cache import cached_recommend
+from .recommend.engine import JobRecommendation, ModelEvidence
+from .recommend.summary import summarize
+from .retest import keys as provider_keys
+from .retest.runner import RetestRefused, enqueue, spent_this_month
 from .schemas import (
+    AlertOut,
+    BreakdownOut,
+    FlowEventOut,
+    ForecastOut,
     Health,
+    HistoryEntryOut,
+    HistoryOut,
     JobCreate,
+    JobInsightsOut,
     JobOut,
     LabelCreate,
     ModelEvidenceOut,
     ModelOut,
     ModelPage,
     ModelRef,
+    ModelVersionSeen,
+    ProviderKeyIn,
+    ProviderKeyOut,
     RecommendationEvidence,
     RecommendationOut,
     RecommendationRules,
+    RetestCreate,
+    RetestLimits,
+    RetestOut,
     RunAccepted,
     RunCreate,
     RunDetail,
@@ -43,10 +68,16 @@ from .schemas import (
     RunPage,
     SpendOut,
 )
-from .security import extract_key, hash_key
+from .auth import routes as auth_routes
+from .auth.access import current_project
+from .config import get_settings
+from .security import SecretKeyMissing
+from .pipeline import flow
+from .storage import lineage
 from .versions import normalize
 
 PREVIEW_CHARS = 200
+log = logging.getLogger("agent_memory.api")
 
 
 @asynccontextmanager
@@ -59,22 +90,20 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Model & Cost Memory API", version=__version__, lifespan=lifespan)
 
 
-async def current_project(
-    session: AsyncSession = Depends(get_session),
-    x_api_key: str | None = Header(default=None),
-    authorization: str | None = Header(default=None),
-) -> Project:
-    """The project that owns the key in the request, or 401."""
-    key = extract_key(x_api_key, authorization)
-    project = None
-    if key:
-        project = (
-            await session.execute(select(Project).where(Project.api_key_hash == hash_key(key)))
-        ).scalar_one_or_none()
-    if project is None:
-        raise HTTPException(401, "Missing or invalid project key", headers={"WWW-Authenticate": "Bearer"})
-    set_context(project_id=project.project_id)  # every log line in this request now carries the project
-    return project
+def _session_secret() -> str:
+    secret = get_settings().secret_key
+    if not secret:
+        log.warning("SECRET_KEY is not set: sign-in sessions will not survive a restart")
+        return secrets.token_urlsafe(32)
+    return secret
+
+
+# The signed session cookie: httpOnly (Starlette's default), SameSite=Lax, Secure on an https site.
+app.add_middleware(
+    SessionMiddleware, secret_key=_session_secret(), session_cookie="mcm_session", same_site="lax",
+    https_only=get_settings().public_url.startswith("https://"), max_age=14 * 24 * 3600,
+)
+app.include_router(auth_routes.router)
 
 
 @app.get("/healthz", response_model=Health, tags=["system"])
@@ -148,6 +177,7 @@ async def list_runs(
     job: str | None = Query(default=None, description="Job name"),
     model: str | None = None,
     outcome: str | None = Query(default=None, pattern="^(PASS|FAIL|UNKNOWN)$"),
+    recommendation: uuid.UUID | None = Query(default=None, description="Only the runs this verdict rests on"),
     limit: int = Query(default=50, ge=1, le=200),
     cursor: str | None = None,
     project: Project = Depends(current_project),
@@ -161,6 +191,8 @@ async def list_runs(
         .order_by(Run.created_at.desc(), Run.run_id.desc())
         .limit(limit + 1)
     )
+    if recommendation:
+        query = query.where(Run.run_id.in_(await lineage.runs_behind(session, recommendation)))
     if job:
         query = query.where(Job.name == job)
     if model:
@@ -299,7 +331,8 @@ def _ref(m: ModelEvidence | None) -> ModelRef | None:
     return ModelRef(model=m.model, model_version=m.model_version) if m else None
 
 
-def _recommendation_out(r: JobRecommendation) -> RecommendationOut:
+def _recommendation_out(r: JobRecommendation, summary: str | None = None,
+                        summary_version: str | None = None) -> RecommendationOut:
     d = r.decision
     return RecommendationOut(
         job=r.job, verdict=d.verdict, current=_ref(d.current), recommended=_ref(d.recommended),
@@ -324,9 +357,22 @@ def _recommendation_out(r: JobRecommendation) -> RecommendationOut:
             n_runs=r.n_runs, evidence_weight=r.evidence_weight, floor=r.settings.evidence_floor,
             failing_runs=[vars(f) for f in r.failing_runs],
         ),
-        progress=d.progress, retest_candidates=d.retest_candidates, warnings=d.warnings, next_step=d.next_step,
-        computed_at=r.computed_at,
+        progress=d.progress, retest_candidates=d.retest_candidates,
+        forecast=ForecastOut(**vars(r.forecast)) if r.forecast else None, summary=summary,
+        summary_prompt_version=summary_version, warnings=d.warnings,
+        next_step=d.next_step, computed_at=r.computed_at,
     )
+
+
+async def _job(session: AsyncSession, project: Project, name: str) -> Job:
+    """The project's job with this name, or 404."""
+    found = (
+        await session.execute(select(Job).where(Job.project_id == project.project_id, Job.name == name))
+    ).scalar_one_or_none()
+    if found is None:
+        raise HTTPException(404, f"Unknown job '{name}'")
+    set_context(job_id=str(found.job_id))
+    return found
 
 
 @app.get("/v1/jobs/{job}/recommendation", response_model=RecommendationOut, tags=["recommendations"])
@@ -337,13 +383,38 @@ async def get_recommendation(
 
     Refuses with INSUFFICIENT_EVIDENCE, and progress toward the floor, until there is enough to judge.
     """
-    found = (
-        await session.execute(select(Job).where(Job.project_id == project.project_id, Job.name == job))
-    ).scalar_one_or_none()
-    if found is None:
-        raise HTTPException(404, f"Unknown job '{job}'")
-    set_context(job_id=str(found.job_id))
-    return _recommendation_out(await recommend(session, found))
+    result = await cached_recommend(session, await _job(session, project, job))
+    log.info("verdict served", extra={"verdict": result.decision.verdict, "n_runs": result.n_runs,
+                                      "evidence_weight": round(result.evidence_weight, 2)})
+    return _recommendation_out(result, *await summarize(result, get_settings()))
+
+
+@app.get("/v1/jobs/{job}/history", response_model=HistoryOut, tags=["recommendations"])
+async def get_history(
+    job: str, project: Project = Depends(current_project), session: AsyncSession = Depends(get_session)
+) -> HistoryOut:
+    """Every recommendation the job has had, newest first: what changed, when and why.
+
+    Followed through `superseded_by_id` with a recursive query; each entry's runs are listed by
+    `GET /v1/runs?recommendation=<id>`.
+    """
+    found = await _job(session, project, job)
+    entries = [
+        HistoryEntryOut(
+            recommendation_id=r.recommendation_id, verdict=r.verdict, model=r.model, model_version=r.model_version,
+            current_model=r.current_model, weighted_pass_rate=r.weighted_pass_rate,
+            mean_cost_usd=float(r.mean_cost_usd) if r.mean_cost_usd is not None else None,
+            cost_per_success_usd=(
+                float(r.mean_cost_usd) / r.weighted_pass_rate
+                if r.mean_cost_usd is not None and r.weighted_pass_rate else None
+            ),
+            n_runs=r.n_runs, evidence_weight=r.evidence_weight, valid_at=r.valid_at, invalid_at=r.invalid_at,
+            superseded_by_id=r.superseded_by_id, supersession_reason=r.supersession_reason,
+        )
+        for r in reversed(await lineage.history(session, found.job_id))
+    ]
+    versions = [ModelVersionSeen(**vars(v)) for v in await lineage.model_versions(session, found.job_id)]
+    return HistoryOut(job=found.name, entries=entries, versions=versions)
 
 
 @app.get("/v1/insights/spend", response_model=list[SpendOut], tags=["insights"])
@@ -354,3 +425,243 @@ async def get_spend(
 ) -> list[SpendOut]:
     """Production spend per job over the last `days` days, most expensive first."""
     return [SpendOut(**vars(s)) for s in await spend_by_job(session, project.project_id, days=days)]
+
+
+def _alert_out(alert: Alert, job_name: str) -> AlertOut:
+    return AlertOut(
+        alert_id=alert.alert_id, job=job_name, kind=alert.kind, summary=alert.detail.get("summary", alert.kind),
+        detail=alert.detail, created_at=alert.created_at, delivered_at=alert.delivered_at,
+        delivery_attempts=alert.delivery_attempts, resolved_at=alert.resolved_at,
+    )
+
+
+@app.get("/v1/jobs/{job}/regressions", response_model=list[AlertOut], tags=["alerts"])
+async def get_regressions(
+    job: str,
+    include_resolved: bool = Query(default=False, description="Also return alerts already resolved"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> list[AlertOut]:
+    """The job's alerts, newest first: open ones by default."""
+    found = await _job(session, project, job)
+    query = select(Alert).where(Alert.job_id == found.job_id).order_by(Alert.created_at.desc())
+    if not include_resolved:
+        query = query.where(Alert.resolved_at.is_(None))
+    return [_alert_out(a, found.name) for a in (await session.execute(query)).scalars()]
+
+
+@app.get("/v1/alerts", response_model=list[AlertOut], tags=["alerts"])
+async def list_alerts(
+    include_resolved: bool = Query(default=False),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> list[AlertOut]:
+    """Every job's alerts in the project, newest first: open ones by default."""
+    query = (
+        select(Alert, Job.name).join(Job, Job.job_id == Alert.job_id)
+        .where(Job.project_id == project.project_id).order_by(Alert.created_at.desc())
+    )
+    if not include_resolved:
+        query = query.where(Alert.resolved_at.is_(None))
+    return [_alert_out(a, name) for a, name in (await session.execute(query)).all()]
+
+
+@app.post("/v1/alerts/{alert_id}/resolve", response_model=AlertOut, tags=["alerts"])
+async def resolve_alert(
+    alert_id: uuid.UUID, project: Project = Depends(current_project), session: AsyncSession = Depends(get_session)
+) -> AlertOut:
+    """Mark an alert handled. The same finding can raise a new alert later."""
+    row = (
+        await session.execute(
+            select(Alert, Job.name).join(Job, Job.job_id == Alert.job_id)
+            .where(Alert.alert_id == alert_id, Job.project_id == project.project_id)
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(404, "Alert not found")
+    alert, name = row
+    if alert.resolved_at is None:
+        alert.resolved_at = datetime.now(UTC)
+        await session.commit()
+    return _alert_out(alert, name)
+
+
+async def _retest_out(session: AsyncSession, row: Retest, job_name: str, project: Project) -> RetestOut:
+    cap = float(project.retest_monthly_cap_usd)
+    spent = float(await spent_this_month(session, project.project_id))
+    decided = row.passed + row.failed
+    return RetestOut(
+        retest_id=row.retest_id, job=job_name, candidate_model=row.candidate_model, trigger=row.trigger,
+        status=row.status, budget_usd=float(row.budget_usd), spent_usd=float(row.spent_usd),
+        runs_planned=row.runs_planned, runs_done=row.runs_done, passed=row.passed, failed=row.failed,
+        pass_rate=row.passed / decided if decided else None, monthly_cap_usd=cap,
+        cap_remaining_usd=max(cap - spent, 0.0), message=row.message, created_at=row.created_at,
+        started_at=row.started_at, finished_at=row.finished_at,
+    )
+
+
+@app.post("/v1/jobs/{job}/retest", response_model=RetestOut, status_code=202, tags=["retests"])
+async def start_retest(
+    job: str, body: RetestCreate, project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> RetestOut:
+    """Queue a re-test: replay sampled past runs on `candidate_model`, spending at most `budget_usd`.
+
+    409 with `{"code", "message"}` when it cannot start; `code` is one of consent_off, project_off,
+    not_checkable, provider_key_required (ask for the key, then try again), cap_reached, already_running.
+    Poll `GET /v1/jobs/{job}/retest/{id}` for progress.
+    """
+    found = await _job(session, project, job)
+    try:
+        row = await enqueue(session, project, found, body.candidate_model, body.budget_usd, "MANUAL")
+    except RetestRefused as exc:
+        raise HTTPException(409, {"code": exc.code, "message": str(exc)}) from exc
+    row.runs_planned = body.sample_size or get_settings().retest_default_sample
+    await session.commit()
+    return await _retest_out(session, row, found.name, project)
+
+
+@app.get("/v1/jobs/{job}/retest/{retest_id}", response_model=RetestOut, tags=["retests"])
+async def get_retest(
+    job: str, retest_id: uuid.UUID, project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> RetestOut:
+    """One re-test's progress and spend so far; the web app polls it every 2 s while it runs."""
+    found = await _job(session, project, job)
+    row = await session.get(Retest, retest_id)
+    if row is None or row.job_id != found.job_id:
+        raise HTTPException(404, "Re-test not found")
+    return await _retest_out(session, row, found.name, project)
+
+
+@app.get("/v1/jobs/{job}/retests", response_model=list[RetestOut], tags=["retests"])
+async def list_retests(
+    job: str, project: Project = Depends(current_project), session: AsyncSession = Depends(get_session)
+) -> list[RetestOut]:
+    """The job's re-tests, newest first."""
+    found = await _job(session, project, job)
+    rows = (
+        await session.execute(select(Retest).where(Retest.job_id == found.job_id).order_by(Retest.created_at.desc()))
+    ).scalars().all()
+    return [await _retest_out(session, r, found.name, project) for r in rows]
+
+
+def _key_out(key: ProviderKey | None) -> ProviderKeyOut | None:
+    if key is None:
+        return None
+    return ProviderKeyOut(provider=key.provider, base_url=key.base_url, key_hint=key.key_hint,
+                          created_at=key.created_at)
+
+
+@app.get("/v1/retest/limits", response_model=RetestLimits, tags=["retests"])
+async def get_retest_limits(
+    project: Project = Depends(current_project), session: AsyncSession = Depends(get_session)
+) -> RetestLimits:
+    """This month's re-test cap, what is spent, and whether the provider key has been given."""
+    cap, spent = float(project.retest_monthly_cap_usd), float(await spent_this_month(session, project.project_id))
+    return RetestLimits(monthly_cap_usd=cap, spent_this_month_usd=spent, cap_remaining_usd=max(cap - spent, 0.0),
+                        retest_allowed=project.retest_allowed,
+                        provider_key=_key_out(await session.get(ProviderKey, project.project_id)))
+
+
+@app.put("/v1/provider-key", response_model=ProviderKeyOut, tags=["retests"])
+async def put_provider_key(
+    body: ProviderKeyIn, project: Project = Depends(current_project), session: AsyncSession = Depends(get_session)
+) -> ProviderKeyOut:
+    """Give (or replace) the key re-tests use. With the monthly cap, this is standing permission for
+    re-tests to run within the cap. Encrypted at rest; never returned again."""
+    try:
+        key = await provider_keys.set_key(session, project.project_id, provider=body.provider, api_key=body.api_key,
+                                          base_url=body.base_url, settings=get_settings())
+    except SecretKeyMissing as exc:
+        raise HTTPException(503, "The server has no SECRET_KEY set, so it cannot store provider keys") from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    await session.commit()
+    return _key_out(key)
+
+
+@app.delete("/v1/provider-key", status_code=204, tags=["retests"])
+async def delete_provider_key(
+    project: Project = Depends(current_project), session: AsyncSession = Depends(get_session)
+) -> None:
+    """Remove the key. Running re-tests finish the call in flight; no new ones start."""
+    key = await session.get(ProviderKey, project.project_id)
+    if key is not None:
+        await session.delete(key)
+        await session.commit()
+
+
+@app.get("/v1/jobs/{job}/insights", response_model=JobInsightsOut, tags=["insights"])
+async def get_job_insights(
+    job: str,
+    days: int = Query(default=90, ge=1, le=365, description="How many days back to count"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> JobInsightsOut:
+    """Cost per success per model, and pass rate per model by input-size band and by prompt version,
+    each with its run count and 95% interval."""
+    found = await _job(session, project, job)
+    groups = await job_insights(session, found, days=days)
+    return JobInsightsOut(job=found.name, days=days,
+                          **{k: [BreakdownOut(**vars(b)) for b in v] for k, v in groups.items()})
+
+
+def _event_out(e) -> FlowEventOut:
+    return FlowEventOut(event_id=e.event_id, ts=e.ts, run_id=e.run_id, stage=e.stage, message=e.message, data=e.data)
+
+
+@app.get("/v1/flow", response_model=list[FlowEventOut], tags=["flow"])
+async def get_flow(
+    after: int = Query(default=0, ge=0, description="Only events after this event_id; 0 = the latest ones"),
+    limit: int = Query(default=100, ge=1, le=500),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> list[FlowEventOut]:
+    """The live data-flow view, polled: each run's steps, oldest first."""
+    return [_event_out(e) for e in await flow.events_after(session, project.project_id, after, limit)]
+
+
+STREAM_POLL_SECONDS = 1.0
+STREAM_HEARTBEAT_SECONDS = 15.0
+
+
+@app.get("/v1/flow/stream", tags=["flow"], response_class=StreamingResponse)
+async def stream_flow(
+    request: Request,
+    last_event_id: str | None = Header(default=None),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Server-Sent Events: each run's steps as they happen. The browser reconnects by itself and
+    resumes from Last-Event-ID. Read-only, one short query a second, no WebSockets."""
+    try:
+        cursor = int(last_event_id) if last_event_id else 0
+    except ValueError:
+        cursor = 0
+    project_id = project.project_id
+
+    def frame(e) -> str:
+        return f"id: {e.event_id}\ndata: {json.dumps(_event_out(e).model_dump(mode='json'))}\n\n"
+
+    async def events():
+        nonlocal cursor
+        quiet = 0.0
+        if cursor == 0:  # start with the recent trail, so the view is not empty
+            for e in await flow.events_after(session, project_id, 0, 50):
+                cursor = e.event_id
+                yield frame(e)
+        while not await request.is_disconnected():
+            await session.rollback()  # end the read so the next poll sees new rows
+            fresh = await flow.events_after(session, project_id, cursor, 200)
+            for e in fresh:
+                cursor = e.event_id
+                yield frame(e)
+            quiet = 0.0 if fresh else quiet + STREAM_POLL_SECONDS
+            if quiet >= STREAM_HEARTBEAT_SECONDS:  # keeps proxies from closing an idle connection
+                quiet = 0.0
+                yield ": still here\n\n"
+            await asyncio.sleep(STREAM_POLL_SECONDS)
+
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

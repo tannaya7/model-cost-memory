@@ -17,15 +17,15 @@ The verdict compares that with the model production uses now:
     INSUFFICIENT_EVIDENCE  no model has enough evidence yet; refusing is a required answer
 
 `decide` is pure (no database), so the rule can be tested and swapped on its own; `recommend` loads a
-job's runs and calls it. Recommendations are computed on read; storing them with their lineage is
-Week 8.
+job's runs and calls it, and `forecast` turns a DOWNGRADE or SWITCH into money and failures per month.
+The Consolidator (pipeline/consolidation.py) stores each changed verdict with the runs behind it.
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
 from sqlalchemy import func, select
@@ -34,9 +34,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import Settings, get_settings
 from ..models import CatalogEntry, Job, Run
 from ..pipeline.decay import current_versions, family_key
-from ..pipeline.scoring import age_days, freshness, importance, stability_days
+from ..pipeline.scoring import age_days, freshness, stability_days
 from ..versions import normalize
-from .stats import Sample, assess, sample, wilson, z_for
+from .stats import Sample, assess, difference, sample, wilson, z_for
 
 Verdict = Literal["HOLD", "DOWNGRADE", "SWITCH", "INSUFFICIENT_EVIDENCE"]
 Status = Literal["GOOD_ENOUGH", "UNSURE", "CLEARLY_WORSE", "BELOW_FLOOR", "RETIRED"]
@@ -185,6 +185,35 @@ def decide(
 
 
 @dataclass
+class Forecast:
+    """What switching would change per month, if next month looks like the last 30 days."""
+
+    runs_per_month: int
+    monthly_saving_usd: float
+    extra_failures_per_month: float
+    extra_failures_low: float  # the interval of the pass-rate difference, in failures per month
+    extra_failures_high: float
+
+
+def forecast(decision: Decision, runs_per_month: int, *, confidence: float) -> Forecast | None:
+    """monthly saving = (cost per success now - recommended) x successes per month;
+    extra failures = (pass rate now - recommended) x runs per month, with its interval."""
+    rec, cur = decision.recommended, decision.current
+    if decision.verdict not in ("DOWNGRADE", "SWITCH") or rec is None or cur is None or rec is cur:
+        return None
+    if None in (rec.cost_per_success_usd, cur.cost_per_success_usd) or not (rec.sample and cur.sample):
+        return None
+    successes = runs_per_month * cur.sample.pass_rate
+    low, high = difference(cur.sample, rec.sample, z_for(confidence))  # current minus recommended
+    return Forecast(
+        runs_per_month=runs_per_month,
+        monthly_saving_usd=(cur.cost_per_success_usd - rec.cost_per_success_usd) * successes,
+        extra_failures_per_month=(cur.sample.pass_rate - rec.sample.pass_rate) * runs_per_month,
+        extra_failures_low=low * runs_per_month, extra_failures_high=high * runs_per_month,
+    )
+
+
+@dataclass
 class FailingRun:
     run_id: object
     model: str
@@ -202,6 +231,8 @@ class JobRecommendation:
     failing_runs: list[FailingRun]
     computed_at: datetime
     settings: Settings
+    run_ids: list = field(default_factory=list)  # every counted run: what a stored verdict rests on
+    forecast: Forecast | None = None
 
 
 async def _catalog(session: AsyncSession, names: set[str]) -> dict[str, CatalogEntry]:
@@ -224,9 +255,6 @@ async def recommend(
                    Run.invalid_at.is_(None))
         )
     ).all()
-    job_mean_cost = float(
-        (await session.execute(select(func.avg(Run.cost_usd)).where(Run.job_id == job.job_id))).scalar() or 0
-    )
     current_version = await current_versions(session, job.job_id)
 
     weights: dict[str, list[tuple[float, bool]]] = defaultdict(list)
@@ -236,8 +264,13 @@ async def recommend(
         name = family_key(run.model, run.model_version)
         superseded = normalize(run.model_version) != current_version[(job.job_id, name)]
         cost = float(run.cost_usd)
+        # The averaging weight must not depend on the outcome: if failures were remembered longer than
+        # passes of the same age, every pass rate would be biased down, most for models with old failures
+        # (a superseded version's failures outliving its passes). Importance keeps doing its two jobs,
+        # deciding what is archived (decay.py) and what re-tests sample first; here only age and
+        # version currency count.
         stab = stability_days(
-            importance(run.outcome, cost, job_mean_cost), superseded=superseded,
+            1.0, superseded=superseded,
             base_days=settings.decay_base_days, superseded_factor=settings.version_factor_superseded,
         )
         w = freshness(age_days(run.created_at, now), stab)
@@ -275,6 +308,14 @@ async def recommend(
         margin=settings.tolerance_points, confidence=settings.confidence_level,
     )
 
+    runs_per_month = (
+        await session.execute(
+            select(func.count()).select_from(Run)
+            .where(Run.job_id == job.job_id, Run.run_kind == "PRODUCTION", Run.created_at > now - timedelta(days=30),
+                   Run.created_at <= now)
+        )
+    ).scalar_one()
+
     shown = {m.model for m in (decision.recommended, decision.current) if m is not None}
     failing = sorted((r for name in shown for r in failures[name]), key=lambda r: r.created_at, reverse=True)
     return JobRecommendation(
@@ -284,5 +325,6 @@ async def recommend(
             FailingRun(r.run_id, family_key(r.model, r.model_version), r.model_version, r.outcome_reason, r.created_at)
             for r in failing[:FAILING_RUNS_SHOWN]
         ],
-        computed_at=now, settings=settings,
+        computed_at=now, settings=settings, run_ids=[r.run_id for r in runs],
+        forecast=forecast(decision, runs_per_month, confidence=settings.confidence_level),
     )

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { setActiveProject } from "../shared/api/apiFetch";
+import { queryClient } from "../shared/api/queryClient";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -46,6 +48,8 @@ export default function ProjectsPage() {
     setFormError(null);
     try {
       const result = await createMutation.mutateAsync({ name: data.name });
+      setActiveProject(result.project.project_id); // the dashboard now shows the new project
+      queryClient.invalidateQueries();
       setNewlyCreatedKey({
         apiKey: result.api_key,
         projectName: result.project.name,

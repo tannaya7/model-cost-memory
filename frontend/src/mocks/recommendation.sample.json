@@ -25,6 +25,7 @@
     "floor": 25.0,
     "n_runs": 1084
   },
+  "forecast": null,
   "job": "invoice-extract",
   "models": [
     {

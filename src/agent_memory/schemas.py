@@ -147,7 +147,8 @@ class RunCreate(Model):
     )
     expected: dict | None = Field(
         default=None,
-        description="The correct values for an ANSWER_KEY job, used to check this run and not stored",
+        description="The correct values for an ANSWER_KEY job, used to check this run. Stored only when the job "
+                    "has re-test consent, so a re-test can check the replayed run against the same answers",
     )
 
     @field_validator("prompt", "output")
@@ -264,6 +265,10 @@ class RecommendationOut(Model):
     evidence: RecommendationEvidence
     progress: float = Field(description="Progress toward the evidence floor, 0..1; below 1 only when insufficient")
     retest_candidates: list[str] = Field(description="Cheaper models a re-test could qualify")
+    forecast: ForecastOut | None = Field(description="Set for DOWNGRADE and SWITCH when both costs are known")
+    summary: str | None = Field(
+        default=None, description="Optional two sentences written from the figures above; never decides anything")
+    summary_prompt_version: str | None = Field(default=None, description="Git blob hash of the prompt file used")
     warnings: list[str]
     next_step: str | None
     computed_at: datetime
@@ -274,3 +279,213 @@ class SpendOut(Model):
     runs: int = Field(description="Production runs in the window")
     spend_usd: float
     share: float = Field(description="Share of the project's spend in the window, 0..1")
+
+
+class ForecastOut(Model):
+    """What switching would change per month, if next month looks like the last 30 days."""
+
+    runs_per_month: int = Field(description="Production runs in the last 30 days")
+    monthly_saving_usd: float = Field(description="Negative means switching costs more")
+    extra_failures_per_month: float = Field(description="Negative means fewer failures")
+    extra_failures_low: float = Field(description="Lower end of the interval, in failures per month")
+    extra_failures_high: float
+
+
+SupersessionReason = Literal["NEW_EVIDENCE", "MODEL_UPGRADE", "EVIDENCE_DECAYED", "REGRESSION", "MODEL_RETIRED"]
+
+
+class HistoryEntryOut(Model):
+    """One stored recommendation: what was decided, on how much evidence, and what replaced it."""
+
+    recommendation_id: uuid.UUID
+    verdict: Verdict
+    model: str = Field(description="The recommended model (the current one for HOLD); empty if none")
+    model_version: str
+    current_model: str | None = Field(description="What production used when this was decided")
+    weighted_pass_rate: float | None
+    mean_cost_usd: float | None
+    cost_per_success_usd: float | None
+    n_runs: int = Field(description="Runs it rests on; GET /v1/runs?recommendation= lists them")
+    evidence_weight: float
+    valid_at: datetime
+    invalid_at: datetime | None = Field(description="Null while it is the current recommendation")
+    superseded_by_id: uuid.UUID | None
+    supersession_reason: SupersessionReason | None
+
+
+class ModelVersionSeen(Model):
+    model: str
+    model_version: str
+    runs: int
+    first_seen: datetime
+    last_seen: datetime
+
+
+class HistoryOut(Model):
+    job: str
+    entries: list[HistoryEntryOut] = Field(description="Newest first; the first is current unless invalidated")
+    versions: list[ModelVersionSeen] = Field(description="Every model version this job has run on")
+
+
+AlertKind = Literal["VERSION_REGRESSION", "SILENT_DROP", "MODEL_DEPRECATED"]
+
+
+class AlertOut(Model):
+    """A regression, silent drop or deprecation that needs a person's attention."""
+
+    alert_id: uuid.UUID
+    job: str
+    kind: AlertKind
+    summary: str = Field(description="One sentence; the figures are in `detail`")
+    detail: dict = Field(
+        description="VERSION_REGRESSION: model, old_version, new_version, old_pass_rate, new_pass_rate, n_old, "
+                    "n_new, drop, p_value, failing_run_ids. SILENT_DROP: model, model_version, before_pass_rate, "
+                    "after_pass_rate, n_before, n_after, drop, p_value. MODEL_DEPRECATED: model, model_version, "
+                    "status."
+    )
+    created_at: datetime
+    delivered_at: datetime | None = Field(description="When the webhook accepted it; null if not (yet)")
+    delivery_attempts: int
+    resolved_at: datetime | None
+
+
+RetestStatus = Literal["QUEUED", "RUNNING", "DONE", "STOPPED_BUDGET", "STOPPED_CAP", "FAILED"]
+
+
+class RetestCreate(Model):
+    """Replay past runs of this job on a candidate model, spending at most `budget_usd`."""
+
+    candidate_model: str = Field(min_length=1, max_length=200, description="The model name to call")
+    budget_usd: float = Field(gt=0, le=1000, description="Required: the re-test stops before going over it")
+    sample_size: int | None = Field(default=None, ge=1, le=500, description="Prompts to replay (default 50)")
+
+
+class RetestOut(Model):
+    retest_id: uuid.UUID
+    job: str
+    candidate_model: str
+    trigger: Literal["MANUAL", "NEW_MODEL", "UNSURE"]
+    status: RetestStatus
+    budget_usd: float
+    spent_usd: float
+    runs_planned: int
+    runs_done: int
+    passed: int
+    failed: int
+    pass_rate: float | None
+    monthly_cap_usd: float
+    cap_remaining_usd: float
+    message: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+class ProviderKeyIn(Model):
+    """The key re-tests use. Encrypted at rest; only its last four characters are shown again."""
+
+    provider: str = Field(min_length=2, max_length=40, description="e.g. openai, gemini, groq")
+    api_key: str = Field(min_length=8, max_length=500)
+    base_url: str | None = Field(default=None, max_length=300, pattern=r"^https?://",
+                                 description="An OpenAI-compatible endpoint; known providers fill it in")
+
+
+class ProviderKeyOut(Model):
+    provider: str
+    base_url: str
+    key_hint: str = Field(description="The key's last four characters")
+    created_at: datetime
+
+
+class RetestLimits(Model):
+    monthly_cap_usd: float
+    spent_this_month_usd: float = Field(description="At catalog list price, so it counts free keys too")
+    cap_remaining_usd: float
+    retest_allowed: bool
+    provider_key: ProviderKeyOut | None = Field(description="Null until the key is given")
+
+
+class UserOut(Model):
+    user_id: uuid.UUID
+    email: str
+    name: str | None
+    picture_url: str | None
+
+
+class AuthConfig(Model):
+    google: bool = Field(description="Google sign-in is configured on this server")
+    dev_login: bool = Field(description="Development-only sign-in by email; never on in production")
+    demo_project_id: str | None = Field(description="A project anyone may read without signing in")
+
+
+class DevLogin(Model):
+    email: str = Field(min_length=3, max_length=200, pattern=r"^[^@\s]+@[^@\s]+$")
+    name: str | None = Field(default=None, max_length=100)
+
+
+class ProjectOut(Model):
+    project_id: str
+    name: str
+    webhook_url: str | None
+    webhook_secret: str | None = Field(description="Verify X-MCM-Signature on webhook payloads with it")
+    retest_monthly_cap_usd: float
+    retest_allowed: bool
+    key_prefix: str | None = Field(description="The first characters of the live project key")
+    created_at: datetime
+
+
+class ProjectCreate(Model):
+    name: str = Field(min_length=1, max_length=100)
+
+
+class ProjectCreated(Model):
+    project: ProjectOut
+    api_key: str = Field(description="Shown once. Put it in the SDK as MCM_API_KEY")
+
+
+class ProjectPatch(Model):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    webhook_url: str | None = Field(default=None, max_length=500, pattern=r"^https://",
+                                    description="Must be https; send null to remove")
+    retest_monthly_cap_usd: float | None = Field(default=None, ge=0, le=10_000)
+    retest_allowed: bool | None = None
+
+
+class ProjectKey(Model):
+    api_key: str = Field(description="Shown once; the previous key stops working immediately")
+
+
+class BreakdownOut(Model):
+    model: str
+    group: str = Field(description="'all', an input-size band ('under 8k', '8k to 32k', 'over 32k') or a prompt version")
+    runs: int
+    passed: int
+    pass_rate: float
+    pass_rate_low: float
+    pass_rate_high: float
+    mean_cost_usd: float
+    cost_per_success_usd: float | None
+
+
+class JobInsightsOut(Model):
+    """Where a job's money goes and where each model is weak. Groupings and statistics only."""
+
+    job: str
+    days: int
+    overall: list[BreakdownOut] = Field(description="Cost per success per model")
+    by_input_size: list[BreakdownOut]
+    by_prompt_version: list[BreakdownOut]
+
+
+class FlowEventOut(Model):
+    """One step of a run through the pipeline, for the live data-flow view."""
+
+    event_id: int = Field(description="Increasing; resume with ?after= or the SSE Last-Event-ID")
+    ts: datetime
+    run_id: uuid.UUID | None
+    stage: Literal["sdk", "api", "check", "index", "consolidate"]
+    message: str
+    data: dict | None
+
+
+RecommendationOut.model_rebuild()  # it refers to ForecastOut, defined after it

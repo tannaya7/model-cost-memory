@@ -77,6 +77,27 @@ class Settings:
     outbox_max_retries: int = 5
     outbox_stuck_minutes: int = 10
     outbox_done_retention_days: int = 7
+    # Regression detection: flag a drop across a version change when p < alpha AND the drop is at
+    # least min_drop, with at least min_runs checked runs on each side. Silent drops use the same rule.
+    regression_alpha: float = 0.05
+    regression_min_drop: float = 0.05
+    regression_min_runs: int = 30
+    # Re-tests: provider calls at once per re-test (low, because a free key shares its quota with
+    # the customer's production traffic), and the default number of prompts replayed.
+    retest_concurrency: int = 2
+    retest_default_sample: int = 50
+    retest_auto_budget_usd: float = 1.0  # budget of a re-test the system starts on its own
+    # Secret for encrypting stored provider keys and signing session cookies. Required in production.
+    secret_key: str = ""
+    # Google sign-in (Week 11). Without a client id, sign-in is off and the project key is used.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    public_url: str = "http://localhost:5174"  # where the web app is served; the OAuth redirect comes back here
+    dev_login: bool = False  # local development only: sign in as any email without Google
+    # A project anyone may read without a key (the public demo); empty means none.
+    demo_project_id: str = ""
+    # Optional two-sentence recommendation summary (Claude). Off unless a key is set.
+    summary_model: str = "claude-haiku-5-5"
     extras: dict[str, str] = field(default_factory=dict)
 
     @classmethod
@@ -96,6 +117,19 @@ class Settings:
             outbox_max_retries=_int("OUTBOX_MAX_RETRIES", 5),
             outbox_stuck_minutes=_int("OUTBOX_STUCK_MINUTES", 10),
             outbox_done_retention_days=_int("OUTBOX_DONE_RETENTION_DAYS", 7),
+            regression_alpha=_float("REGRESSION_ALPHA", 0.05),
+            regression_min_drop=_float("REGRESSION_MIN_DROP", 0.05),
+            regression_min_runs=_int("REGRESSION_MIN_RUNS", 30),
+            retest_concurrency=_int("RETEST_CONCURRENCY", 2),
+            retest_default_sample=_int("RETEST_DEFAULT_SAMPLE", 50),
+            retest_auto_budget_usd=_float("RETEST_AUTO_BUDGET_USD", 1.0),
+            secret_key=os.environ.get("SECRET_KEY", ""),
+            google_client_id=os.environ.get("GOOGLE_CLIENT_ID", ""),
+            google_client_secret=os.environ.get("GOOGLE_CLIENT_SECRET", ""),
+            public_url=os.environ.get("PUBLIC_URL", cls.public_url).rstrip("/"),
+            dev_login=os.environ.get("DEV_LOGIN", "").lower() in ("1", "true", "yes"),
+            demo_project_id=os.environ.get("DEMO_PROJECT_ID", ""),
+            summary_model=os.environ.get("SUMMARY_MODEL", cls.summary_model),
         )
 
 

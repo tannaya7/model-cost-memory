@@ -14,6 +14,7 @@ from typing import Any
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     ARRAY,
+    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
@@ -39,8 +40,22 @@ class Base(DeclarativeBase):
     pass
 
 
+class User(Base):
+    """One Google account. No passwords are stored."""
+
+    __tablename__ = "users"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=NEW_UUID)
+    google_sub: Mapped[str] = mapped_column(Text, unique=True)  # Google's stable account id
+    email: Mapped[str] = mapped_column(Text)
+    name: Mapped[str | None] = mapped_column(Text)
+    picture_url: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+
+
 class Project(Base):
     __tablename__ = "projects"
+    __table_args__ = (Index("idx_projects_owner", "owner_user_id"),)
 
     project_id: Mapped[str] = mapped_column(Text, primary_key=True)
     api_key_hash: Mapped[str] = mapped_column(Text)  # the key itself is shown once, never stored
@@ -49,6 +64,24 @@ class Project(Base):
     retest_monthly_cap_usd: Mapped[Decimal] = mapped_column(
         Numeric(8, 2), server_default=text("10")
     )
+    webhook_secret: Mapped[str | None] = mapped_column(Text)  # signs webhook payloads (HMAC-SHA256)
+    retest_allowed: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))  # project-wide switch
+    created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.user_id"))
+    name: Mapped[str | None] = mapped_column(Text)  # display name chosen in the web app
+    key_prefix: Mapped[str | None] = mapped_column(Text)  # first characters of the live key, for display
+
+
+class ProviderKey(Base):
+    """The customer's key for re-tests, asked for when a re-test is first needed. Encrypted."""
+
+    __tablename__ = "provider_keys"
+
+    project_id: Mapped[str] = mapped_column(Text, ForeignKey("projects.project_id"), primary_key=True)
+    provider: Mapped[str] = mapped_column(Text)  # matches model_catalog.provider
+    base_url: Mapped[str] = mapped_column(Text)  # an OpenAI-compatible endpoint
+    key_encrypted: Mapped[str] = mapped_column(Text)
+    key_hint: Mapped[str] = mapped_column(Text)  # last four characters
     created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
 
 
@@ -82,6 +115,7 @@ class Run(Base):
             name="runs_state_check",
         ),
         Index("idx_runs_job_model", "job_id", "model", "model_version"),
+        Index("idx_runs_retest", "retest_id", postgresql_where=text("retest_id IS NOT NULL")),
         Index("idx_runs_job_created", "job_id", text("created_at DESC")),
         Index("idx_runs_prompt_hash", "prompt_hash"),
         Index(
@@ -122,6 +156,41 @@ class Run(Base):
     state: Mapped[str] = mapped_column(Text, server_default=text("'CAPTURED'"))
     created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
     invalid_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    retest_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("retests.retest_id"))
+    expected: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # kept only for jobs with re-test consent
+
+
+class Retest(Base):
+    """Replaying sampled past runs on a candidate model, under a budget."""
+
+    __tablename__ = "retests"
+    __table_args__ = (
+        CheckConstraint("trigger IN ('MANUAL','NEW_MODEL','UNSURE')", name="retests_trigger_check"),
+        CheckConstraint(
+            "status IN ('QUEUED','RUNNING','DONE','STOPPED_BUDGET','STOPPED_CAP','FAILED')",
+            name="retests_status_check",
+        ),
+        CheckConstraint("budget_usd > 0", name="retests_budget_usd_check"),
+        Index("idx_retests_queued", "created_at", postgresql_where=text("status = 'QUEUED'")),
+        Index("idx_retests_job", "job_id", text("created_at DESC")),
+    )
+
+    retest_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=NEW_UUID)
+    job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("jobs.job_id"))
+    project_id: Mapped[str] = mapped_column(Text, ForeignKey("projects.project_id"))
+    candidate_model: Mapped[str] = mapped_column(Text)
+    trigger: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, server_default=text("'QUEUED'"))
+    budget_usd: Mapped[Decimal] = mapped_column(Numeric(10, 4))
+    spent_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6), server_default=text("0"))
+    runs_planned: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    runs_done: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    passed: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    failed: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+    started_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    finished_at: Mapped[datetime | None] = mapped_column(Timestamp)
 
 
 class Recommendation(Base):
@@ -151,7 +220,9 @@ class Recommendation(Base):
     superseded_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("recommendations.recommendation_id")
     )
-    supersession_reason: Mapped[str | None] = mapped_column(Text)  # MODEL_UPGRADE | EVIDENCE_DECAYED | REGRESSION
+    # NEW_EVIDENCE | MODEL_UPGRADE | EVIDENCE_DECAYED | REGRESSION | MODEL_RETIRED
+    supersession_reason: Mapped[str | None] = mapped_column(Text)
+    current_model: Mapped[str | None] = mapped_column(Text)  # what production used when this was decided
     memory_type: Mapped[str] = mapped_column(Text, server_default=text("'SEMANTIC'"))
     valid_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
     invalid_at: Mapped[datetime | None] = mapped_column(Timestamp)
@@ -205,6 +276,8 @@ class Alert(Base):
         CheckConstraint(
             "kind IN ('VERSION_REGRESSION','SILENT_DROP','MODEL_DEPRECATED')", name="alerts_kind_check"
         ),
+        Index("idx_alerts_open", "job_id", "dedupe_key", unique=True, postgresql_where=text("resolved_at IS NULL")),
+        Index("idx_alerts_undelivered", "next_attempt_at", postgresql_where=text("delivered_at IS NULL")),
     )
 
     alert_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=NEW_UUID)
@@ -214,3 +287,26 @@ class Alert(Base):
     delivered_at: Mapped[datetime | None] = mapped_column(Timestamp)  # null until the webhook accepts it
     resolved_at: Mapped[datetime | None] = mapped_column(Timestamp)
     created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+    dedupe_key: Mapped[str] = mapped_column(Text, server_default=text("''"))  # one open alert per finding
+    delivery_attempts: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(Timestamp)  # webhook retry with backoff
+    last_error: Mapped[str | None] = mapped_column(Text)
+
+
+class FlowEvent(Base):
+    """One step of a run through the pipeline, for the live data-flow view. Deleted after a day."""
+
+    __tablename__ = "flow_events"
+    __table_args__ = (
+        CheckConstraint("stage IN ('sdk','api','check','index','consolidate')", name="flow_events_stage_check"),
+        Index("idx_flow_events_project", "project_id", "event_id"),
+        Index("idx_flow_events_ts", "ts"),
+    )
+
+    event_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    project_id: Mapped[str] = mapped_column(Text, ForeignKey("projects.project_id"))
+    run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    stage: Mapped[str] = mapped_column(Text)
+    message: Mapped[str] = mapped_column(Text)
+    data: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    ts: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)

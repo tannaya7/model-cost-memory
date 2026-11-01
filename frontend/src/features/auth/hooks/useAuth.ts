@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchMe, logout } from "../api/authApi";
+import { fetchAuthConfig, fetchMe, logout } from "../api/authApi";
+import { setActiveProject } from "../../../shared/api/apiFetch";
 
 export const meKey = ["auth", "me"] as const;
 
@@ -21,7 +22,12 @@ export function useLogout() {
   return useMutation({
     mutationFn: logout,
     onSuccess: () => {
+      setActiveProject("");
       queryClient.clear();
     },
   });
+}
+
+export function useAuthConfig() {
+  return useQuery({ queryKey: ["auth", "config"], queryFn: fetchAuthConfig, staleTime: 5 * 60_000, retry: false });
 }

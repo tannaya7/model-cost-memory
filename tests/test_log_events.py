@@ -94,8 +94,13 @@ async def test_a_late_label_logs_the_transition(client, headers, caplog):
 
 
 async def test_authenticating_binds_the_project_for_the_rest_of_the_request(session, headers):
+    from starlette.requests import Request
+
     async def request():
-        project = await current_project(session, x_api_key=headers["X-API-Key"], authorization=None)
+        project = await current_project(
+            Request({"type": "http", "method": "GET", "headers": []}), session, user=None,
+            x_api_key=headers["X-API-Key"], authorization=None, x_project_id=None,
+        )
         return project.project_id, current_context().get("project_id")
 
     import asyncio

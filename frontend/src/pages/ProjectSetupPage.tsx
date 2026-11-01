@@ -259,7 +259,7 @@ export default function ProjectSetupPage() {
               </p>
             )}
             <p className="mt-1 text-xs text-dim">
-              Receives POST notifications for regressions and model deprecations. Must start with https://.
+              Receives regression and deprecation alerts. Paste a Slack, Discord, Google Chat or Mattermost incoming-webhook URL to get them in a channel, or your own https:// endpoint (payloads are signed with the webhook secret).
             </p>
           </div>
 

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ..config import Settings, get_settings
 from ..models import Run
+from . import flow
 
 log = logging.getLogger("agent_memory.janitor")
 
@@ -69,6 +70,7 @@ async def run_janitor(sessions: async_sessionmaker[AsyncSession], settings: Sett
             session, minutes=settings.outbox_stuck_minutes, max_retries=settings.outbox_max_retries
         )
         purged = await purge_done(session, days=settings.outbox_done_retention_days)
+        await flow.purge(session)  # the live view's trail; a day is plenty
     if requeued or failed or purged:
         log.info("outbox janitor: %d requeued, %d failed, %d purged", requeued, failed, purged)
     async with sessions() as session:
