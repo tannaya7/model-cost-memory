@@ -29,8 +29,8 @@ async def test_without_a_provider_a_model_others_still_serve_is_deprecated_with_
     await add_flash(session)
     life = (await lifecycles(session, {"flash": None}, today=TODAY))["flash"]
     assert life.status == "DEPRECATED"
-    assert life.note == ("vertex_ai retired it on 2026-10-20, but gemini still serve flash; record which provider "
-                         "this job uses to know for sure")
+    assert life.note == ("flash was retired by vertex_ai on 2026-10-20, but is still served by gemini. Record which "
+                         "provider this job uses to know whether it is affected")
 
 
 async def test_a_hand_entered_status_wins_and_an_unknown_model_is_unknown(session):

@@ -58,10 +58,10 @@ async def lifecycles(
         elif row is None:
             out[name] = UNKNOWN
         elif row.status != "ACTIVE" and (still := sorted(p for p, d in offers.items() if d is None or d > today)):
-            verb = "retired it on" if row.status == "RETIRED" else "retires it on"
+            verb = "was retired" if row.status == "RETIRED" else "is being retired"
             out[name] = Lifecycle("DEPRECATED", row.shutdown_date, (
-                f"{row.provider} {verb} {row.shutdown_date}, but {', '.join(still[:3])} still serve "
-                f"{name}; record which provider this job uses to know for sure"))
+                f"{name} {verb} by {row.provider} on {row.shutdown_date}, but is still served by "
+                f"{', '.join(still[:3])}. Record which provider this job uses to know whether it is affected"))
         else:
             out[name] = Lifecycle(row.status, row.shutdown_date)
     return out
