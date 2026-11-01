@@ -7,6 +7,10 @@ and can be corrected by hand. A model is:
   DEPRECATED  a shutdown date is announced and still in the future (it can still be recommended, with a warning)
   RETIRED     the shutdown date has passed (never recommended)
 
+The catalog has one row per model name. The same open-weight model is often sold by several providers
+at different prices, so each provider's own price is also kept (model_prices); a run that says which
+provider served it is priced from there.
+
 A row marked source MANUAL is an override: the daily sync never changes it, so a hand-entered price, a
 shutdown date the list lags on, or a local model at $0 always wins. `clear_override` hands a row back
 to the sync.
@@ -25,7 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
-from ..models import CatalogEntry
+from ..models import CatalogEntry, ProviderPrice
 from ..versions import normalize
 
 log = logging.getLogger("agent_memory.catalog")
@@ -53,7 +57,8 @@ class SyncResult:
     unchanged: int = 0
     skipped_manual: int = 0
     status_changes: list[tuple[str, str, str]] = field(default_factory=list)  # (model, old, new)
-    added_models: list[CatalogRecord] = field(default_factory=list)  # new models: candidates for re-tests
+    # New (model, provider) pairs, each with that provider's price: candidates for re-tests.
+    added_models: list[CatalogRecord] = field(default_factory=list)
 
 
 def _per_mtok(per_token: Any) -> Decimal | None:
@@ -80,11 +85,9 @@ def status_for(shutdown: date | None, today: date) -> str:
     return "RETIRED" if shutdown <= today else "DEPRECATED"
 
 
-def parse_price_list(data: dict[str, Any], today: date | None = None) -> list[CatalogRecord]:
-    """Turn the public price list into catalog records, skipping entries that are not priced chat models."""
-    today = today or datetime.now(UTC).date()
-    records: dict[str, CatalogRecord] = {}
-    for key in sorted(data, key=lambda k: ("/" in k, k)):  # a plain name beats a provider-prefixed duplicate
+def _priced_entries(data: dict[str, Any], today: date):
+    """Every priced chat model in the list, plain names before provider-prefixed duplicates."""
+    for key in sorted(data, key=lambda k: ("/" in k, k)):
         spec = data[key]
         if key == "sample_spec" or not isinstance(spec, dict) or spec.get("mode") not in CHAT_MODES:
             continue
@@ -92,14 +95,28 @@ def parse_price_list(data: dict[str, Any], today: date | None = None) -> list[Ca
         if price_in is None and price_out is None:
             continue
         name = normalize(key)
-        if name in records:
-            continue
         shutdown = _parse_date(spec.get("deprecation_date"))
-        records[name] = CatalogRecord(
+        yield CatalogRecord(
             model=name, model_version=name, provider=str(spec.get("litellm_provider") or "unknown").lower(),
             price_in_per_mtok=price_in, price_out_per_mtok=price_out, shutdown_date=shutdown,
             status=status_for(shutdown, today),
         )
+
+
+def parse_price_list(data: dict[str, Any], today: date | None = None) -> list[CatalogRecord]:
+    """Turn the public price list into catalog records, one per model name; a plain name beats a
+    provider-prefixed duplicate."""
+    records: dict[str, CatalogRecord] = {}
+    for rec in _priced_entries(data, today or datetime.now(UTC).date()):
+        records.setdefault(rec.model, rec)
+    return list(records.values())
+
+
+def parse_provider_prices(data: dict[str, Any], today: date | None = None) -> list[CatalogRecord]:
+    """One record per (model, provider): what each provider charges for the model."""
+    records: dict[tuple[str, str], CatalogRecord] = {}
+    for rec in _priced_entries(data, today or datetime.now(UTC).date()):
+        records.setdefault((rec.model, rec.provider), rec)
     return list(records.values())
 
 
@@ -119,6 +136,7 @@ async def sync_catalog(session: AsyncSession, data: dict[str, Any], *, today: da
     records = parse_price_list(data, today)
     existing = {(e.model, e.model_version): e for e in (await session.execute(select(CatalogEntry))).scalars()}
     result = SyncResult()
+    new_names: set[str] = set()
     for rec in records:
         row = existing.get((rec.model, rec.model_version))
         if row is None:
@@ -128,7 +146,7 @@ async def sync_catalog(session: AsyncSession, data: dict[str, Any], *, today: da
                 price_out_per_mtok=rec.price_out_per_mtok, source="SYNC",
             ))
             result.added += 1
-            result.added_models.append(rec)
+            new_names.add(rec.model)
             continue
         if row.source == "MANUAL":
             result.skipped_manual += 1
@@ -143,10 +161,31 @@ async def sync_catalog(session: AsyncSession, data: dict[str, Any], *, today: da
         row.provider, row.status, row.shutdown_date = rec.provider, rec.status, rec.shutdown_date
         row.price_in_per_mtok, row.price_out_per_mtok = rec.price_in_per_mtok, rec.price_out_per_mtok
         result.updated += 1
+    await _sync_provider_prices(session, data, today, result, new_names, backfill=bool(existing))
     await session.commit()
     log.info("catalog sync: %d added, %d updated, %d unchanged, %d manual", result.added, result.updated,
              result.unchanged, result.skipped_manual)
     return result
+
+
+async def _sync_provider_prices(
+    session: AsyncSession, data: dict[str, Any], today: date, result: SyncResult, new_names: set[str], *,
+    backfill: bool,
+) -> None:
+    """Upsert each provider's price. A pair is reported as new only when it really is: the first fill of
+    an existing catalog (after migration 0010) reports just the models new to the catalog, so it does not
+    start a re-test for every model already known."""
+    prices = {(p.model, p.provider): p for p in (await session.execute(select(ProviderPrice))).scalars()}
+    first_fill = backfill and not prices
+    for rec in parse_provider_prices(data, today):
+        row = prices.get((rec.model, rec.provider))
+        if row is None:
+            session.add(ProviderPrice(model=rec.model, provider=rec.provider,
+                                      price_in_per_mtok=rec.price_in_per_mtok, price_out_per_mtok=rec.price_out_per_mtok))
+            if not first_fill or rec.model in new_names:
+                result.added_models.append(rec)
+        elif (row.price_in_per_mtok, row.price_out_per_mtok) != (rec.price_in_per_mtok, rec.price_out_per_mtok):
+            row.price_in_per_mtok, row.price_out_per_mtok = rec.price_in_per_mtok, rec.price_out_per_mtok
 
 
 async def set_override(

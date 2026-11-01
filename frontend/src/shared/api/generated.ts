@@ -1263,7 +1263,7 @@ export interface components {
             reference: string | null;
             /**
              * Retest Candidates
-             * @description Cheaper models a re-test could qualify
+             * @description Models a re-test would settle: cheaper ones that could qualify, or the best model when the current one measures worse but that is not proven yet
              */
             retest_candidates: string[];
             rules: components["schemas"]["RecommendationRules"];
@@ -1455,6 +1455,11 @@ export interface components {
             prompt: string;
             /** Prompt Version */
             prompt_version?: string | null;
+            /**
+             * Provider
+             * @description Who served the call, as the price list names it (e.g. openai, gemini, groq, together_ai). The same model can cost different amounts on different providers; without it the catalog's default price for the model is used
+             */
+            provider?: string | null;
             /**
              * Run Id
              * Format: uuid

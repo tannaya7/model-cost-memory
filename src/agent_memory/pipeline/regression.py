@@ -2,14 +2,22 @@
 
 VERSION_REGRESSION   For each model family a job uses, the version production uses now is compared
                      with the version it replaced: a one-sided two-proportion z-test on their checked
-                     runs. Flagged when p < alpha AND the drop is at least `regression_min_drop`, with
-                     at least `regression_min_runs` runs on each side. The job's recommendation is then
-                     superseded with the reason REGRESSION (never overwritten), and an alert is raised.
+                     runs. Flagged when the test passes the sequential boundary below AND the drop is
+                     at least `regression_min_drop`, with at least `regression_min_runs` runs on each
+                     side. The job's recommendation is then superseded with the reason REGRESSION
+                     (never overwritten), and an alert is raised.
 
 SILENT_DROP          Providers can change behaviour under an unchanged name. For the current version,
-(Should)             daily pass rates over the last 28 days are split in half; a one-sided CUSUM over
-                     the second half against the first half's rate must cross its threshold, and the
-                     two halves must differ by the same p < alpha and minimum-drop rule.
+(Should)             daily pass rates over the last 28 days (at least 20 days with runs) are split in
+                     half; a one-sided CUSUM over the second half against the first half's rate must
+                     cross its threshold, and the halves must differ with p < `silent_alpha` and by at
+                     least the minimum drop.
+
+The sweep runs every day, and every look is another chance for noise to cross a fixed p < 0.05 line:
+in simulation that rule raised a false alarm on 7% of unchanged models. So the version test uses an
+O'Brien-Fleming-style boundary: z must reach z_alpha x sqrt(ref_runs / n) while the new version has
+n < ref_runs runs, and z_alpha after, but never more than p < 0.0001 asks. Early noise cannot cross
+it, and an overwhelming drop is still flagged on the first day it shows.
 
 Both run with an explicit `now`, so the simulated-time harness can drive them through weeks in minutes.
 """
@@ -18,6 +26,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from statistics import NormalDist
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -34,6 +43,8 @@ from .decay import current_versions, family_key
 OLD_VERSION_WINDOW = 1000  # the replaced version's most recent runs are what it is judged by
 SILENT_WINDOW_DAYS = 28
 SILENT_MIN_DAILY_RUNS = 5
+SILENT_MIN_DAYS = 20
+STRICTEST_P = 0.0001  # the early boundary never asks for more than this
 FAILING_RUNS_IN_ALERT = 10
 
 
@@ -46,6 +57,16 @@ def drop_test(pass_old: int, n_old: int, pass_new: int, n_new: int) -> tuple[flo
     if se == 0:
         return drop, 0.0 if drop > 0 else 1.0
     return drop, 0.5 * math.erfc((drop / se) / math.sqrt(2))
+
+
+def boundary_alpha(alpha: float, n: int, ref_runs: int) -> float:
+    """The p-value a daily check must beat with n runs on the new version: alpha once n >= ref_runs,
+    stricter before (down to STRICTEST_P), so that checking every day keeps the overall false-alarm
+    rate near alpha."""
+    if n >= ref_runs:
+        return alpha
+    z = NormalDist().inv_cdf(1 - alpha) * math.sqrt(ref_runs / max(n, 1))
+    return max(0.5 * math.erfc(z / math.sqrt(2)), min(alpha, STRICTEST_P))
 
 
 def cusum_alarm(daily: list[tuple[int, int]], baseline: float, *, k: float = 0.5, h: float = 4.0) -> bool:
@@ -118,7 +139,8 @@ async def sweep_job(
             if min(n_old, n_new) >= settings.regression_min_runs:
                 pass_old, pass_new = sum(r[1] for r in old_runs), sum(r[1] for r in new_runs)
                 drop, p = drop_test(pass_old, n_old, pass_new, n_new)
-                if p < settings.regression_alpha and drop >= settings.regression_min_drop:
+                limit = boundary_alpha(settings.regression_alpha, n_new, settings.regression_ref_runs)
+                if p < limit and drop >= settings.regression_min_drop:
                     failing = [str(r[2]) for r in reversed(new_runs) if not r[1]][:FAILING_RUNS_IN_ALERT]
                     alert = await raise_alert(
                         session, job, "VERSION_REGRESSION", f"VERSION_REGRESSION|{fam}|{now_version}",
@@ -142,12 +164,12 @@ async def sweep_job(
                 day[0] += passed
                 day[1] += 1
         days = [tuple(daily[d]) for d in sorted(daily) if daily[d][1] >= SILENT_MIN_DAILY_RUNS]
-        if len(days) >= 10:
+        if len(days) >= SILENT_MIN_DAYS:
             first, second = days[: len(days) // 2], days[len(days) // 2:]
             p1, n1 = sum(d[0] for d in first), sum(d[1] for d in first)
             p2, n2 = sum(d[0] for d in second), sum(d[1] for d in second)
             drop, p = drop_test(p1, n1, p2, n2)
-            if (p < settings.regression_alpha and drop >= settings.regression_min_drop
+            if (p < settings.silent_alpha and drop >= settings.regression_min_drop
                     and cusum_alarm(second, p1 / n1)):
                 alert = await raise_alert(
                     session, job, "SILENT_DROP", f"SILENT_DROP|{fam}|{now_version}",

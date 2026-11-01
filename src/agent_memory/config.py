@@ -81,11 +81,15 @@ class Settings:
     outbox_max_retries: int = 5
     outbox_stuck_minutes: int = 10
     outbox_done_retention_days: int = 7
-    # Regression detection: flag a drop across a version change when p < alpha AND the drop is at
-    # least min_drop, with at least min_runs checked runs on each side. Silent drops use the same rule.
-    regression_alpha: float = 0.05
-    regression_min_drop: float = 0.05
+    # Regression detection. The sweep re-tests every day, so each check must be stricter than a one-off
+    # test would be. A version change is flagged when p < alpha (tightened while the new version has
+    # fewer than ref_runs runs) AND the drop is at least min_drop, with min_runs runs on each side.
+    # A silent drop uses silent_alpha and the same min_drop. Chosen by simulation (reports/).
+    regression_alpha: float = 0.005
+    regression_ref_runs: int = 500
+    regression_min_drop: float = 0.03
     regression_min_runs: int = 30
+    silent_alpha: float = 0.001
     # Re-tests: provider calls at once per re-test (low, because a free key shares its quota with
     # the customer's production traffic), and the default number of prompts replayed.
     retest_concurrency: int = 2
@@ -123,9 +127,11 @@ class Settings:
             outbox_max_retries=_int("OUTBOX_MAX_RETRIES", 5),
             outbox_stuck_minutes=_int("OUTBOX_STUCK_MINUTES", 10),
             outbox_done_retention_days=_int("OUTBOX_DONE_RETENTION_DAYS", 7),
-            regression_alpha=_float("REGRESSION_ALPHA", 0.05),
-            regression_min_drop=_float("REGRESSION_MIN_DROP", 0.05),
+            regression_alpha=_float("REGRESSION_ALPHA", 0.005),
+            regression_ref_runs=_int("REGRESSION_REF_RUNS", 500),
+            regression_min_drop=_float("REGRESSION_MIN_DROP", 0.03),
             regression_min_runs=_int("REGRESSION_MIN_RUNS", 30),
+            silent_alpha=_float("SILENT_ALPHA", 0.001),
             retest_concurrency=_int("RETEST_CONCURRENCY", 2),
             retest_default_sample=_int("RETEST_DEFAULT_SAMPLE", 50),
             retest_auto_budget_usd=_float("RETEST_AUTO_BUDGET_USD", 1.0),

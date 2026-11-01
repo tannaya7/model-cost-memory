@@ -52,11 +52,17 @@ Simulated data, run through the production engine, decay, consolidation and regr
 - **Staleness experiment** ([report](reports/staleness_experiment.md)): as the workload drifts and a new model
   version arrives, a curated evidence set frozen at day 14 stops picking the right model, while the
   self-maintaining memory keeps up.
-- **Regression detection** ([data](reports/regression_detection.json)), 20 trials per size: no false alarms;
-  drops of 10 and 15 points caught every time; drops of exactly 5 points 75% of the time.
+- **Regression detection** ([version](reports/regression_detection.json),
+  [silent](reports/silent_drop_detection.json)), 50 trials per size: a version upgrade that costs 5 points is
+  caught 96% of the time and 10 points always, the day after it lands, with 1 false alarm in 50 unchanged
+  upgrades. A silent drop under an unchanged name is caught 68% of the time at 5 points and always at 10, with
+  no false alarms.
+- **Held-out check** ([report](reports/holdout_check.md)): on simulated answers at real Gemini prices, every
+  model the engine moves a job to is truly within 3 points of the best, at every amount of evidence. The cost
+  is caution: a cheaper model only 1.4 points worse takes several hundred runs per model to prove.
 
-Reproduce with `python scripts/staleness_experiment.py` and `python scripts/simulate.py` (an embedded
-Postgres is started for them).
+Reproduce with `python scripts/staleness_experiment.py`, `python scripts/simulate.py` (an embedded Postgres
+is started for them) and `python scripts/holdout_check.py --simulated`.
 
 ## Getting started
 
@@ -86,15 +92,17 @@ Open the web app and either paste the project key in **Settings**, or sign in: w
 Record a call from your own code:
 
 ```python
-from agent_memory.recorder import RunRecorder
+from agent_memory.recorder import RunRecorder, provider_for
 
-with RunRecorder(job="invoice-extract") as rec:
+with RunRecorder(job="invoice-extract", provider=provider_for(client.base_url)) as rec:
     response = client.chat.completions.create(model="my-model", messages=[...])   # your call, unchanged
     rec.capture(response, prompt=prompt, model="my-model", expected={"total": 1250.0})
 ```
 
 Set `MCM_API_KEY` to the project key (and `MCM_API_URL` if the API is not local). The recorder sends in the
-background, adds well under 5 ms, and never raises into your application.
+background, adds well under 5 ms, and never raises into your application. `provider` says who served the call
+(`openai`, `gemini`, `groq`, `together_ai`, ... as the price list names them): the same open-weight model can cost
+several times more on one provider than another, so naming it gets each run that provider's price.
 
 Try it with the built-in corpus of invoices with known answers, on a free hosted model:
 
@@ -105,7 +113,9 @@ python scripts/run_corpus.py --model <a Gemini model name> --limit 50 \
 ```
 
 Pick a model your key's free tier offers that is also in the price catalog (`GET /v1/models?q=gemini`), so each
-run is priced at its real list price. Groq works the same way with `--base-url https://api.groq.com/openai/v1`.
+run is priced at its real list price. The script names the provider from `--base-url`, so Gemma through the
+Gemini API is priced at Gemini's $0, not another provider's rate. Groq works the same way with
+`--base-url https://api.groq.com/openai/v1`.
 
 Or fill a demo project with 90 days of simulated history (recommendations that change, a regression alert,
 spend), and let anyone read it without signing in:

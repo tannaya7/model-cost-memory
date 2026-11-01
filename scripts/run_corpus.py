@@ -5,8 +5,11 @@ Works with any OpenAI-compatible endpoint, which includes local Ollama (free) an
   # local Ollama model, free
   python scripts/run_corpus.py --model llama3.2 --limit 50
 
-  # a hosted OpenAI-compatible endpoint
-  python scripts/run_corpus.py --model some-model --base-url https://api.example.com/v1 --api-key-env EXAMPLE_KEY
+  # Gemini's free tier (the provider, and so the price, is worked out from the address)
+  python scripts/run_corpus.py --model gemini-2.5-flash-lite       --base-url https://generativelanguage.googleapis.com/v1beta/openai/ --api-key-env GEMINI_API_KEY
+
+  # any other OpenAI-compatible endpoint: name the provider as the price list does
+  python scripts/run_corpus.py --model some-model --base-url https://api.example.com/v1 --api-key-env EXAMPLE_KEY       --provider example
 
 Needs MCM_API_KEY (the project key) and, unless --api-url is given, an API running on 127.0.0.1:8000.
 """
@@ -22,7 +25,7 @@ from openai import OpenAI
 
 from agent_memory.config import load_dotenv_file
 from agent_memory.corpus import ensure_job, from_jsonl, generate_invoices, replay
-from agent_memory.recorder import Sender
+from agent_memory.recorder import Sender, provider_for
 
 
 def main() -> int:
@@ -35,6 +38,7 @@ def main() -> int:
     parser.add_argument("--corpus", default="corpus/invoices.jsonl", help="JSONL from build_corpus.py (generated in memory if missing)")
     parser.add_argument("--limit", type=int, default=0, help="only the first N invoices")
     parser.add_argument("--prompt-version", default="v1")
+    parser.add_argument("--provider", default="", help="who serves the model, for its price (default: from --base-url)")
     args = parser.parse_args()
 
     project_key = os.environ.get("MCM_API_KEY", "")
@@ -58,7 +62,11 @@ def main() -> int:
             model=args.model, messages=[{"role": "user", "content": prompt}], temperature=0
         )
 
-    done = replay(invoices, complete, model=args.model, sender=sender, prompt_version=args.prompt_version)
+    provider = args.provider or provider_for(args.base_url)
+    if provider is None:
+        print("Unknown endpoint: pass --provider so the runs are priced at that provider's rate", file=sys.stderr)
+    done = replay(invoices, complete, model=args.model, sender=sender, prompt_version=args.prompt_version,
+                  provider=provider)
     sender.flush(30)
     print(f"sent {done} calls to {args.model}: {sender.sent} recorded, {sender.dropped} dropped")
     sender.close()

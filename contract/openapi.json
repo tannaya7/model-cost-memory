@@ -1463,7 +1463,7 @@
             "title": "Reference"
           },
           "retest_candidates": {
-            "description": "Cheaper models a re-test could qualify",
+            "description": "Models a re-test would settle: cheaper ones that could qualify, or the best model when the current one measures worse but that is not proven yet",
             "items": {
               "type": "string"
             },
@@ -1909,6 +1909,19 @@
               }
             ],
             "title": "Prompt Version"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who served the call, as the price list names it (e.g. openai, gemini, groq, together_ai). The same model can cost different amounts on different providers; without it the catalog's default price for the model is used",
+            "title": "Provider"
           },
           "run_id": {
             "format": "uuid",

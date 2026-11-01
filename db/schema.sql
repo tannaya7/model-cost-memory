@@ -111,7 +111,8 @@ CREATE TABLE runs (
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     invalid_at        TIMESTAMPTZ,
     retest_id         UUID REFERENCES retests(retest_id),  -- which re-test produced a RETEST run
-    expected          JSONB                         -- answer key, kept only for jobs with re-test consent
+    expected          JSONB,                        -- answer key, kept only for jobs with re-test consent
+    provider          TEXT                          -- who served the call, e.g. 'groq'; picks the price (0010)
 );
 CREATE INDEX idx_runs_retest ON runs(retest_id) WHERE retest_id IS NOT NULL;
 CREATE INDEX idx_runs_job_model ON runs(job_id, model, model_version);
@@ -173,6 +174,17 @@ CREATE TABLE model_catalog (
     source         TEXT NOT NULL DEFAULT 'SYNC' CHECK (source IN ('SYNC','MANUAL')),
     first_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (model, model_version)
+);
+
+-- Each provider's own price for a model: the same open-weight model costs different amounts on
+-- different providers. A run that names its provider is priced from here (a MANUAL catalog row wins).
+CREATE TABLE model_prices (
+    model              TEXT NOT NULL,
+    provider           TEXT NOT NULL,
+    price_in_per_mtok  NUMERIC(10,4),
+    price_out_per_mtok NUMERIC(10,4),
+    first_seen_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (model, provider)
 );
 
 CREATE TABLE alerts (

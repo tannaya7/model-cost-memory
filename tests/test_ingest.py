@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import select, text
 
 from agent_memory.ingest import prompt_hash
-from agent_memory.models import CatalogEntry, OutboxRow, Project, Run
+from agent_memory.models import CatalogEntry, OutboxRow, Project, ProviderPrice, Run
 from agent_memory.security import generate_key, hash_key
 
 
@@ -136,3 +136,31 @@ async def test_cost_falls_back_to_the_sender_then_to_unknown_without_a_price(cli
 async def test_runs_need_a_key(client, project):
     assert (await client.post("/v1/runs", json=run_body())).status_code == 401
     assert (await client.post("/v1/jobs", json=JOB)).status_code == 401
+
+
+async def test_a_run_that_names_its_provider_is_priced_at_that_providers_rate(client, project, session):
+    session.add(CatalogEntry(model="oss-20b", model_version="oss-20b", provider="cloudflare",
+                             price_in_per_mtok=Decimal("0.2"), price_out_per_mtok=Decimal("0.3")))
+    session.add(ProviderPrice(model="oss-20b", provider="groq", price_in_per_mtok=Decimal("0.075"),
+                              price_out_per_mtok=Decimal("0.3")))
+    await session.commit()
+    await client.post("/v1/jobs", json=JOB, headers=project)
+    tokens = {"model": "openai/oss-20b", "model_version": "oss-20b", "tokens_in": 1_000_000, "tokens_out": 0}
+    for provider in ("Groq", None, "nobody-sells-it"):
+        assert (await client.post("/v1/runs", json=run_body(**tokens, provider=provider), headers=project)).status_code == 202
+    rows = (await session.execute(select(Run.provider, Run.cost_usd).order_by(Run.cost_usd))).all()
+    # Groq's own price; no provider -> the catalog's; an unknown provider -> the catalog's too.
+    assert [tuple(r) for r in rows] == [("groq", Decimal("0.075000")), (None, Decimal("0.200000")),
+                                        ("nobody-sells-it", Decimal("0.200000"))]
+
+
+async def test_a_hand_entered_catalog_price_beats_the_providers_price(client, project, session):
+    session.add(CatalogEntry(model="mini", model_version="mini", provider="acme", source="MANUAL",
+                             price_in_per_mtok=Decimal("1"), price_out_per_mtok=Decimal("1")))
+    session.add(ProviderPrice(model="mini", provider="groq", price_in_per_mtok=Decimal("5"),
+                              price_out_per_mtok=Decimal("5")))
+    await session.commit()
+    await client.post("/v1/jobs", json=JOB, headers=project)
+    body = run_body(model_version="mini", tokens_in=1_000_000, tokens_out=0, provider="groq")
+    await client.post("/v1/runs", json=body, headers=project)
+    assert (await session.execute(select(Run.cost_usd))).scalar_one() == Decimal("1.000000")

@@ -142,6 +142,7 @@ def replay(
     sender: Sender | None = None,
     job: str = JOB_NAME,
     prompt_version: str | None = "v1",
+    provider: str | None = None,
 ) -> int:
     """Send each invoice to a model and record every call through the SDK.
 
@@ -151,7 +152,7 @@ def replay(
     """
     count = 0
     for invoice in invoices:
-        with RunRecorder(job=job, prompt_version=prompt_version, sender=sender) as rec:
+        with RunRecorder(job=job, prompt_version=prompt_version, provider=provider, sender=sender) as rec:
             response = complete(invoice.prompt)
             rec.capture(response, prompt=invoice.prompt, model=model, expected=invoice.expected)
         count += 1

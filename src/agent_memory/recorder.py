@@ -2,13 +2,17 @@
 
     from agent_memory.recorder import RunRecorder
 
-    with RunRecorder(job="invoice-extract") as rec:
+    with RunRecorder(job="invoice-extract", provider="anthropic") as rec:
         response = client.messages.create(model="...", messages=[...])   # the app's own call, unchanged
         rec.capture(response, prompt=prompt)                              # reads usage, model and output
 
 It copies the run to POST /v1/runs in a background thread. It adds well under 5 ms to the call, never
 waits for the network, and never raises into the application: if the API is down the run is dropped
 after a short retry and a warning is logged. The production call itself never goes through us.
+
+`provider` says who served the call, so it is priced at that provider's rate: the same open-weight
+model can cost several times more on one provider than another. `provider_for(client.base_url)` names
+the common ones.
 
 Configuration comes from the environment: MCM_API_URL (default http://127.0.0.1:8000) and MCM_API_KEY.
 """
@@ -23,6 +27,7 @@ import threading
 import time
 import uuid
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -31,6 +36,21 @@ from .privacy import sanitize_tool_calls
 log = logging.getLogger("agent_memory.recorder")
 
 DEFAULT_API_URL = "http://127.0.0.1:8000"
+
+# Provider names as the price list spells them.
+KNOWN_HOSTS = {
+    "api.openai.com": "openai",
+    "api.anthropic.com": "anthropic",
+    "generativelanguage.googleapis.com": "gemini",
+    "api.groq.com": "groq",
+    "api.together.xyz": "together_ai",
+    "api.mistral.ai": "mistral",
+    "api.deepseek.com": "deepseek",
+    "api.fireworks.ai": "fireworks_ai",
+    "api.cerebras.ai": "cerebras",
+    "api.x.ai": "xai",
+    "api.deepinfra.com": "deepinfra",
+}
 _STOP = object()
 
 
@@ -160,6 +180,20 @@ def default_sender() -> Sender:
         return _default_sender
 
 
+def provider_for(base_url: Any) -> str | None:
+    """The provider behind an endpoint address, or None when it is not a known one.
+
+    Local Ollama (port 11434) is "ollama". Anything else should be named by hand.
+    """
+    parts = urlsplit(str(base_url or ""))
+    host = (parts.hostname or "").lower()
+    if host in KNOWN_HOSTS:
+        return KNOWN_HOSTS[host]
+    if host in ("localhost", "127.0.0.1") and parts.port == 11434:
+        return "ollama"
+    return None
+
+
 def _get(obj: Any, *path: str) -> Any:
     """Read obj.a.b or obj['a']['b'], returning None when any step is missing."""
     for name in path:
@@ -230,11 +264,13 @@ class RunRecorder:
         job: str,
         *,
         prompt_version: str | None = None,
+        provider: str | None = None,
         sender: Sender | None = None,
         send_tool_arguments: bool = False,
     ) -> None:
         self.job = job
         self.prompt_version = prompt_version
+        self.provider = provider
         self.send_tool_arguments = send_tool_arguments  # off by default: arguments can hold sensitive data
         self._sender = sender
         self._started = 0.0
@@ -259,7 +295,7 @@ class RunRecorder:
         `response` is the provider response; usage, resolved model and output are read from it.
         `prompt` is the text that was sent. `model` is the model that was asked for (defaults to the
         resolved one). Anything the response does not carry can be passed as a keyword: tokens_in,
-        tokens_out, cache_read_tokens, cache_write_tokens, cost_usd, output, tool_calls, latency_ms.
+        tokens_out, cache_read_tokens, cache_write_tokens, cost_usd, output, tool_calls, latency_ms, provider.
         """
         try:
             data = read_response(response, include_arguments=self.send_tool_arguments) if response is not None else {}
@@ -274,6 +310,7 @@ class RunRecorder:
                 "prompt": prompt,
                 "model": model or resolved,
                 "prompt_version": self.prompt_version,
+                **({"provider": self.provider} if self.provider else {}),
                 **data,
             }
         except Exception:
