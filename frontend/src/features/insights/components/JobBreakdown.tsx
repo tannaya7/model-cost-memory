@@ -77,7 +77,13 @@ const columns: Column<Breakdown>[] = [
       </span>
     ),
   },
-  { key: "cost", header: "Mean cost", render: (r) => <span className="font-mono">${r.mean_cost_usd.toFixed(4)}</span> },
+  {
+    key: "cost",
+    header: "Mean cost",
+    render: (r) => (
+      <span className="font-mono">{r.mean_cost_usd !== null ? `$${r.mean_cost_usd.toFixed(4)}` : "no price"}</span>
+    ),
+  },
   {
     key: "cps",
     header: "Cost per success",

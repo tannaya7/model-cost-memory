@@ -57,6 +57,10 @@ def _int(name: str, default: int) -> int:
 @dataclass(frozen=True)
 class Settings:
     database_url: str = ""
+    # Connections per process (API, worker, scheduler, and any script): pool + overflow. Four processes
+    # at the defaults use at most 20, within what a small or free-tier Postgres allows.
+    db_pool_size: int = 3
+    db_max_overflow: int = 2
     # Re-tests: a hard monthly ceiling per project (default for new projects).
     retest_monthly_cap_usd: float = 10.0
     # Recommendation: minimum weighted evidence before a verdict, and the tolerance rule: a cheaper
@@ -105,6 +109,8 @@ class Settings:
         url = os.environ.get("DATABASE_URL", "")
         return cls(
             database_url=normalize_database_url(url) if url else "",
+            db_pool_size=_int("DB_POOL_SIZE", 3),
+            db_max_overflow=_int("DB_MAX_OVERFLOW", 2),
             retest_monthly_cap_usd=_float("RETEST_MONTHLY_CAP_USD", 10.0),
             evidence_floor=_float("EVIDENCE_FLOOR", 25.0),
             tolerance_points=_float("TOLERANCE_POINTS", 0.03),

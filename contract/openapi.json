@@ -134,8 +134,16 @@
             "type": "string"
           },
           "mean_cost_usd": {
-            "title": "Mean Cost Usd",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Over the group's priced runs; null when none is priced",
+            "title": "Mean Cost Usd"
           },
           "model": {
             "title": "Model",
@@ -1963,8 +1971,16 @@
             "type": "integer"
           },
           "cost_usd": {
-            "title": "Cost Usd",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when the model has no catalog price and none was sent",
+            "title": "Cost Usd"
           },
           "created_at": {
             "format": "date-time",
@@ -2152,8 +2168,16 @@
             "type": "integer"
           },
           "cost_usd": {
-            "title": "Cost Usd",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when the model has no catalog price and none was sent",
+            "title": "Cost Usd"
           },
           "created_at": {
             "format": "date-time",
@@ -2342,8 +2366,15 @@
             "type": "number"
           },
           "spend_usd": {
+            "description": "Priced runs only; see unpriced_runs",
             "title": "Spend Usd",
             "type": "number"
+          },
+          "unpriced_runs": {
+            "default": 0,
+            "description": "Runs on models with no known price, not in spend_usd",
+            "title": "Unpriced Runs",
+            "type": "integer"
           }
         },
         "required": [

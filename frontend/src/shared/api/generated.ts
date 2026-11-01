@@ -665,8 +665,11 @@ export interface components {
              * @description 'all', an input-size band ('under 8k', '8k to 32k', 'over 32k') or a prompt version
              */
             group: string;
-            /** Mean Cost Usd */
-            mean_cost_usd: number;
+            /**
+             * Mean Cost Usd
+             * @description Over the group's priced runs; null when none is priced
+             */
+            mean_cost_usd: number | null;
             /** Model */
             model: string;
             /** Pass Rate */
@@ -1486,8 +1489,11 @@ export interface components {
             cache_read_tokens: number;
             /** Cache Write Tokens */
             cache_write_tokens: number;
-            /** Cost Usd */
-            cost_usd: number;
+            /**
+             * Cost Usd
+             * @description Null when the model has no catalog price and none was sent
+             */
+            cost_usd: number | null;
             /**
              * Created At
              * Format: date-time
@@ -1565,8 +1571,11 @@ export interface components {
             cache_read_tokens: number;
             /** Cache Write Tokens */
             cache_write_tokens: number;
-            /** Cost Usd */
-            cost_usd: number;
+            /**
+             * Cost Usd
+             * @description Null when the model has no catalog price and none was sent
+             */
+            cost_usd: number | null;
             /**
              * Created At
              * Format: date-time
@@ -1651,8 +1660,17 @@ export interface components {
              * @description Share of the project's spend in the window, 0..1
              */
             share: number;
-            /** Spend Usd */
+            /**
+             * Spend Usd
+             * @description Priced runs only; see unpriced_runs
+             */
             spend_usd: number;
+            /**
+             * Unpriced Runs
+             * @description Runs on models with no known price, not in spend_usd
+             * @default 0
+             */
+            unpriced_runs: number;
         };
         /** UserOut */
         UserOut: {

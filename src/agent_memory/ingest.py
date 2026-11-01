@@ -104,7 +104,9 @@ async def record_run(
     if price is not None:
         cost = compute_cost(price, body.tokens_in, body.tokens_out, body.cache_read_tokens, body.cache_write_tokens)
     else:
-        cost = Decimal(str(body.cost_usd)) if body.cost_usd is not None else Decimal(0)
+        # No catalog price and no cost sent: unknown, not free. Storing 0 would make the model win
+        # every cost comparison.
+        cost = Decimal(str(body.cost_usd)) if body.cost_usd is not None else None
 
     result = check_run(job.check_kind, job.check_config, body.output, body.expected)
     state = "CAPTURED" if result.outcome is Outcome.UNKNOWN else "CHECKED"
@@ -135,14 +137,15 @@ async def record_run(
         "run recorded",
         extra={"run_id": str(body.run_id), "job_id": str(job.job_id), "project_id": project.project_id,
                "model": body.model, "model_version": body.model_version, "outcome": result.outcome.value,
-               "from_state": None, "to_state": state, "cost_usd": float(cost)},
+               "from_state": None, "to_state": state, "cost_usd": float(cost) if cost is not None else None},
     )
     session.add(OutboxRow(run_id=body.run_id, op="UPSERT", payload={"run_id": str(body.run_id), "prompt_hash": digest}))
     source = "Re-test runner" if run_kind == "RETEST" else "RunRecorder"
     flow.emit(session, project.project_id, "sdk", f"{source} captured a call to '{body.model}' for '{job.name}'",
               run_id=body.run_id, data={"job": job.name, "model": body.model, "run_kind": run_kind})
     flow.emit(session, project.project_id, "api", "POST /v1/runs accepted: stored and queued for indexing",
-              run_id=body.run_id, data={"cost_usd": float(cost), "tokens_in": body.tokens_in})
+              run_id=body.run_id, data={"cost_usd": float(cost) if cost is not None else None,
+                                        "tokens_in": body.tokens_in})
     verdict = {"PASS": "Check passed", "FAIL": "Check failed", "UNKNOWN": "Waiting for a label"}[result.outcome.value]
     flow.emit(session, project.project_id, "check", f"{verdict}: {result.reason}" if result.reason else verdict,
               run_id=body.run_id, data={"outcome": result.outcome.value})

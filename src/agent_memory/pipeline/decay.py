@@ -21,7 +21,7 @@ from sqlalchemy import bindparam, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import Settings, get_settings
-from ..models import Run
+from ..models import Job, Run
 from ..versions import family, normalize
 from .scoring import age_days, freshness, importance, is_archived, stability_days
 
@@ -71,51 +71,65 @@ async def recompute(
     settings = settings or get_settings()
     now = now or datetime.now(UTC)
     stats = DecayStats()
+    jobs = (
+        await session.execute(select(Job.job_id).where(*([Job.project_id == project_id] if project_id else [])))
+    ).scalars().all()
+    # One job at a time, CHUNK runs at a time: memory stays bounded however many runs accumulate.
+    for job_id in jobs:
+        await _recompute_job(session, job_id, now, settings, stats)
+    if stats.archived:
+        log.info("decay: scored %d runs, archived %d", stats.scored, stats.archived)
+    return stats
 
-    mean_cost = {
-        job_id: float(avg or 0)
-        for job_id, avg in (await session.execute(select(Run.job_id, func.avg(Run.cost_usd)).group_by(Run.job_id))).all()
-    }
-    current = await current_versions(session)
 
-    runs = (
-        await session.execute(
-            select(Run.run_id, Run.job_id, Run.project_id, Run.model, Run.model_version, Run.outcome, Run.cost_usd,
-                   Run.created_at, Run.state)
-            .where(Run.state != "ARCHIVED", *([Run.project_id == project_id] if project_id else []))
-        )
-    ).all()
-
-    updates = []
-    for run in runs:
-        superseded = normalize(run.model_version) != current[(run.job_id, family_key(run.model, run.model_version))]
-        imp = importance(run.outcome, float(run.cost_usd), mean_cost.get(run.job_id, 0.0))
-        stab = stability_days(
-            imp, superseded=superseded, base_days=settings.decay_base_days,
-            superseded_factor=settings.version_factor_superseded,
-        )
-        weight = freshness(age_days(run.created_at, now), stab)
-        archive = is_archived(weight, settings.archive_below_weight) and run.state in ARCHIVABLE_STATES
-        updates.append({"b_id": run.run_id, "b_imp": imp, "b_stab": stab, "b_state": "ARCHIVED" if archive else run.state})
-        stats.scored += 1
-        stats.superseded += superseded
-        stats.archived += archive
-        if archive:
-            log.info(
-                "run archived",
-                extra={"run_id": str(run.run_id), "job_id": str(run.job_id), "project_id": run.project_id,
-                       "from_state": run.state, "to_state": "ARCHIVED", "weight": round(weight, 4),
-                       "age_days": round(age_days(run.created_at, now), 1), "superseded": superseded},
-            )
-
+async def _recompute_job(session: AsyncSession, job_id, now: datetime, settings: Settings, stats: DecayStats) -> None:
+    mean_cost = float(
+        (await session.execute(select(func.avg(Run.cost_usd)).where(Run.job_id == job_id))).scalar() or 0
+    )
+    current = await current_versions(session, job_id)
     table = Run.__table__
     statement = (
         update(table).where(table.c.run_id == bindparam("b_id"))
         .values(importance_score=bindparam("b_imp"), stability=bindparam("b_stab"), state=bindparam("b_state"))
     )
-    for start in range(0, len(updates), CHUNK):
-        await session.execute(statement, updates[start : start + CHUNK])
-    await session.commit()
-    if stats.archived:
-        log.info("decay: scored %d runs, archived %d", stats.scored, stats.archived)
-    return stats
+    after = None
+    while True:
+        query = (
+            select(Run.run_id, Run.job_id, Run.project_id, Run.model, Run.model_version, Run.outcome, Run.cost_usd,
+                   Run.created_at, Run.state)
+            .where(Run.job_id == job_id, Run.state != "ARCHIVED").order_by(Run.run_id).limit(CHUNK)
+        )
+        if after is not None:
+            query = query.where(Run.run_id > after)
+        runs = (await session.execute(query)).all()
+        if not runs:
+            break
+        after = runs[-1].run_id
+        updates = [_score(run, current, mean_cost, now, settings, stats) for run in runs]
+        await session.execute(statement, updates)
+        await session.commit()
+
+
+def _score(run, current: dict, mean_cost: float, now: datetime, settings: Settings, stats: DecayStats) -> dict:
+    """One run's importance, stability and state, as bind parameters for the batched UPDATE."""
+    version = normalize(run.model_version)
+    # An unrecognised version is treated as current (TIP 3.7), so one odd row never stops the pass.
+    superseded = version != current.get((run.job_id, family_key(run.model, run.model_version)), version)
+    imp = importance(run.outcome, float(run.cost_usd or 0), mean_cost)
+    stab = stability_days(
+        imp, superseded=superseded, base_days=settings.decay_base_days,
+        superseded_factor=settings.version_factor_superseded,
+    )
+    weight = freshness(age_days(run.created_at, now), stab)
+    archive = is_archived(weight, settings.archive_below_weight) and run.state in ARCHIVABLE_STATES
+    stats.scored += 1
+    stats.superseded += superseded
+    stats.archived += archive
+    if archive:
+        log.info(
+            "run archived",
+            extra={"run_id": str(run.run_id), "job_id": str(run.job_id), "project_id": run.project_id,
+                   "from_state": run.state, "to_state": "ARCHIVED", "weight": round(weight, 4),
+                   "age_days": round(age_days(run.created_at, now), 1), "superseded": superseded},
+        )
+    return {"b_id": run.run_id, "b_imp": imp, "b_stab": stab, "b_state": "ARCHIVED" if archive else run.state}

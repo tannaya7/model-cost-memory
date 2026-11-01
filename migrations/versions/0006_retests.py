@@ -58,7 +58,12 @@ def upgrade() -> None:
     """)
     op.execute("ALTER TABLE runs ADD COLUMN retest_id UUID REFERENCES retests(retest_id)")
     op.execute("ALTER TABLE runs ADD COLUMN expected JSONB")
-    op.execute("CREATE INDEX idx_runs_retest ON runs(retest_id) WHERE retest_id IS NOT NULL")
+    # runs is the table that grows: build its index without locking writes. CONCURRENTLY cannot run
+    # inside a transaction, hence the autocommit block. (0003's index predates this rule; it was built
+    # while the table was small.)
+    with op.get_context().autocommit_block():
+        op.execute("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_runs_retest ON runs(retest_id) "
+                   "WHERE retest_id IS NOT NULL")
     op.execute("ALTER TABLE projects ADD COLUMN retest_allowed BOOLEAN NOT NULL DEFAULT true")
 
 

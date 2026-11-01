@@ -30,6 +30,10 @@ from .models import EMBEDDING_DIM
 log = logging.getLogger("agent_memory.embeddings")
 
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+# The exact weights, pinned. The revision is part of the embedder's name, which is stored with every
+# vector (runs.embedding_model) and keys the persistent embedding cache, so upgrading the model is an
+# explicit change that makes old vectors ineligible for reuse instead of silently mixing vector spaces.
+MODEL_REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
 _WORD = re.compile(r"[a-z0-9]+")
 
 
@@ -59,13 +63,13 @@ class HashingEmbedder:
 
 
 class MiniLMEmbedder:
-    name = "minilm"
+    name = f"minilm@{MODEL_REVISION[:12]}"
     dim = EMBEDDING_DIM
 
     def __init__(self, batch_size: int = 32) -> None:
         from sentence_transformers import SentenceTransformer  # heavy; imported only when used
 
-        self._model = SentenceTransformer(MODEL_NAME)
+        self._model = SentenceTransformer(MODEL_NAME, revision=MODEL_REVISION)
         self._batch_size = batch_size
 
     def embed(self, texts: list[str]) -> list[list[float]]:

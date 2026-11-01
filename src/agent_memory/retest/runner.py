@@ -239,7 +239,7 @@ async def run_retest(
                 row.runs_done += 1
                 row.passed += run.outcome == "PASS"
                 row.failed += run.outcome == "FAIL"
-                row.spent_usd = Decimal(row.spent_usd) + Decimal(run.cost_usd)
+                row.spent_usd = Decimal(row.spent_usd) + Decimal(run.cost_usd or 0)
                 await s.commit()
             if progress.done % EARLY_CHECK_EVERY == 0 and not progress.stop_status:
                 await early_check()
