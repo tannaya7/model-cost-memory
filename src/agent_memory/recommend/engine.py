@@ -188,6 +188,11 @@ def decide(
                 f"use; a re-test of {recommended.model} would settle it"
             )
             settle.append(recommended.model)
+            # Its status says so too: "good enough" next to the reference is not good enough to replace the
+            # model in use, and a re-test of it must not stop early on that status before it settles this.
+            recommended.status, recommended.eligible = "UNSURE", False
+            recommended.why = (f"Not yet sure it is within {_points(margin)} of {current.model}, the model in use; "
+                               "a re-test would settle it")
             verdict, recommended = "HOLD", current
     else:
         # The current model is not proven good enough, but nothing cheaper is either.
@@ -217,6 +222,7 @@ def decide(
     retest = [
         m.model for m in models
         if m.status in ("UNSURE", "BELOW_FLOOR") and m is not recommended and _cheaper(m, recommended)
+        and m.model not in settle
     ]
     if retest:
         next_step = f"Re-test {', '.join(retest)}: cheaper, but not enough evidence yet"
