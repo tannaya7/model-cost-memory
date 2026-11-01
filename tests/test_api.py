@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import select
 
 from agent_memory.models import Job, Project, Run
 from agent_memory.security import generate_key, hash_key
@@ -109,3 +110,23 @@ async def test_bad_input_is_a_422(client, seeded):
     assert (await client.get("/v1/runs", headers=auth(key), params={"cursor": "not-a-cursor"})).status_code == 422
     assert (await client.get("/v1/runs", headers=auth(key), params={"limit": 0})).status_code == 422
     assert (await client.get("/v1/runs", headers=auth(key), params={"outcome": "MAYBE"})).status_code == 422
+
+
+async def test_each_run_shows_its_importance_and_its_weight_in_the_recommendation_now(client, seeded, session):
+    # The weight is e^(-age/S): a month-old run on the current version counts e^-1 at the default 30 days.
+    runs = (await client.get("/v1/runs?job=invoice-extract", headers=auth(seeded["demo"]))).json()["items"]
+    assert {r["importance_score"] for r in runs} == {1.0}
+    assert all(0 < r["weight"] < 1 for r in runs)
+    detail = (await client.get(f"/v1/runs/{runs[0]['run_id']}", headers=auth(seeded["demo"]))).json()
+    assert detail["weight"] == pytest.approx(runs[0]["weight"], rel=1e-3)
+    # A run on a version that has since been replaced fades four times faster.
+    job = (await session.execute(select(Job).where(Job.name == "invoice-extract"))).scalar_one()
+    for n, version, minutes in ((97, "small-2026-01-01", 1), (98, "small-2026-09-01", 2)):
+        session.add(Run(run_id=uuid.UUID(int=n), job_id=job.job_id, project_id="demo", prompt="p", prompt_hash="h",
+                        model="small", model_version=version, outcome="PASS", state="CHECKED", run_kind="PRODUCTION",
+                        created_at=T0 + timedelta(minutes=minutes)))
+    await session.commit()
+    weights = {r["run_id"]: r["weight"] for r in
+               (await client.get("/v1/runs?job=invoice-extract", headers=auth(seeded["demo"]))).json()["items"]}
+    old, new = weights[str(uuid.UUID(int=97))], weights[str(uuid.UUID(int=98))]
+    assert old == pytest.approx(new ** 4, rel=1e-2)
