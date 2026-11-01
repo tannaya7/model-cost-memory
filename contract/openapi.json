@@ -2080,6 +2080,12 @@
             ],
             "title": "Effort"
           },
+          "importance_score": {
+            "default": 1.0,
+            "description": "How much the run matters (failures and costly runs more): what decides archiving and re-test sampling",
+            "title": "Importance Score",
+            "type": "number"
+          },
           "job": {
             "description": "The job's name",
             "title": "Job",
@@ -2220,6 +2226,18 @@
               }
             ],
             "title": "Tool Calls"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How much it counts in the recommendation now: e^(-age/S), S shorter once its version is replaced",
+            "title": "Weight"
           }
         },
         "required": [
@@ -2287,6 +2305,12 @@
               }
             ],
             "title": "Effort"
+          },
+          "importance_score": {
+            "default": 1.0,
+            "description": "How much the run matters (failures and costly runs more): what decides archiving and re-test sampling",
+            "title": "Importance Score",
+            "type": "number"
           },
           "job": {
             "description": "The job's name",
@@ -2398,6 +2422,18 @@
           "tokens_out": {
             "title": "Tokens Out",
             "type": "integer"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How much it counts in the recommendation now: e^(-age/S), S shorter once its version is replaced",
+            "title": "Weight"
           }
         },
         "required": [
