@@ -60,10 +60,12 @@ Simulated data, run through the production engine, decay, consolidation and regr
   Keeping the evidence fresh costs 9% of production spend. In a world where nothing changes it does not
   wander: 2-3 changes of answer per timeline, never to a model that is not good enough.
 - **Regression detection** ([version](reports/regression_detection.json),
-  [silent](reports/silent_drop_detection.json)), 50 trials per size: a version upgrade that costs 5 points is
-  caught 96% of the time and 10 points always, the day after it lands, with 1 false alarm in 50 unchanged
-  upgrades. A silent drop under an unchanged name is caught 68% of the time at 5 points and always at 10, with
-  no false alarms.
+  [silent](reports/silent_drop_detection.json)), 100 trials per size: a version upgrade that costs 5 points is
+  caught 93% of the time (likely 86-97%) and 10 points always, the day after it lands, with 2 false alarms in
+  100 unchanged upgrades. A silent drop under an unchanged name, watched for 28 days, is caught at 5 points
+  77% of the time at 50 runs a day and 100/100 at 100 runs a day, and always at 10 points, with 1 false
+  alarm in 100 at 50 runs a day: **90% of 5-point silent drops once a job has about 100 runs a day**. False
+  alarms at 100 runs a day are still to be measured.
 - **Speed** ([report](reports/speed.md)): a recommendation for a job with 100,000 runs in under 300 ms, and
   for 500,000 runs about 1 s cold and under 100 ms under live traffic; recording adds about 0.01 ms (p99
   0.2 ms) to the application's own call, whether the API is up or not.
