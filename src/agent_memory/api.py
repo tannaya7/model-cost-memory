@@ -35,7 +35,7 @@ from .recommend.cache import cached_recommend
 from .recommend.engine import JobRecommendation, ModelEvidence
 from .recommend.summary import summarize
 from .retest import keys as provider_keys
-from .retest.runner import RetestRefused, enqueue, spent_this_month
+from .retest.runner import RetestRefused, enqueue, spent_this_month, start_on_first_key
 from .schemas import (
     AlertOut,
     BreakdownOut,
@@ -343,6 +343,7 @@ def _recommendation_out(r: JobRecommendation, summary: str | None = None,
         rules=RecommendationRules(
             confidence=r.settings.confidence_level, margin=r.settings.tolerance_points,
             evidence_floor=r.settings.evidence_floor,
+            switch_confidence=max(r.settings.switch_confidence, r.settings.confidence_level),
         ),
         models=[
             ModelEvidenceOut(
@@ -581,6 +582,12 @@ async def put_provider_key(
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     await session.commit()
+    # A job that has only used one model is compared with a cheaper one now, once per job.
+    try:
+        await start_on_first_key(session, project)
+    except Exception:  # the key is saved either way; the scheduler's triggers still run
+        await session.rollback()
+        log.exception("first-key re-tests were not started", extra={"project_id": project.project_id})
     return _key_out(key)
 
 

@@ -59,6 +59,10 @@ recommendation       lowest cost per success among GOOD_ENOUGH models, never RET
                      needs the pick shown within 3 points of the model in use, not only of the best;
                      otherwise HOLD and re-test it. A model in use that measures more than 3 points
                      behind the best, unproven, gets the best model re-tested to settle it
+switch confidence    advising a move to a cheaper model not advised before needs 99% (SWITCH_CONFIDENCE),
+                     keeping advice already given 95%: the verdict is recomputed daily, and at 95%
+                     alone a world where nothing changed saw ~6 changes of advice per 120 days and,
+                     on 0.5% of days, a model outside the margin; at 99%, 2-3 changes and none
 savings forecast     saving = (cost per success now − recommended) × successes per month;
                      extra failures = (pass rate now − recommended) × runs per month, with its interval
 regression           one-sided two-proportion z-test, the current version against the one it replaced:

@@ -21,6 +21,7 @@ recommended and why it changed.
   current without anyone curating a test set.
 - A cheaper model is recommended only when the system is **95% sure it is at most 3 points worse** than the
   best, ranked by **cost per successful run**, with a savings forecast and the failing runs behind it.
+  Advising a move away from the model in use asks for **99%**, so the advice does not flip on daily noise.
 - Scheduled jobs store each changed verdict with its lineage, detect regressions across version changes (and
   silent drops under an unchanged name), alert a signed webhook, track model retirements, and **re-test**
   cheaper candidates on the customer's own key, always within a budget and a monthly cap.
@@ -49,9 +50,12 @@ measured results: [`reports/`](reports/)
 
 Simulated data, run through the production engine, decay, consolidation and regression code:
 
-- **Staleness experiment** ([report](reports/staleness_experiment.md)): as the workload drifts and a new model
-  version arrives, a curated evidence set frozen at day 14 stops picking the right model, while the
-  self-maintaining memory keeps up.
+- **Staleness experiment** ([report](reports/staleness_experiment.md)), 5 timelines of 120 days: as the
+  workload drifts and a new model version arrives, the self-maintaining memory picks the right model 75% of
+  the time over the whole timeline (92% in the second half), a test set frozen at day 14 25% (0%), and one
+  re-checked every month 69% (88%). Its wrong answers are all the safe kind: a good model that costs more.
+  Keeping the evidence fresh costs 9% of production spend. In a world where nothing changes it does not
+  wander: 2-3 changes of answer per timeline, never to a model that is not good enough.
 - **Regression detection** ([version](reports/regression_detection.json),
   [silent](reports/silent_drop_detection.json)), 50 trials per size: a version upgrade that costs 5 points is
   caught 96% of the time and 10 points always, the day after it lands, with 1 false alarm in 50 unchanged

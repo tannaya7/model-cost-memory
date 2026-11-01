@@ -42,7 +42,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..catalog.lifecycle import UNKNOWN, lifecycles
 from ..config import Settings, get_settings
-from ..models import Job, Run
+from ..models import Job, Recommendation, Run
 from ..pipeline.decay import current_versions, family_key
 from ..pipeline.scoring import stability_days
 from ..versions import normalize
@@ -113,9 +113,14 @@ def _within(candidate: ModelEvidence, current: ModelEvidence, margin: float, z: 
 
 
 def decide(
-    inputs: list[ModelInput], current_model: str | None, *, floor: float, margin: float, confidence: float
+    inputs: list[ModelInput], current_model: str | None, *, floor: float, margin: float, confidence: float,
+    switch_confidence: float | None = None, advised: str | None = None,
 ) -> Decision:
-    """The verdict for one job, from per-model evidence and the model production uses now."""
+    """The verdict for one job, from per-model evidence and the model production uses now.
+
+    `advised` is the cheaper model the job was last told to move to, if any. Advising a move to any
+    other model needs `switch_confidence` (when higher than `confidence`); keeping advice already given
+    needs only `confidence`. The gap between the two stops the answer flapping on day-to-day noise."""
     z = z_for(confidence)
     models = [ModelEvidence(**vars(m)) for m in inputs]
     judged: list[ModelEvidence] = []
@@ -180,19 +185,31 @@ def decide(
     elif current.status in ("RETIRED", "CLEARLY_WORSE"):
         verdict = "SWITCH"
     elif current.status == "GOOD_ENOUGH" or _cheaper(recommended, current):
-        if _within(recommended, current, margin, z):
+        new_advice = (switch_confidence is not None and switch_confidence > confidence
+                      and recommended.model != advised)
+        z_move = z_for(switch_confidence) if new_advice else z
+        if _within(recommended, current, margin, z_move):
             verdict = "DOWNGRADE"  # what qualifies and costs less per success
         else:
-            warnings.append(
-                f"Not yet sure {recommended.model} is within {_points(margin)} of {current.model}, the model in "
-                f"use; a re-test of {recommended.model} would settle it"
-            )
+            if new_advice and _within(recommended, current, margin, z):
+                warnings.append(
+                    f"{recommended.model} is likely within {_points(margin)} of {current.model}, the model in use, "
+                    f"but advising a switch needs {switch_confidence:.0%} confidence; a re-test of "
+                    f"{recommended.model} would settle it"
+                )
+                why = (f"Within {_points(margin)} of {current.model} at {confidence:.0%}, not yet at the "
+                       f"{switch_confidence:.0%} a switch needs; a re-test would settle it")
+            else:
+                warnings.append(
+                    f"Not yet sure {recommended.model} is within {_points(margin)} of {current.model}, the model in "
+                    f"use; a re-test of {recommended.model} would settle it"
+                )
+                why = (f"Not yet sure it is within {_points(margin)} of {current.model}, the model in use; "
+                       "a re-test would settle it")
             settle.append(recommended.model)
             # Its status says so too: "good enough" next to the reference is not good enough to replace the
             # model in use, and a re-test of it must not stop early on that status before it settles this.
-            recommended.status, recommended.eligible = "UNSURE", False
-            recommended.why = (f"Not yet sure it is within {_points(margin)} of {current.model}, the model in use; "
-                               "a re-test would settle it")
+            recommended.status, recommended.eligible, recommended.why = "UNSURE", False, why
             verdict, recommended = "HOLD", current
     else:
         # The current model is not proven good enough, but nothing cheaper is either.
@@ -427,9 +444,16 @@ async def recommend(
             mean_cost_usd=mean_cost,
             catalog_status=life.status, shutdown_date=life.shutdown_date, catalog_note=life.note,
         ))
+    advised = (
+        await session.execute(
+            select(Recommendation.model).where(Recommendation.job_id == job.job_id, Recommendation.invalid_at.is_(None),
+                                               Recommendation.verdict == "DOWNGRADE")
+        )
+    ).scalar_one_or_none()
     decision = decide(
         inputs, current_model, floor=settings.evidence_floor,
         margin=settings.tolerance_points, confidence=settings.confidence_level,
+        switch_confidence=settings.switch_confidence, advised=advised,
     )
 
     runs_per_month = (

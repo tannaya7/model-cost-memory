@@ -59,7 +59,7 @@ CREATE TABLE retests (                              -- replaying sampled past ru
     job_id          UUID NOT NULL REFERENCES jobs(job_id),
     project_id      TEXT NOT NULL REFERENCES projects(project_id),
     candidate_model TEXT NOT NULL,
-    trigger         TEXT NOT NULL CHECK (trigger IN ('MANUAL','NEW_MODEL','UNSURE')),
+    trigger         TEXT NOT NULL CHECK (trigger IN ('MANUAL','NEW_MODEL','UNSURE','FIRST_KEY')),
     status          TEXT NOT NULL DEFAULT 'QUEUED' CHECK (status IN
                       ('QUEUED','RUNNING','DONE','STOPPED_BUDGET','STOPPED_CAP','FAILED')),
     budget_usd      NUMERIC(10,4) NOT NULL CHECK (budget_usd > 0),

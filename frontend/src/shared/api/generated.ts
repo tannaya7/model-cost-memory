@@ -1299,6 +1299,11 @@ export interface components {
              * @description How much worse (0.03 = 3 points) a cheaper model may be and still qualify
              */
             margin: number;
+            /**
+             * Switch Confidence
+             * @description Confidence needed to advise moving to a cheaper model not advised before, e.g. 0.99
+             */
+            switch_confidence: number;
         };
         /**
          * RetestCreate
@@ -1386,7 +1391,7 @@ export interface components {
              * Trigger
              * @enum {string}
              */
-            trigger: "MANUAL" | "NEW_MODEL" | "UNSURE";
+            trigger: "MANUAL" | "NEW_MODEL" | "UNSURE" | "FIRST_KEY";
         };
         /** RunAccepted */
         RunAccepted: {

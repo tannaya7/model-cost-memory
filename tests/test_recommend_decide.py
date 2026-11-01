@@ -118,3 +118,29 @@ def test_a_current_model_that_measures_well_below_the_best_asks_for_a_re_test_of
     assert d.warnings == ["mini measures 7.0 points below big, not yet proven; a re-test of big will show "
                           "whether to switch"]
     assert d.retest_candidates == ["big"]
+
+
+def test_advising_a_switch_needs_99_percent_and_keeping_the_advice_needs_95():
+    # Every day's verdict is another look at the data: at 95% a lucky streak passes now and then and the
+    # advice flaps. So new advice to move needs 99%; advice already given stays while it holds at 95%.
+    evidence = [model("big", 0.99, 400, 0.03), model("mini", 0.98, 400, 0.001)]
+    new = decide(evidence, "big", **RULES, switch_confidence=0.99)
+    assert (new.verdict, new.recommended.model) == ("HOLD", "big")
+    assert new.warnings == ["mini is likely within 3 points of big, the model in use, but advising a switch needs "
+                            "99% confidence; a re-test of mini would settle it"]
+    assert new.retest_candidates == ["mini"]
+    assert (by_name(new)["mini"].status, by_name(new)["mini"].eligible) == ("UNSURE", False)
+    assert by_name(new)["mini"].why == ("Within 3 points of big at 95%, not yet at the 99% a switch needs; "
+                                        "a re-test would settle it")
+
+    kept = decide(evidence, "big", **RULES, switch_confidence=0.99, advised="mini")
+    assert (kept.verdict, kept.recommended.model) == ("DOWNGRADE", "mini")
+
+    proven = decide([model("big", 0.99, 1200, 0.03), model("mini", 0.98, 1200, 0.001)], "big", **RULES,
+                    switch_confidence=0.99)
+    assert (proven.verdict, proven.recommended.model) == ("DOWNGRADE", "mini")
+
+
+def test_a_switch_confidence_no_higher_than_the_confidence_changes_nothing():
+    evidence = [model("big", 0.99, 400, 0.03), model("mini", 0.98, 400, 0.001)]
+    assert decide(evidence, "big", **RULES, switch_confidence=0.95).verdict == "DOWNGRADE"

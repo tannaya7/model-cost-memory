@@ -42,7 +42,9 @@ export function ProviderKeyForm({ onSaved }: { onSaved: () => void }) {
         <p className="mt-1 text-xs text-dim">
           Re-tests call the candidate model with your own provider key, so the spending is yours and stays
           under the monthly cap above. Saving the key is your permission for re-tests to run within that cap,
-          including ones the system starts when a cheaper model appears. The key is encrypted on the server and
+          including ones the system starts when a cheaper model appears. A job that has only ever used one
+          model gets one re-test of a cheaper model from this provider as soon as you save, with a small budget ($1 by default). Only
+          models with a known price are re-tested, so the cap always holds. The key is encrypted on the server and
           only its last four characters are ever shown again. You can remove it at any time.
         </p>
       </div>

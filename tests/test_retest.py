@@ -11,17 +11,19 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from agent_memory.catalog.sync import CatalogRecord
 from agent_memory.config import Settings
 from agent_memory.ingest import prompt_hash
-from agent_memory.models import CatalogEntry, Job, Project, ProviderKey, Retest, Run
+from agent_memory.models import CatalogEntry, Job, Project, ProviderKey, ProviderPrice, Retest, Run
 from agent_memory.retest import keys
 from agent_memory.retest.provider import RateLimited
 from agent_memory.retest.runner import (
     RetestRefused,
     enqueue,
     run_queued,
+    first_key_candidate,
     run_retest,
     sample_sources,
     spent_this_month,
     start_for_new_models,
+    start_on_first_key,
 )
 from agent_memory.security import decrypt, generate_key, hash_key
 
@@ -224,7 +226,83 @@ async def test_a_cheaper_new_model_from_the_keys_provider_is_re_tested_automatic
         CatalogRecord("other-nano", "other-nano", "other", Decimal("0.1"), Decimal("0.4"), None, "ACTIVE"),
         CatalogRecord("acme-huge", "acme-huge", "acme", Decimal("100"), Decimal("400"), None, "ACTIVE"),
     ]
+    for rec in new:  # the catalog sync stores them before it reports them as new
+        session.add(CatalogEntry(model=rec.model, model_version=rec.model_version, provider=rec.provider,
+                                 price_in_per_mtok=rec.price_in_per_mtok, price_out_per_mtok=rec.price_out_per_mtok))
+    await session.flush()
     started = await start_for_new_models(session, new, settings=SETTINGS)
     assert [(r.candidate_model, r.trigger) for r in started] == [("acme-nano", "NEW_MODEL")]
     assert started[0].budget_usd == Decimal("1")
     assert (await session.execute(select(Retest))).scalars().all()[0].status == "QUEUED"
+
+
+async def test_an_early_stop_stops_the_calls_still_queued(engine, session, world):
+    # Every answer wrong: clearly worse than big after the first checks. All 50 sources are queued at
+    # once; the stop must hold back the ones still waiting for a slot, not only the ones not yet queued.
+    _, project, job = world
+    retest = await enqueue(session, project, job, "mini", 5.0, "MANUAL")
+    await session.commit()
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    provider = FakeProvider(accuracy=0.0)
+    done = await run_retest(sessions, retest.retest_id, settings=SETTINGS, client_factory=factory(provider),
+                            sample_size=50)
+    assert done.status == "DONE" and done.message.startswith("Stopped early: clearly worse than big")
+    assert done.runs_planned == 50
+    assert done.runs_done < 50 and provider.calls == done.runs_done
+    assert done.runs_done <= 30 + SETTINGS.retest_concurrency  # stopped at a check, plus the calls in flight
+
+
+async def test_a_model_with_no_known_price_is_never_re_tested(engine, session, world):
+    # Its calls would count as free, so neither the budget nor the monthly cap could stop it.
+    _, project, job = world
+    with pytest.raises(RetestRefused) as refused:
+        await enqueue(session, project, job, "unpriced-model", 1.0, "MANUAL")
+    assert refused.value.code == "no_price"
+    # Queued while priced, then the price disappeared: nothing is replayed.
+    retest = await enqueue(session, project, job, "mini", 1.0, "MANUAL")
+    await session.commit()
+    await session.delete(await session.get(CatalogEntry, ("mini", "mini")))
+    await session.commit()
+    provider = FakeProvider()
+    done = await run_retest(async_sessionmaker(engine, expire_on_commit=False), retest.retest_id, settings=SETTINGS,
+                            client_factory=factory(provider), sample_size=10)
+    assert (done.status, done.runs_done, provider.calls) == ("FAILED", 0, 0)
+    assert "No price is known for mini" in done.message
+
+
+def test_the_first_key_candidate_is_the_priciest_model_at_half_the_cost_or_less():
+    offers = [("nano", Decimal("0.001")), ("small", Decimal("0.012")), ("mid", Decimal("0.02")),
+              ("same", Decimal("0.03")), ("huge", Decimal("0.3"))]
+    assert first_key_candidate(Decimal("0.03"), offers) == "small"  # mid saves only a third
+    assert first_key_candidate(Decimal("0.03"), [("mid", Decimal("0.02"))]) == "mid"  # nothing at half: any saving
+    assert first_key_candidate(Decimal("0.03"), [("huge", Decimal("0.3"))]) is None
+
+
+async def test_a_job_that_only_used_one_model_gets_one_re_test_when_the_key_is_first_given(session, world):
+    _, project, job = world  # 60 runs of big at $0.03, nothing else measured
+    for model, price_in, price_out in (("acme-small", "10", "20"), ("acme-nano", "0.1", "0.4"),
+                                       ("acme-mid", "18", "40")):
+        session.add(ProviderPrice(model=model, provider="acme", price_in_per_mtok=Decimal(price_in),
+                                  price_out_per_mtok=Decimal(price_out)))
+        session.add(CatalogEntry(model=model, model_version=model, provider="acme",
+                                 price_in_per_mtok=Decimal(price_in), price_out_per_mtok=Decimal(price_out)))
+    session.add(ProviderPrice(model="other-small", provider="other", price_in_per_mtok=Decimal("10"),
+                              price_out_per_mtok=Decimal("20")))
+    await session.flush()
+    started = await start_on_first_key(session, project, settings=SETTINGS)
+    # Per run: small $0.012 (at most half of $0.03, and the priciest such), mid $0.022, nano $0.00014.
+    assert [(r.candidate_model, r.trigger, r.budget_usd) for r in started] == [("acme-small", "FIRST_KEY", Decimal("1"))]
+    assert await start_on_first_key(session, project, settings=SETTINGS) == []  # once per job
+
+
+async def test_a_job_that_already_compares_models_gets_no_first_key_re_test(session, world):
+    _, project, job = world
+    for i in range(40):
+        session.add(Run(run_id=uuid.uuid4(), job_id=job.job_id, project_id="demo", prompt=f"retest {i}",
+                        prompt_hash=prompt_hash(f"retest {i}"), model="mini", model_version="mini", outcome="PASS",
+                        cost_usd=0.001, state="INDEXED", run_kind="RETEST"))
+    session.add(ProviderPrice(model="acme-small", provider="acme", price_in_per_mtok=Decimal("10"),
+                              price_out_per_mtok=Decimal("20")))
+    await session.flush()
+    assert await start_on_first_key(session, project, settings=SETTINGS) == []
+

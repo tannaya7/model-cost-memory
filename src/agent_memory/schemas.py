@@ -239,6 +239,8 @@ class RecommendationRules(Model):
     confidence: float = Field(description="Confidence of the intervals, e.g. 0.95")
     margin: float = Field(description="How much worse (0.03 = 3 points) a cheaper model may be and still qualify")
     evidence_floor: float
+    switch_confidence: float = Field(
+        description="Confidence needed to advise moving to a cheaper model not advised before, e.g. 0.99")
 
 
 class FailingRunOut(Model):
@@ -373,7 +375,7 @@ class RetestOut(Model):
     retest_id: uuid.UUID
     job: str
     candidate_model: str
-    trigger: Literal["MANUAL", "NEW_MODEL", "UNSURE"]
+    trigger: Literal["MANUAL", "NEW_MODEL", "UNSURE", "FIRST_KEY"]
     status: RetestStatus
     budget_usd: float
     spent_usd: float

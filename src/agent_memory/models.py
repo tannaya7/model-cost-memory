@@ -166,7 +166,7 @@ class Retest(Base):
 
     __tablename__ = "retests"
     __table_args__ = (
-        CheckConstraint("trigger IN ('MANUAL','NEW_MODEL','UNSURE')", name="retests_trigger_check"),
+        CheckConstraint("trigger IN ('MANUAL','NEW_MODEL','UNSURE','FIRST_KEY')", name="retests_trigger_check"),
         CheckConstraint(
             "status IN ('QUEUED','RUNNING','DONE','STOPPED_BUDGET','STOPPED_CAP','FAILED')",
             name="retests_status_check",
