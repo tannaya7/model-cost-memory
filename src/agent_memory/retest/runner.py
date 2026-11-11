@@ -1,4 +1,4 @@
-"""RetestRunner: replays importance-sampled past runs on a candidate model, under a budget.
+"""RetestRunner: replays a random sample of past runs on a candidate model, under a budget.
 
 The only component that spends money, so the controls come first:
 
@@ -7,15 +7,21 @@ The only component that spends money, so the controls come first:
   and an answer-key run is replayable only if its answers were kept (they are, with consent).
 - **The customer's key.** Re-tests run on the customer's own provider key, asked for when a re-test
   is first needed (`keys.py`). It is never logged.
-- **Budget and cap, before every call.** A re-test refuses to start without a positive budget. Before
-  each provider call the expected cost of that call (catalog price x the source run's tokens) is
+- **Budget and cap, before every call.** A re-test refuses to start without a positive budget. Every
+  call sets an output limit (`output_limit`: 4x the source run's output, at least 500 tokens), and
+  before it the most that call can cost (catalog price x the source's input and that limit) is
   reserved; the call is made only if the re-test stays within its budget and the project within its
   monthly cap, which counts at catalog list price, so it limits testing on free keys too. A model
   with no known price is never re-tested: its calls would count as free and no limit would hold.
+- **A cut-off answer is not a failure.** An answer that stopped at the output limit is recorded as
+  UNKNOWN: failing it would blame the model for our limit.
 - **Dedupe.** A prompt already replayed on this candidate is never replayed on it again.
 
-Sampling is weighted by each run's importance (failures and expensive runs first), without
-replacement. Calls run a few at a time (`retest_concurrency`), and every result is recorded as an
+Sampling is uniform over the job's distinct prompts, without replacement. It used to be weighted by
+importance, but importance is highest for failed runs, so the sample held about three times as many
+hard prompts as production and every candidate looked worse than it is; the engine compares the
+candidate's replay pass rate with the production model's pass rate on ordinary traffic, so the
+replayed prompts must look like ordinary traffic. Calls run a few at a time (`retest_concurrency`), and every result is recorded as an
 ordinary RETEST run the moment it arrives, so progress is visible while it runs. Every
 EARLY_CHECK_EVERY results the engine is asked how the candidate stands; once it is clearly worse, or
 already good enough, the re-test stops and keeps the rest of its budget. The stop and the budget
@@ -49,8 +55,9 @@ from ..ingest import find_price, record_run
 from ..models import Job, Project, ProviderKey, ProviderPrice, Retest, Run
 from ..options import option_name, split_option
 from ..recommend.engine import recommend
-from ..recorder import read_response
+from ..recorder import read_response, was_cut_off
 from ..schemas import RunCreate
+from ..urls import UnsafeUrl, check_outbound
 from ..versions import family, normalize
 from .keys import client_for
 from .provider import ProviderClient, ProviderError, RateLimited
@@ -60,6 +67,14 @@ log = logging.getLogger("agent_memory.retest")
 ACTIVE = ("QUEUED", "RUNNING")
 CHECKABLE = ("ANSWER_KEY", "SCHEMA")
 EARLY_CHECK_EVERY = 10
+OUTPUT_LIMIT_FACTOR = 4
+OUTPUT_LIMIT_FLOOR = 500
+
+
+def output_limit(source_tokens_out: int | None) -> int:
+    """The output cap for replaying a run: room for an answer 4x as long as the original, never
+    under 500 tokens (a reasoning model may think far longer than the model that wrote the original)."""
+    return max(OUTPUT_LIMIT_FACTOR * int(source_tokens_out or 0), OUTPUT_LIMIT_FLOOR)
 INTERRUPTED_AFTER = timedelta(hours=1)
 
 
@@ -133,16 +148,15 @@ async def enqueue(
 async def sample_sources(
     session: AsyncSession, job: Job, candidate_model: str, n: int, *, seed: int = 0
 ) -> list:
-    """Up to n past production runs to replay, one per prompt, weighted by importance, skipping prompts
-    already replayed on this candidate."""
+    """Up to n past production runs to replay, one per prompt, chosen uniformly at random, skipping
+    prompts already replayed on this candidate."""
     model, effort = split_option(candidate_model)
     already = select(Run.prompt_hash).where(
         Run.job_id == job.job_id, Run.run_kind == "RETEST", func.lower(Run.model) == normalize(model),
         Run.effort.is_(None) if effort is None else Run.effort == effort,
     )
     query = (
-        select(Run.run_id, Run.prompt, Run.prompt_hash, Run.expected, Run.tokens_in, Run.tokens_out,
-               Run.importance_score)
+        select(Run.run_id, Run.prompt, Run.prompt_hash, Run.expected, Run.tokens_in, Run.tokens_out)
         .where(Run.job_id == job.job_id, Run.run_kind == "PRODUCTION", Run.outcome.in_(("PASS", "FAIL")),
                Run.invalid_at.is_(None), Run.prompt_hash.not_in(already))
         .ext(distinct_on(Run.prompt_hash)).order_by(Run.prompt_hash, Run.created_at.desc())
@@ -150,10 +164,9 @@ async def sample_sources(
     if job.check_kind == "ANSWER_KEY":
         query = query.where(Run.expected.is_not(None))
     rows = (await session.execute(query)).all()
-    rng = random.Random(seed)
-    # Efraimidis-Spirakis: key = u^(1/w); the n largest keys are a weighted sample without replacement.
-    keyed = sorted(rows, key=lambda r: rng.random() ** (1 / max(r.importance_score or 1.0, 1e-6)), reverse=True)
-    return keyed[:n]
+    if len(rows) <= n:
+        return list(rows)
+    return random.Random(seed).sample(rows, n)
 
 
 @dataclass
@@ -192,9 +205,13 @@ async def run_retest(
         return await _finish(sessions, retest_id, "FAILED", f"No price is known for {retest.candidate_model}, so "
                              "the budget and the monthly cap could not hold; nothing was replayed")
 
+    try:  # checked again now: the host may have been re-pointed at a private address since it was saved
+        await check_outbound(key.base_url, allow_private=settings.allow_private_urls)
+    except UnsafeUrl as exc:
+        return await _finish(sessions, retest_id, "FAILED", f"The re-test endpoint was refused: {exc}; nothing was replayed")
     client = client_factory(key, settings)
     progress = _Progress()
-    lock = asyncio.Lock()
+    lock = asyncio.Condition()  # guards the reservations; notified whenever one is released
     gate = asyncio.Semaphore(max(settings.retest_concurrency, 1))
     candidate_family = option_name(family(model), effort)
 
@@ -202,32 +219,51 @@ async def run_retest(
         # The slot comes first: every source is queued at once, so a stop or budget check made before
         # waiting for a slot would pass them all before the first result could stop anything.
         async with gate:
-            await replay(src)
+            try:
+                await replay(src)
+            except Exception:  # anything unexpected ends the re-test; waiting calls must not wait forever
+                log.exception("re-test call broke", extra={"retest_id": str(retest_id)})
+                async with lock:
+                    if not progress.stop_status:
+                        progress.stop_status = "FAILED"
+                        progress.stop_message = "An unexpected error stopped the re-test; partial results kept"
+                    lock.notify_all()
 
     async def replay(src) -> None:
-        cost = compute_cost(price, src.tokens_in, src.tokens_out)
+        limit = output_limit(src.tokens_out)
+        cost = compute_cost(price, src.tokens_in, limit)  # the most this call can cost
         async with lock:
-            if progress.stop_status:
-                return
-            async with sessions() as s:
-                row = await s.get(Retest, retest_id)
-                month = await spent_this_month(s, row.project_id)
-                if Decimal(row.spent_usd) + progress.reserved + cost > budget:
-                    progress.stop_status, progress.stop_message = "STOPPED_BUDGET", (
-                        f"Stopped at the budget of ${budget:.2f}: the next run would have gone over it")
+            while True:
+                if progress.stop_status:
                     return
-                if month + progress.reserved + cost > cap:
+                async with sessions() as s:
+                    row = await s.get(Retest, retest_id)
+                    spent, month = Decimal(row.spent_usd), await spent_this_month(s, row.project_id)
+                # Over even with nothing in flight: stop. Over only because calls in flight hold their
+                # worst case: wait for one to finish (it usually costs less) and look again.
+                if spent + cost > budget:
+                    progress.stop_status, progress.stop_message = "STOPPED_BUDGET", (
+                        f"Stopped at the budget of ${budget:.2f}: the next run could have gone over it")
+                    lock.notify_all()
+                    return
+                if month + cost > cap:
                     progress.stop_status, progress.stop_message = "STOPPED_CAP", (
                         f"Stopped at this month's re-test cap of ${cap:.2f}")
+                    lock.notify_all()
                     return
+                if spent + progress.reserved + cost <= budget and month + progress.reserved + cost <= cap:
+                    break
+                await lock.wait()
             progress.reserved += cost
         try:
             started = datetime.now(UTC)
-            response = await client.complete(model, src.prompt, **({"effort": effort} if effort else {}))
+            response = await client.complete(model, src.prompt, max_tokens=limit,
+                                             **({"effort": effort} if effort else {}))
             latency = int((datetime.now(UTC) - started).total_seconds() * 1000)
         except (RateLimited, ProviderError) as exc:
             async with lock:
                 progress.reserved -= cost
+                lock.notify_all()
                 if not progress.stop_status:
                     progress.stop_status = "FAILED"
                     progress.stop_message = ("The provider kept refusing with 'too many requests'; partial results kept"
@@ -249,7 +285,9 @@ async def run_retest(
         async with lock:
             async with sessions() as s:
                 owner = await s.get(Project, project.project_id)
-                await record_run(s, owner, body, run_kind="RETEST", retest_id=retest_id)
+                cut = (f"cut off at the re-test's output limit of {limit} tokens, so not judged"
+                       if was_cut_off(response) else None)
+                await record_run(s, owner, body, run_kind="RETEST", retest_id=retest_id, unknown_reason=cut)
                 await s.commit()
                 run = await s.get(Run, body.run_id)
             progress.reserved -= cost
@@ -262,6 +300,7 @@ async def run_retest(
                 # A version priced differently from its alias still counts; never as free.
                 row.spent_usd = Decimal(row.spent_usd) + (Decimal(run.cost_usd) if run.cost_usd is not None else cost)
                 await s.commit()
+            lock.notify_all()
             if progress.done % EARLY_CHECK_EVERY == 0 and not progress.stop_status:
                 await early_check()
 

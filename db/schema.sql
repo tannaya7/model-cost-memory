@@ -201,10 +201,21 @@ CREATE TABLE alerts (
     dedupe_key     TEXT NOT NULL DEFAULT '',        -- one open alert per finding
     delivery_attempts INT NOT NULL DEFAULT 0,
     next_attempt_at TIMESTAMPTZ,                    -- webhook retry with backoff
-    last_error     TEXT
+    last_error     TEXT,
+    delivery_failed_at TIMESTAMPTZ                  -- gave up after the last retry (0014)
 );
 CREATE UNIQUE INDEX idx_alerts_open ON alerts(job_id, dedupe_key) WHERE resolved_at IS NULL;
 CREATE INDEX idx_alerts_undelivered ON alerts(next_attempt_at) WHERE delivered_at IS NULL;
+
+CREATE TABLE recommendation_summaries (             -- the optional summary, once per verdict (0014)
+    summary_key    TEXT PRIMARY KEY,                -- job + summary model + prompt + what the verdict says
+    job_id         UUID NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+    summary        TEXT,                            -- null while being written, or after a failed call
+    prompt_version TEXT NOT NULL,
+    attempts       INTEGER NOT NULL DEFAULT 1,
+    attempted_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_summaries_attempted ON recommendation_summaries(attempted_at);
 
 CREATE TABLE usage_limits (                         -- limits the project works under (0013)
     limit_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),

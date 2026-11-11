@@ -27,7 +27,9 @@ from ..db import get_session
 from ..models import Project, User
 from ..projects import ProjectExists, create_project, rotate_key, slug_for
 from ..schemas import AuthConfig, DevLogin, ProjectCreate, ProjectCreated, ProjectKey, ProjectOut, ProjectPatch, UserOut
+from ..alerts.notifier import retry_given_up_alerts
 from ..security import generate_webhook_secret
+from ..urls import UnsafeUrl, check_outbound
 from .access import current_user, owned_project
 
 log = logging.getLogger("agent_memory.auth")
@@ -171,8 +173,16 @@ async def patch_project(
     if "name" in sent and body.name:
         project.name = body.name.strip()
     if "webhook_url" in sent:
+        if body.webhook_url is not None:
+            try:
+                await check_outbound(body.webhook_url, allow_private=get_settings().allow_private_urls)
+            except UnsafeUrl as exc:
+                raise HTTPException(422, f"webhook_url: {exc}") from exc
+        changed = body.webhook_url != project.webhook_url
         project.webhook_url = body.webhook_url
         project.webhook_secret = project.webhook_secret or generate_webhook_secret()
+        if changed and body.webhook_url is not None:
+            await retry_given_up_alerts(session, project.project_id)
     if "retest_monthly_cap_usd" in sent and body.retest_monthly_cap_usd is not None:
         project.retest_monthly_cap_usd = Decimal(str(body.retest_monthly_cap_usd))
     if "retest_allowed" in sent and body.retest_allowed is not None:

@@ -179,7 +179,8 @@ export interface paths {
         /**
          * Stream Flow
          * @description Server-Sent Events: each run's steps as they happen. The browser reconnects by itself and
-         *     resumes from Last-Event-ID. Read-only, one short query a second, no WebSockets.
+         *     resumes from Last-Event-ID. Read-only, no WebSockets. Everyone watching a project shares one
+         *     poller (pipeline/flow_hub.py); at most STREAMS_PER_IP connections per IP (429 beyond).
          */
         get: operations["stream_flow_v1_flow_stream_get"];
         put?: never;
@@ -601,6 +602,7 @@ export interface paths {
         /**
          * Record Run Endpoint
          * @description Record one model call. Safe to retry: the same `run_id` is only ever stored once.
+         *     A project may record at most RUNS_PER_DAY_PER_PROJECT runs per UTC day (429 after that).
          */
         post: operations["record_run_endpoint_v1_runs_post"];
         delete?: never;
@@ -675,6 +677,11 @@ export interface components {
             delivered_at: string | null;
             /** Delivery Attempts */
             delivery_attempts: number;
+            /**
+             * Delivery Failed At
+             * @description When webhook delivery gave up after its last retry; saving a new webhook URL tries again. Null while it is delivered or still being tried
+             */
+            delivery_failed_at?: string | null;
             /**
              * Detail
              * @description VERSION_REGRESSION: model, old_version, new_version, old_pass_rate, new_pass_rate, n_old, n_new, drop, p_value, failing_run_ids. SILENT_DROP: model, model_version, before_pass_rate, after_pass_rate, n_before, n_after, drop, p_value. MODEL_DEPRECATED: model, model_version, status.

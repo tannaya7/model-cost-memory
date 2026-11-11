@@ -24,7 +24,7 @@ from decimal import Decimal
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select, text, tuple_
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import __version__, ingest
@@ -76,9 +76,11 @@ from .schemas import (
 )
 from .auth import routes as auth_routes
 from .auth.access import current_project
-from .config import get_settings
-from .security import SecretKeyMissing
+from .config import check_startup, get_settings
+from .ratelimit import DAILY_RUNS, STREAMS, RateLimitMiddleware
+from .security import SecretKeyMissing, session_secret
 from .pipeline import flow
+from .pipeline.flow_hub import HUB, Overflowed
 from .pipeline.decay import current_versions, family_key
 from .pipeline.scoring import age_days, freshness, stability_days
 from .storage import lineage
@@ -91,6 +93,7 @@ log = logging.getLogger("agent_memory.api")
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     configure_logging()
+    check_startup()  # refuses an unsafe public configuration (config.startup_problems)
     yield
     await dispose_engine()
 
@@ -103,7 +106,7 @@ def _session_secret() -> str:
     if not secret:
         log.warning("SECRET_KEY is not set: sign-in sessions will not survive a restart")
         return secrets.token_urlsafe(32)
-    return secret
+    return session_secret(secret)
 
 
 # The signed session cookie: httpOnly (Starlette's default), SameSite=Lax, Secure on an https site.
@@ -111,6 +114,7 @@ app.add_middleware(
     SessionMiddleware, secret_key=_session_secret(), session_cookie="mcm_session", same_site="lax",
     https_only=get_settings().public_url.startswith("https://"), max_age=14 * 24 * 3600,
 )
+app.add_middleware(RateLimitMiddleware)  # added last, so it runs first: refused requests do no work
 app.include_router(auth_routes.router)
 
 
@@ -263,11 +267,24 @@ async def record_run_endpoint(
     project: Project = Depends(current_project),
     session: AsyncSession = Depends(get_session),
 ) -> RunAccepted:
-    """Record one model call. Safe to retry: the same `run_id` is only ever stored once."""
+    """Record one model call. Safe to retry: the same `run_id` is only ever stored once.
+    A project may record at most RUNS_PER_DAY_PER_PROJECT runs per UTC day (429 after that)."""
+    limit = get_settings().runs_per_day_per_project
+
+    async def count_today(since: datetime) -> int:
+        return (await session.execute(select(func.count()).where(
+            Run.project_id == project.project_id, Run.run_kind == "PRODUCTION", Run.created_at >= since))).scalar_one()
+
+    if not await DAILY_RUNS.admit(project.project_id, limit, count_today):
+        raise HTTPException(429, f"This project has recorded its {limit:,} runs for today (UTC); "
+                                 "raise RUNS_PER_DAY_PER_PROJECT on the server if that is expected")
     try:
         stored = await ingest.record_run(session, project, body)
     except ingest.UnknownJob as exc:
+        DAILY_RUNS.forget(project.project_id)
         raise HTTPException(404, f"Unknown job '{body.job}'. Create it first with POST /v1/jobs") from exc
+    if not stored:
+        DAILY_RUNS.forget(project.project_id)
     await session.commit()
     return RunAccepted(run_id=body.run_id, status="accepted" if stored else "duplicate")
 
@@ -415,10 +432,11 @@ async def get_recommendation(
 
     Refuses with INSUFFICIENT_EVIDENCE, and progress toward the floor, until there is enough to judge.
     """
-    result = await cached_recommend(session, await _job(session, project, job))
+    found = await _job(session, project, job)
+    result = await cached_recommend(session, found)
     log.info("verdict served", extra={"verdict": result.decision.verdict, "n_runs": result.n_runs,
                                       "evidence_weight": round(result.evidence_weight, 2)})
-    return _recommendation_out(result, *await summarize(result, get_settings()))
+    return _recommendation_out(result, *await summarize(session, found, result, get_settings()))
 
 
 @app.get("/v1/jobs/{job}/history", response_model=HistoryOut, tags=["recommendations"])
@@ -463,7 +481,8 @@ def _alert_out(alert: Alert, job_name: str) -> AlertOut:
     return AlertOut(
         alert_id=alert.alert_id, job=job_name, kind=alert.kind, summary=alert.detail.get("summary", alert.kind),
         detail=alert.detail, created_at=alert.created_at, delivered_at=alert.delivered_at,
-        delivery_attempts=alert.delivery_attempts, resolved_at=alert.resolved_at,
+        delivery_attempts=alert.delivery_attempts, delivery_failed_at=alert.delivery_failed_at,
+        resolved_at=alert.resolved_at,
     )
 
 
@@ -662,6 +681,7 @@ async def get_flow(
 
 STREAM_POLL_SECONDS = 1.0
 STREAM_HEARTBEAT_SECONDS = 15.0
+STREAM_CATCH_UP = 200  # events read per query while a viewer catches up from its Last-Event-ID
 
 
 @app.get("/v1/flow/stream", tags=["flow"], response_class=StreamingResponse)
@@ -672,38 +692,69 @@ async def stream_flow(
     session: AsyncSession = Depends(get_session),
 ):
     """Server-Sent Events: each run's steps as they happen. The browser reconnects by itself and
-    resumes from Last-Event-ID. Read-only, one short query a second, no WebSockets."""
+    resumes from Last-Event-ID. Read-only, no WebSockets. Everyone watching a project shares one
+    poller (pipeline/flow_hub.py); at most STREAMS_PER_IP connections per IP (429 beyond)."""
     try:
         cursor = int(last_event_id) if last_event_id else 0
     except ValueError:
         cursor = 0
     project_id = project.project_id
+    settings = get_settings()
+    client = getattr(request, "client", None)
+    ip = client.host if client else "unknown"
+    if not STREAMS.acquire(ip, settings.streams_per_ip, settings.streams_total):
+        raise HTTPException(429, "Too many live views open from here; close one and try again",
+                            headers={"Retry-After": "10"})
+    try:
+        viewer = await HUB.subscribe(project_id, async_sessionmaker(session.bind, expire_on_commit=False))
+    except Exception:
+        STREAMS.release(ip)
+        raise
 
     def frame(e) -> str:
         return f"id: {e.event_id}\ndata: {json.dumps(_event_out(e).model_dump(mode='json'))}\n\n"
 
     async def events():
         nonlocal cursor
-        quiet = 0.0
-        if cursor == 0:  # start with the recent trail, so the view is not empty
-            for e in await flow.events_after(session, project_id, 0, 50):
-                cursor = e.event_id
-                yield frame(e)
-        while not await request.is_disconnected():
-            await session.rollback()  # end the read so the next poll sees new rows
-            fresh = await flow.events_after(session, project_id, cursor, 200)
-            for e in fresh:
-                cursor = e.event_id
-                yield frame(e)
-            quiet = 0.0 if fresh else quiet + STREAM_POLL_SECONDS
-            if quiet >= STREAM_HEARTBEAT_SECONDS:  # keeps proxies from closing an idle connection
+        try:
+            # Catch up once from the database, then take events from the shared poller.
+            if cursor == 0:  # start with the recent trail, so the view is not empty
+                for e in await flow.events_after(session, project_id, 0, 50):
+                    cursor = e.event_id
+                    yield frame(e)
+            else:
+                while True:
+                    batch = await flow.events_after(session, project_id, cursor, STREAM_CATCH_UP)
+                    for e in batch:
+                        cursor = e.event_id
+                        yield frame(e)
+                    if len(batch) < STREAM_CATCH_UP:
+                        break
+            await session.rollback()  # the request's connection goes back to the pool for the rest
+            quiet = 0.0
+            while not await request.is_disconnected():
+                if viewer.overflowed:
+                    raise Overflowed
+                try:
+                    e = await asyncio.wait_for(viewer.queue.get(), STREAM_POLL_SECONDS)
+                except TimeoutError:
+                    quiet += STREAM_POLL_SECONDS
+                    if quiet >= STREAM_HEARTBEAT_SECONDS:  # keeps proxies from closing an idle connection
+                        quiet = 0.0
+                        yield ": still here\n\n"
+                    continue
                 quiet = 0.0
-                yield ": still here\n\n"
-            await asyncio.sleep(STREAM_POLL_SECONDS)
+                if e.event_id > cursor:  # the catch-up may already have sent it
+                    cursor = e.event_id
+                    yield frame(e)
+        except Overflowed:
+            return  # the browser reconnects with Last-Event-ID and catches up
+        finally:
+            await HUB.unsubscribe(project_id, viewer)
+            STREAMS.release(ip)
 
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-
 
 
 # --- Usage limits (limits.py) ---

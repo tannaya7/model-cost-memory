@@ -306,6 +306,23 @@ class Alert(Base):
     delivery_attempts: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     next_attempt_at: Mapped[datetime | None] = mapped_column(Timestamp)  # webhook retry with backoff
     last_error: Mapped[str | None] = mapped_column(Text)
+    delivery_failed_at: Mapped[datetime | None] = mapped_column(Timestamp)  # gave up after MAX_ATTEMPTS (0014)
+
+
+class RecommendationSummary(Base):
+    """The optional two-sentence summary, written once per verdict (0014). `summary_key` identifies the
+    verdict (the job, the summary model and prompt, and what the verdict says), not its exact figures,
+    so new runs that leave the verdict unchanged do not pay for another call."""
+
+    __tablename__ = "recommendation_summaries"
+    __table_args__ = (Index("idx_summaries_attempted", "attempted_at"),)
+
+    summary_key: Mapped[str] = mapped_column(Text, primary_key=True)
+    job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("jobs.job_id", ondelete="CASCADE"))
+    summary: Mapped[str | None] = mapped_column(Text)  # null while being written, or after a failed call
+    prompt_version: Mapped[str] = mapped_column(Text)
+    attempts: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    attempted_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
 
 
 class FlowEvent(Base):

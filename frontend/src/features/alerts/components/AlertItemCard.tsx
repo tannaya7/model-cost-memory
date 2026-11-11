@@ -181,6 +181,8 @@ function AlertCard({ alert }: { alert: Alert }) {
           <p className="text-[11px] text-dim">
             {alert.delivered_at
               ? `Sent to the webhook ${formatLocalTimestamp(alert.delivered_at)}`
+              : alert.delivery_failed_at
+              ? `Webhook unreachable after ${alert.delivery_attempts} attempts; stopped trying. Save the webhook URL in Settings to try again`
               : alert.delivery_attempts > 0
               ? `Webhook not reached yet (${alert.delivery_attempts} attempts); retrying`
               : "Not sent to a webhook"}

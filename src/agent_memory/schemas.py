@@ -367,6 +367,9 @@ class AlertOut(Model):
     created_at: datetime
     delivered_at: datetime | None = Field(description="When the webhook accepted it; null if not (yet)")
     delivery_attempts: int
+    delivery_failed_at: datetime | None = Field(
+        default=None, description="When webhook delivery gave up after its last retry; saving a new webhook URL "
+                                  "tries again. Null while it is delivered or still being tried")
     resolved_at: datetime | None
 
 

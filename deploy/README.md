@@ -18,8 +18,11 @@ Laptops need none of this: development uses a free hosted Neon database. Docker 
    (long and random; it encrypts stored provider keys and signs sign-in cookies, so keep it stable) and
    `PUBLIC_URL=https://<DOMAIN>`. For Google sign-in, create an OAuth client (Web application) with the redirect
    URI `https://<DOMAIN>/auth/google/callback` and set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Leave
-   `DEV_LOGIN` false. Optional: `ANTHROPIC_API_KEY` for recommendation summaries, `DEMO_PROJECT_ID` for a public
-   read-only demo (fill it with `python scripts/seed_demo.py`).
+   `DEV_LOGIN` and `ALLOW_PRIVATE_URLS` false: with `PUBLIC_URL` on https the API and the scheduler refuse to start
+   if either is on, or if `SECRET_KEY` is missing or shorter than 32 characters. Optional: `ANTHROPIC_API_KEY` for
+   recommendation summaries, `DEMO_PROJECT_ID` for a public read-only demo (fill it with
+   `python scripts/seed_demo.py`), and the abuse limits (`RATE_LIMIT_*`, `RUNS_PER_DAY_PER_PROJECT`, `STREAMS_*`),
+   whose defaults suit one small server.
 6. **Build the web app** so `frontend/dist` is present: `npm ci && npm run build` in `frontend/`.
 7. **First deploy:** `./deploy/deploy.sh`. It builds, runs `alembic upgrade head`, starts everything and checks `/healthz`.
 8. **Create the first project:** `docker compose run --rm api python scripts/create_project.py my-company`.

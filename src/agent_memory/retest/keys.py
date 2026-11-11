@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import Settings
 from ..models import ProviderKey
 from ..security import decrypt, encrypt
+from ..urls import UnsafeUrl, check_outbound
 from .provider import OpenAICompatible, ProviderClient
 
 KNOWN_ENDPOINTS = {  # convenience defaults; any OpenAI-compatible base_url works
@@ -34,6 +35,11 @@ async def set_key(
     url = base_url or KNOWN_ENDPOINTS.get(provider.lower())
     if not url:
         raise ValueError(f"Give the base_url for provider '{provider}' (an OpenAI-compatible endpoint)")
+    try:
+        await check_outbound(url, allow_private=settings.allow_private_urls)
+    except UnsafeUrl as exc:
+        raise ValueError(f"base_url: {exc}. A local endpoint (e.g. Ollama) needs ALLOW_PRIVATE_URLS=true, "
+                         "which only a development or self-hosted server should set") from exc
     row = await session.get(ProviderKey, project_id)
     if row is None:
         row = ProviderKey(project_id=project_id)
