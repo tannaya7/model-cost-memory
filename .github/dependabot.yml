@@ -1,0 +1,7 @@
+# Actions are pinned to exact commits in ci.yml for reproducible builds; Dependabot proposes the bumps.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

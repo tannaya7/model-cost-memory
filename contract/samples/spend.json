@@ -1,0 +1,16 @@
+[
+  {
+    "job": "invoice-extract",
+    "runs": 961,
+    "share": 0.87,
+    "spend_usd": 28.41,
+    "unpriced_runs": 0
+  },
+  {
+    "job": "ticket-classify",
+    "runs": 1530,
+    "share": 0.13,
+    "spend_usd": 4.26,
+    "unpriced_runs": 0
+  }
+]

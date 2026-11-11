@@ -1,0 +1,58 @@
+[
+  {
+    "check_config": {
+      "fields": [
+        "vendor",
+        "invoice_number",
+        "date",
+        "total"
+      ]
+    },
+    "check_kind": "ANSWER_KEY",
+    "description": "Extract vendor, invoice number, date and total from an invoice",
+    "job_id": "00000000-0000-0000-0000-000000001001",
+    "name": "invoice-extract",
+    "retest_consent": true,
+    "run_count": 964,
+    "runs_by_state": {
+      "CAPTURED": 3,
+      "CHECKED": 21,
+      "INDEXED": 940
+    }
+  },
+  {
+    "check_config": {
+      "schema": {
+        "required": [
+          "category"
+        ],
+        "type": "object"
+      }
+    },
+    "check_kind": "SCHEMA",
+    "description": "Classify a support ticket",
+    "job_id": "00000000-0000-0000-0000-000000001002",
+    "name": "ticket-classify",
+    "retest_consent": false,
+    "run_count": 0,
+    "runs_by_state": {}
+  },
+  {
+    "check_config": {
+      "fields": [
+        "merchant",
+        "total"
+      ]
+    },
+    "check_kind": "ANSWER_KEY",
+    "description": "Scan and extract merchant and total from receipts",
+    "job_id": "00000000-0000-0000-0000-000000001003",
+    "name": "receipt-scan",
+    "retest_consent": true,
+    "run_count": 180,
+    "runs_by_state": {
+      "CHECKED": 10,
+      "INDEXED": 170
+    }
+  }
+]

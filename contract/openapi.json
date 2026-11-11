@@ -1,0 +1,5863 @@
+{
+  "components": {
+    "schemas": {
+      "AlertOut": {
+        "description": "A regression, silent drop or deprecation that needs a person's attention.",
+        "properties": {
+          "alert_id": {
+            "format": "uuid",
+            "title": "Alert Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the webhook accepted it; null if not (yet)",
+            "title": "Delivered At"
+          },
+          "delivery_attempts": {
+            "title": "Delivery Attempts",
+            "type": "integer"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "description": "VERSION_REGRESSION: model, old_version, new_version, old_pass_rate, new_pass_rate, n_old, n_new, drop, p_value, failing_run_ids. SILENT_DROP: model, model_version, before_pass_rate, after_pass_rate, n_before, n_after, drop, p_value. MODEL_DEPRECATED: model, model_version, status.",
+            "title": "Detail",
+            "type": "object"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "VERSION_REGRESSION",
+              "SILENT_DROP",
+              "MODEL_DEPRECATED"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "summary": {
+            "description": "One sentence; the figures are in `detail`",
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alert_id",
+          "job",
+          "kind",
+          "summary",
+          "detail",
+          "created_at",
+          "delivered_at",
+          "delivery_attempts",
+          "resolved_at"
+        ],
+        "title": "AlertOut",
+        "type": "object"
+      },
+      "AuthConfig": {
+        "properties": {
+          "demo_project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A project anyone may read without signing in",
+            "title": "Demo Project Id"
+          },
+          "dev_login": {
+            "description": "Development-only sign-in by email; never on in production",
+            "title": "Dev Login",
+            "type": "boolean"
+          },
+          "google": {
+            "description": "Google sign-in is configured on this server",
+            "title": "Google",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "google",
+          "dev_login",
+          "demo_project_id"
+        ],
+        "title": "AuthConfig",
+        "type": "object"
+      },
+      "BreakdownOut": {
+        "properties": {
+          "cost_per_success_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Per Success Usd"
+          },
+          "group": {
+            "description": "'all', an input-size band ('under 8k', '8k to 32k', 'over 32k') or a prompt version",
+            "title": "Group",
+            "type": "string"
+          },
+          "mean_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Over the group's priced runs; null when none is priced",
+            "title": "Mean Cost Usd"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "pass_rate": {
+            "title": "Pass Rate",
+            "type": "number"
+          },
+          "pass_rate_high": {
+            "title": "Pass Rate High",
+            "type": "number"
+          },
+          "pass_rate_low": {
+            "title": "Pass Rate Low",
+            "type": "number"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model",
+          "group",
+          "runs",
+          "passed",
+          "pass_rate",
+          "pass_rate_low",
+          "pass_rate_high",
+          "mean_cost_usd",
+          "cost_per_success_usd"
+        ],
+        "title": "BreakdownOut",
+        "type": "object"
+      },
+      "DevLogin": {
+        "properties": {
+          "email": {
+            "maxLength": 200,
+            "minLength": 3,
+            "pattern": "^[^@\\s]+@[^@\\s]+$",
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "DevLogin",
+        "type": "object"
+      },
+      "FailingRunOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "outcome_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Reason"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "model",
+          "model_version",
+          "outcome_reason",
+          "created_at"
+        ],
+        "title": "FailingRunOut",
+        "type": "object"
+      },
+      "FlowEventOut": {
+        "description": "One step of a run through the pipeline, for the live data-flow view.",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "event_id": {
+            "description": "Increasing; resume with ?after= or the SSE Last-Event-ID",
+            "title": "Event Id",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "stage": {
+            "enum": [
+              "sdk",
+              "api",
+              "check",
+              "index",
+              "consolidate"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "ts": {
+            "format": "date-time",
+            "title": "Ts",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "ts",
+          "run_id",
+          "stage",
+          "message",
+          "data"
+        ],
+        "title": "FlowEventOut",
+        "type": "object"
+      },
+      "ForecastOut": {
+        "description": "What switching would change per month, if next month looks like the last 30 days.",
+        "properties": {
+          "extra_failures_high": {
+            "title": "Extra Failures High",
+            "type": "number"
+          },
+          "extra_failures_low": {
+            "description": "Lower end of the interval, in failures per month",
+            "title": "Extra Failures Low",
+            "type": "number"
+          },
+          "extra_failures_per_month": {
+            "description": "Negative means fewer failures",
+            "title": "Extra Failures Per Month",
+            "type": "number"
+          },
+          "monthly_saving_usd": {
+            "description": "Negative means switching costs more",
+            "title": "Monthly Saving Usd",
+            "type": "number"
+          },
+          "runs_per_month": {
+            "description": "Production runs in the last 30 days",
+            "title": "Runs Per Month",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "runs_per_month",
+          "monthly_saving_usd",
+          "extra_failures_per_month",
+          "extra_failures_low",
+          "extra_failures_high"
+        ],
+        "title": "ForecastOut",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Health": {
+        "properties": {
+          "status": {
+            "const": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Health",
+        "type": "object"
+      },
+      "HistoryEntryOut": {
+        "description": "One stored recommendation: what was decided, on how much evidence, and what replaced it.",
+        "properties": {
+          "cost_per_success_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Per Success Usd"
+          },
+          "current_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What production used when this was decided",
+            "title": "Current Model"
+          },
+          "evidence_weight": {
+            "title": "Evidence Weight",
+            "type": "number"
+          },
+          "invalid_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null while it is the current recommendation",
+            "title": "Invalid At"
+          },
+          "mean_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Cost Usd"
+          },
+          "model": {
+            "description": "The recommended model (the current one for HOLD); empty if none",
+            "title": "Model",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "n_runs": {
+            "description": "Runs it rests on; GET /v1/runs?recommendation= lists them",
+            "title": "N Runs",
+            "type": "integer"
+          },
+          "recommendation_id": {
+            "format": "uuid",
+            "title": "Recommendation Id",
+            "type": "string"
+          },
+          "superseded_by_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By Id"
+          },
+          "supersession_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "NEW_EVIDENCE",
+                  "MODEL_UPGRADE",
+                  "EVIDENCE_DECAYED",
+                  "REGRESSION",
+                  "MODEL_RETIRED"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersession Reason"
+          },
+          "valid_at": {
+            "format": "date-time",
+            "title": "Valid At",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "HOLD",
+              "DOWNGRADE",
+              "SWITCH",
+              "INSUFFICIENT_EVIDENCE"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          },
+          "weighted_pass_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weighted Pass Rate"
+          }
+        },
+        "required": [
+          "recommendation_id",
+          "verdict",
+          "model",
+          "model_version",
+          "current_model",
+          "weighted_pass_rate",
+          "mean_cost_usd",
+          "cost_per_success_usd",
+          "n_runs",
+          "evidence_weight",
+          "valid_at",
+          "invalid_at",
+          "superseded_by_id",
+          "supersession_reason"
+        ],
+        "title": "HistoryEntryOut",
+        "type": "object"
+      },
+      "HistoryOut": {
+        "properties": {
+          "entries": {
+            "description": "Newest first; the first is current unless invalidated",
+            "items": {
+              "$ref": "#/components/schemas/HistoryEntryOut"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "versions": {
+            "description": "Every model version this job has run on",
+            "items": {
+              "$ref": "#/components/schemas/ModelVersionSeen"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "job",
+          "entries",
+          "versions"
+        ],
+        "title": "HistoryOut",
+        "type": "object"
+      },
+      "JobCreate": {
+        "description": "Define a job and how a correct answer is recognised.",
+        "properties": {
+          "check_config": {
+            "additionalProperties": true,
+            "description": "ANSWER_KEY: {'fields': [...]}. SCHEMA: {'schema': <JSON Schema>}.",
+            "title": "Check Config",
+            "type": "object"
+          },
+          "check_kind": {
+            "enum": [
+              "ANSWER_KEY",
+              "TEST_COMMAND",
+              "SCHEMA",
+              "LATE_LABEL"
+            ],
+            "title": "Check Kind",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "examples": [
+              "invoice-extract"
+            ],
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Name",
+            "type": "string"
+          },
+          "retest_consent": {
+            "default": false,
+            "description": "May this job's prompts be replayed on another provider?",
+            "title": "Retest Consent",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "check_kind"
+        ],
+        "title": "JobCreate",
+        "type": "object"
+      },
+      "JobInsightsOut": {
+        "description": "Where a job's money goes and where each model is weak. Groupings and statistics only.",
+        "properties": {
+          "by_input_size": {
+            "items": {
+              "$ref": "#/components/schemas/BreakdownOut"
+            },
+            "title": "By Input Size",
+            "type": "array"
+          },
+          "by_prompt_version": {
+            "items": {
+              "$ref": "#/components/schemas/BreakdownOut"
+            },
+            "title": "By Prompt Version",
+            "type": "array"
+          },
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "overall": {
+            "description": "Cost per success per model",
+            "items": {
+              "$ref": "#/components/schemas/BreakdownOut"
+            },
+            "title": "Overall",
+            "type": "array"
+          }
+        },
+        "required": [
+          "job",
+          "days",
+          "overall",
+          "by_input_size",
+          "by_prompt_version"
+        ],
+        "title": "JobInsightsOut",
+        "type": "object"
+      },
+      "JobOut": {
+        "properties": {
+          "check_config": {
+            "additionalProperties": true,
+            "title": "Check Config",
+            "type": "object"
+          },
+          "check_kind": {
+            "enum": [
+              "ANSWER_KEY",
+              "TEST_COMMAND",
+              "SCHEMA",
+              "LATE_LABEL"
+            ],
+            "title": "Check Kind",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "retest_consent": {
+            "title": "Retest Consent",
+            "type": "boolean"
+          },
+          "run_count": {
+            "description": "All runs recorded for this job",
+            "title": "Run Count",
+            "type": "integer"
+          },
+          "runs_by_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Run counts per state, for example {'INDEXED': 40}",
+            "title": "Runs By State",
+            "type": "object"
+          }
+        },
+        "required": [
+          "job_id",
+          "name",
+          "description",
+          "check_kind",
+          "check_config",
+          "retest_consent",
+          "run_count"
+        ],
+        "title": "JobOut",
+        "type": "object"
+      },
+      "LabelCreate": {
+        "description": "A late outcome for a run that was stored UNKNOWN.",
+        "properties": {
+          "outcome": {
+            "enum": [
+              "PASS",
+              "FAIL"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "LabelCreate",
+        "type": "object"
+      },
+      "LimitSuggestionOut": {
+        "properties": {
+          "current": {
+            "description": "The option the job uses now, e.g. opus-5-5@medium",
+            "title": "Current",
+            "type": "string"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "reduction": {
+            "description": "Share of the job's use of this limit the move saves (1 = all of it)",
+            "title": "Reduction",
+            "type": "number"
+          },
+          "share_of_use": {
+            "description": "This job's share of the limit's recent use",
+            "title": "Share Of Use",
+            "type": "number"
+          },
+          "suggested": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What to move it to; null when nothing is proven yet",
+            "title": "Suggested"
+          }
+        },
+        "required": [
+          "job",
+          "current",
+          "suggested",
+          "share_of_use",
+          "reduction",
+          "note"
+        ],
+        "title": "LimitSuggestionOut",
+        "type": "object"
+      },
+      "ModelEvidenceOut": {
+        "description": "What the runs say about one model in this job, and how the tolerance rule judged it.",
+        "properties": {
+          "catalog_status": {
+            "description": "UNKNOWN when the model is not in the catalog",
+            "enum": [
+              "ACTIVE",
+              "DEPRECATED",
+              "RETIRED",
+              "UNKNOWN"
+            ],
+            "title": "Catalog Status",
+            "type": "string"
+          },
+          "cost_per_success_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mean cost divided by pass rate",
+            "title": "Cost Per Success Usd"
+          },
+          "effective_n": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Kish effective sample size of the weighted runs",
+            "title": "Effective N"
+          },
+          "eligible": {
+            "description": "Good enough, priced and not retired: it can be recommended",
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "evidence_weight": {
+            "description": "Sum of freshness weights; judged once it reaches the floor",
+            "title": "Evidence Weight",
+            "type": "number"
+          },
+          "failures": {
+            "title": "Failures",
+            "type": "integer"
+          },
+          "mean_cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Freshness-weighted mean cost per run; null when unpriced",
+            "title": "Mean Cost Usd"
+          },
+          "model": {
+            "description": "The model family, without its date suffix",
+            "title": "Model",
+            "type": "string"
+          },
+          "model_version": {
+            "description": "The version in use now",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "n_runs": {
+            "description": "Checked runs counted (PASS or FAIL, not archived)",
+            "title": "N Runs",
+            "type": "integer"
+          },
+          "pass_rate_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Upper end of the pass-rate interval",
+            "title": "Pass Rate High"
+          },
+          "pass_rate_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Lower end of the pass-rate interval",
+            "title": "Pass Rate Low"
+          },
+          "shutdown_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shutdown Date"
+          },
+          "status": {
+            "enum": [
+              "GOOD_ENOUGH",
+              "UNSURE",
+              "CLEARLY_WORSE",
+              "BELOW_FLOOR",
+              "RETIRED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "weighted_pass_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weighted Pass Rate"
+          },
+          "why": {
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "model_version",
+          "catalog_status",
+          "shutdown_date",
+          "n_runs",
+          "failures",
+          "evidence_weight",
+          "effective_n",
+          "weighted_pass_rate",
+          "pass_rate_low",
+          "pass_rate_high",
+          "mean_cost_usd",
+          "cost_per_success_usd",
+          "status",
+          "eligible",
+          "why"
+        ],
+        "title": "ModelEvidenceOut",
+        "type": "object"
+      },
+      "ModelOut": {
+        "description": "One model in the catalog.",
+        "properties": {
+          "first_seen_at": {
+            "format": "date-time",
+            "title": "First Seen At",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "price_in_per_mtok": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "US dollars per million input tokens",
+            "title": "Price In Per Mtok"
+          },
+          "price_out_per_mtok": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "US dollars per million output tokens",
+            "title": "Price Out Per Mtok"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "shutdown_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Announced shutdown, set while DEPRECATED",
+            "title": "Shutdown Date"
+          },
+          "source": {
+            "description": "MANUAL rows are overrides the daily sync never changes",
+            "enum": [
+              "SYNC",
+              "MANUAL"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "description": "RETIRED models are never recommended",
+            "enum": [
+              "ACTIVE",
+              "DEPRECATED",
+              "RETIRED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "used_by_project": {
+            "description": "This project has recorded runs on this model",
+            "title": "Used By Project",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "model",
+          "model_version",
+          "provider",
+          "status",
+          "shutdown_date",
+          "price_in_per_mtok",
+          "price_out_per_mtok",
+          "source",
+          "first_seen_at",
+          "used_by_project"
+        ],
+        "title": "ModelOut",
+        "type": "object"
+      },
+      "ModelPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModelOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as ?cursor= for the next page; null on the last page",
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "ModelPage",
+        "type": "object"
+      },
+      "ModelRef": {
+        "properties": {
+          "model": {
+            "description": "The model family, without its date suffix",
+            "title": "Model",
+            "type": "string"
+          },
+          "model_version": {
+            "description": "The version in use now",
+            "title": "Model Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "model_version"
+        ],
+        "title": "ModelRef",
+        "type": "object"
+      },
+      "ModelVersionSeen": {
+        "properties": {
+          "first_seen": {
+            "format": "date-time",
+            "title": "First Seen",
+            "type": "string"
+          },
+          "last_seen": {
+            "format": "date-time",
+            "title": "Last Seen",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model",
+          "model_version",
+          "runs",
+          "first_seen",
+          "last_seen"
+        ],
+        "title": "ModelVersionSeen",
+        "type": "object"
+      },
+      "ProjectCreate": {
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ProjectCreate",
+        "type": "object"
+      },
+      "ProjectCreated": {
+        "properties": {
+          "api_key": {
+            "description": "Shown once. Put it in the SDK as MCM_API_KEY",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectOut"
+          }
+        },
+        "required": [
+          "project",
+          "api_key"
+        ],
+        "title": "ProjectCreated",
+        "type": "object"
+      },
+      "ProjectKey": {
+        "properties": {
+          "api_key": {
+            "description": "Shown once; the previous key stops working immediately",
+            "title": "Api Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "title": "ProjectKey",
+        "type": "object"
+      },
+      "ProjectOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "key_prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first characters of the live project key",
+            "title": "Key Prefix"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "retest_allowed": {
+            "title": "Retest Allowed",
+            "type": "boolean"
+          },
+          "retest_monthly_cap_usd": {
+            "title": "Retest Monthly Cap Usd",
+            "type": "number"
+          },
+          "webhook_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Verify X-MCM-Signature on webhook payloads with it",
+            "title": "Webhook Secret"
+          },
+          "webhook_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Url"
+          }
+        },
+        "required": [
+          "project_id",
+          "name",
+          "webhook_url",
+          "webhook_secret",
+          "retest_monthly_cap_usd",
+          "retest_allowed",
+          "key_prefix",
+          "created_at"
+        ],
+        "title": "ProjectOut",
+        "type": "object"
+      },
+      "ProjectPatch": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "retest_allowed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retest Allowed"
+          },
+          "retest_monthly_cap_usd": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retest Monthly Cap Usd"
+          },
+          "webhook_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "pattern": "^https://",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Must be https; send null to remove",
+            "title": "Webhook Url"
+          }
+        },
+        "title": "ProjectPatch",
+        "type": "object"
+      },
+      "ProviderKeyIn": {
+        "description": "The key re-tests use. Encrypted at rest; only its last four characters are shown again.",
+        "properties": {
+          "api_key": {
+            "maxLength": 500,
+            "minLength": 8,
+            "title": "Api Key",
+            "type": "string"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "pattern": "^https?://",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An OpenAI-compatible endpoint; known providers fill it in",
+            "title": "Base Url"
+          },
+          "provider": {
+            "description": "e.g. openai, gemini, groq",
+            "maxLength": 40,
+            "minLength": 2,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "api_key"
+        ],
+        "title": "ProviderKeyIn",
+        "type": "object"
+      },
+      "ProviderKeyOut": {
+        "properties": {
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "key_hint": {
+            "description": "The key's last four characters",
+            "title": "Key Hint",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "base_url",
+          "key_hint",
+          "created_at"
+        ],
+        "title": "ProviderKeyOut",
+        "type": "object"
+      },
+      "RecommendationEvidence": {
+        "properties": {
+          "evidence_weight": {
+            "title": "Evidence Weight",
+            "type": "number"
+          },
+          "failing_runs": {
+            "description": "The most recent failures of the recommended and the current model: the receipt",
+            "items": {
+              "$ref": "#/components/schemas/FailingRunOut"
+            },
+            "title": "Failing Runs",
+            "type": "array"
+          },
+          "floor": {
+            "title": "Floor",
+            "type": "number"
+          },
+          "n_runs": {
+            "description": "Checked runs counted across every model",
+            "title": "N Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n_runs",
+          "evidence_weight",
+          "floor",
+          "failing_runs"
+        ],
+        "title": "RecommendationEvidence",
+        "type": "object"
+      },
+      "RecommendationOut": {
+        "description": "The cheapest model that does this job properly, with the evidence behind it.",
+        "properties": {
+          "computed_at": {
+            "format": "date-time",
+            "title": "Computed At",
+            "type": "string"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The model production used most recently"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/RecommendationEvidence"
+          },
+          "forecast": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ForecastOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set for DOWNGRADE and SWITCH when both costs are known"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelEvidenceOut"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "next_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Step"
+          },
+          "progress": {
+            "description": "Progress toward the evidence floor, 0..1; below 1 only when insufficient",
+            "title": "Progress",
+            "type": "number"
+          },
+          "recommended": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The model every other one was compared with",
+            "title": "Reference"
+          },
+          "retest_candidates": {
+            "description": "Models a re-test would settle: cheaper ones that could qualify, or the best model when the current one measures worse but that is not proven yet",
+            "items": {
+              "type": "string"
+            },
+            "title": "Retest Candidates",
+            "type": "array"
+          },
+          "rules": {
+            "$ref": "#/components/schemas/RecommendationRules"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional two sentences written from the figures above; never decides anything",
+            "title": "Summary"
+          },
+          "summary_prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Git blob hash of the prompt file used",
+            "title": "Summary Prompt Version"
+          },
+          "verdict": {
+            "enum": [
+              "HOLD",
+              "DOWNGRADE",
+              "SWITCH",
+              "INSUFFICIENT_EVIDENCE"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "job",
+          "verdict",
+          "current",
+          "recommended",
+          "reference",
+          "rules",
+          "models",
+          "evidence",
+          "progress",
+          "retest_candidates",
+          "forecast",
+          "warnings",
+          "next_step",
+          "computed_at"
+        ],
+        "title": "RecommendationOut",
+        "type": "object"
+      },
+      "RecommendationRules": {
+        "properties": {
+          "confidence": {
+            "description": "Confidence of the intervals, e.g. 0.95",
+            "title": "Confidence",
+            "type": "number"
+          },
+          "evidence_floor": {
+            "title": "Evidence Floor",
+            "type": "number"
+          },
+          "margin": {
+            "description": "How much worse (0.03 = 3 points) a cheaper model may be and still qualify",
+            "title": "Margin",
+            "type": "number"
+          },
+          "switch_confidence": {
+            "description": "Confidence needed to advise moving to a cheaper model not advised before, e.g. 0.99",
+            "title": "Switch Confidence",
+            "type": "number"
+          }
+        },
+        "required": [
+          "confidence",
+          "margin",
+          "evidence_floor",
+          "switch_confidence"
+        ],
+        "title": "RecommendationRules",
+        "type": "object"
+      },
+      "RetestCreate": {
+        "description": "Replay past runs of this job on a candidate model, spending at most `budget_usd`.",
+        "properties": {
+          "budget_usd": {
+            "description": "Required: the re-test stops before going over it",
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000.0,
+            "title": "Budget Usd",
+            "type": "number"
+          },
+          "candidate_model": {
+            "description": "The model name to call",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Candidate Model",
+            "type": "string"
+          },
+          "sample_size": {
+            "anyOf": [
+              {
+                "maximum": 500.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Prompts to replay (default 50)",
+            "title": "Sample Size"
+          }
+        },
+        "required": [
+          "candidate_model",
+          "budget_usd"
+        ],
+        "title": "RetestCreate",
+        "type": "object"
+      },
+      "RetestLimits": {
+        "properties": {
+          "cap_remaining_usd": {
+            "title": "Cap Remaining Usd",
+            "type": "number"
+          },
+          "monthly_cap_usd": {
+            "title": "Monthly Cap Usd",
+            "type": "number"
+          },
+          "provider_key": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProviderKeyOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null until the key is given"
+          },
+          "retest_allowed": {
+            "title": "Retest Allowed",
+            "type": "boolean"
+          },
+          "spent_this_month_usd": {
+            "description": "At catalog list price, so it counts free keys too",
+            "title": "Spent This Month Usd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "monthly_cap_usd",
+          "spent_this_month_usd",
+          "cap_remaining_usd",
+          "retest_allowed",
+          "provider_key"
+        ],
+        "title": "RetestLimits",
+        "type": "object"
+      },
+      "RetestOut": {
+        "properties": {
+          "budget_usd": {
+            "title": "Budget Usd",
+            "type": "number"
+          },
+          "candidate_model": {
+            "title": "Candidate Model",
+            "type": "string"
+          },
+          "cap_remaining_usd": {
+            "title": "Cap Remaining Usd",
+            "type": "number"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "monthly_cap_usd": {
+            "title": "Monthly Cap Usd",
+            "type": "number"
+          },
+          "pass_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pass Rate"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "retest_id": {
+            "format": "uuid",
+            "title": "Retest Id",
+            "type": "string"
+          },
+          "runs_done": {
+            "title": "Runs Done",
+            "type": "integer"
+          },
+          "runs_planned": {
+            "title": "Runs Planned",
+            "type": "integer"
+          },
+          "spent_usd": {
+            "title": "Spent Usd",
+            "type": "number"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "QUEUED",
+              "RUNNING",
+              "DONE",
+              "STOPPED_BUDGET",
+              "STOPPED_CAP",
+              "FAILED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trigger": {
+            "enum": [
+              "MANUAL",
+              "NEW_MODEL",
+              "UNSURE",
+              "FIRST_KEY"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "retest_id",
+          "job",
+          "candidate_model",
+          "trigger",
+          "status",
+          "budget_usd",
+          "spent_usd",
+          "runs_planned",
+          "runs_done",
+          "passed",
+          "failed",
+          "pass_rate",
+          "monthly_cap_usd",
+          "cap_remaining_usd",
+          "message",
+          "created_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "RetestOut",
+        "type": "object"
+      },
+      "RunAccepted": {
+        "properties": {
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "description": "'duplicate' means this run_id was already recorded; nothing changed",
+            "enum": [
+              "accepted",
+              "duplicate"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status"
+        ],
+        "title": "RunAccepted",
+        "type": "object"
+      },
+      "RunCreate": {
+        "description": "One model call, sent by the SDK (or any client) after the production call has finished.\n\n`run_id` is generated by the sender, so a retried send is recognised as the same run and never\ncounted twice. The outcome (pass or fail) is never accepted from the client: it is resolved here.",
+        "properties": {
+          "cache_read_tokens": {
+            "default": 0,
+            "maximum": 10000000.0,
+            "minimum": 0.0,
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cache_write_tokens": {
+            "default": 0,
+            "maximum": 10000000.0,
+            "minimum": 0.0,
+            "title": "Cache Write Tokens",
+            "type": "integer"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Used only when the model catalog has no price; otherwise the server computes it",
+            "title": "Cost Usd"
+          },
+          "effort": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The reasoning effort the call asked for (e.g. low, medium, high). The same model at different efforts is compared as separate options",
+            "title": "Effort"
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The correct values for an ANSWER_KEY job, used to check this run. Stored only when the job has re-test consent, so a re-test can check the replayed run against the same answers",
+            "title": "Expected"
+          },
+          "job": {
+            "description": "Name of an existing job in this project",
+            "title": "Job",
+            "type": "string"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "maximum": 3600000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "model": {
+            "description": "The model the call asked for",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "model_version": {
+            "description": "The provider-resolved version from the response",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Model Version",
+            "type": "string"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output"
+          },
+          "prompt": {
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who served the call, as the price list names it (e.g. openai, gemini, groq, together_ai). The same model can cost different amounts on different providers; without it the catalog's default price for the model is used",
+            "title": "Provider"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "tokens_in": {
+            "default": 0,
+            "description": "Uncached input tokens",
+            "maximum": 10000000.0,
+            "minimum": 0.0,
+            "title": "Tokens In",
+            "type": "integer"
+          },
+          "tokens_out": {
+            "default": 0,
+            "description": "Output tokens, thinking included",
+            "maximum": 10000000.0,
+            "minimum": 0.0,
+            "title": "Tokens Out",
+            "type": "integer"
+          },
+          "tool_calls": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only each tool's name and call id are kept. Arguments are dropped unless the project has opted in to storing them, because they can hold sensitive data.",
+            "title": "Tool Calls"
+          }
+        },
+        "required": [
+          "run_id",
+          "job",
+          "prompt",
+          "model",
+          "model_version"
+        ],
+        "title": "RunCreate",
+        "type": "object"
+      },
+      "RunDetail": {
+        "description": "One run in full, for the detail panel.",
+        "properties": {
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cache_write_tokens": {
+            "title": "Cache Write Tokens",
+            "type": "integer"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when the model has no catalog price and none was sent",
+            "title": "Cost Usd"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
+          },
+          "importance_score": {
+            "default": 1.0,
+            "description": "How much the run matters (failures and costly runs more): what decides archiving and re-test sampling",
+            "title": "Importance Score",
+            "type": "number"
+          },
+          "job": {
+            "description": "The job's name",
+            "title": "Job",
+            "type": "string"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "UNKNOWN"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "outcome_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Reason"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output"
+          },
+          "output_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "First 200 characters of the output",
+            "title": "Output Preview"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "prompt_preview": {
+            "description": "First 200 characters of the prompt",
+            "title": "Prompt Preview",
+            "type": "string"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_kind": {
+            "enum": [
+              "PRODUCTION",
+              "SHADOW",
+              "RETEST"
+            ],
+            "title": "Run Kind",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "CAPTURED",
+              "CHECKED",
+              "INDEXED",
+              "CONSOLIDATED",
+              "ARCHIVED",
+              "INGESTION_FAILED"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tokens_in": {
+            "title": "Tokens In",
+            "type": "integer"
+          },
+          "tokens_out": {
+            "title": "Tokens Out",
+            "type": "integer"
+          },
+          "tool_calls": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Calls"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How much it counts in the recommendation now: e^(-age/S), S shorter once its version is replaced",
+            "title": "Weight"
+          }
+        },
+        "required": [
+          "run_id",
+          "job_id",
+          "job",
+          "model",
+          "model_version",
+          "prompt_version",
+          "tokens_in",
+          "tokens_out",
+          "cache_read_tokens",
+          "cache_write_tokens",
+          "cost_usd",
+          "latency_ms",
+          "outcome",
+          "outcome_reason",
+          "run_kind",
+          "state",
+          "created_at",
+          "prompt_preview",
+          "output_preview",
+          "prompt",
+          "output",
+          "tool_calls"
+        ],
+        "title": "RunDetail",
+        "type": "object"
+      },
+      "RunOut": {
+        "description": "One recorded run, as a table row. Full prompt and output come from the run detail.",
+        "properties": {
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cache_write_tokens": {
+            "title": "Cache Write Tokens",
+            "type": "integer"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when the model has no catalog price and none was sent",
+            "title": "Cost Usd"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
+          },
+          "importance_score": {
+            "default": 1.0,
+            "description": "How much the run matters (failures and costly runs more): what decides archiving and re-test sampling",
+            "title": "Importance Score",
+            "type": "number"
+          },
+          "job": {
+            "description": "The job's name",
+            "title": "Job",
+            "type": "string"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "UNKNOWN"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "outcome_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Reason"
+          },
+          "output_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "First 200 characters of the output",
+            "title": "Output Preview"
+          },
+          "prompt_preview": {
+            "description": "First 200 characters of the prompt",
+            "title": "Prompt Preview",
+            "type": "string"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_kind": {
+            "enum": [
+              "PRODUCTION",
+              "SHADOW",
+              "RETEST"
+            ],
+            "title": "Run Kind",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "CAPTURED",
+              "CHECKED",
+              "INDEXED",
+              "CONSOLIDATED",
+              "ARCHIVED",
+              "INGESTION_FAILED"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tokens_in": {
+            "title": "Tokens In",
+            "type": "integer"
+          },
+          "tokens_out": {
+            "title": "Tokens Out",
+            "type": "integer"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How much it counts in the recommendation now: e^(-age/S), S shorter once its version is replaced",
+            "title": "Weight"
+          }
+        },
+        "required": [
+          "run_id",
+          "job_id",
+          "job",
+          "model",
+          "model_version",
+          "prompt_version",
+          "tokens_in",
+          "tokens_out",
+          "cache_read_tokens",
+          "cache_write_tokens",
+          "cost_usd",
+          "latency_ms",
+          "outcome",
+          "outcome_reason",
+          "run_kind",
+          "state",
+          "created_at",
+          "prompt_preview",
+          "output_preview"
+        ],
+        "title": "RunOut",
+        "type": "object"
+      },
+      "RunPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as ?cursor= to get the next page; null on the last page",
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "RunPage",
+        "type": "object"
+      },
+      "SpendOut": {
+        "properties": {
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "runs": {
+            "description": "Production runs in the window",
+            "title": "Runs",
+            "type": "integer"
+          },
+          "share": {
+            "description": "Share of the project's spend in the window, 0..1",
+            "title": "Share",
+            "type": "number"
+          },
+          "spend_usd": {
+            "description": "Priced runs only; see unpriced_runs",
+            "title": "Spend Usd",
+            "type": "number"
+          },
+          "unpriced_runs": {
+            "default": 0,
+            "description": "Runs on models with no known price, not in spend_usd",
+            "title": "Unpriced Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "job",
+          "runs",
+          "spend_usd",
+          "share"
+        ],
+        "title": "SpendOut",
+        "type": "object"
+      },
+      "UsageLimitIn": {
+        "description": "A usage limit the project works under. A plan that shows only a percentage is entered as PERCENT\nand kept current with PUT /v1/limits/{limit_id}/used.",
+        "properties": {
+          "measure": {
+            "description": "USD at list price, TOKENS (all kinds), REQUESTS (calls), or PERCENT for a plan that shows only the share used",
+            "enum": [
+              "USD",
+              "TOKENS",
+              "REQUESTS",
+              "PERCENT"
+            ],
+            "title": "Measure",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only this model family counts",
+            "title": "Model"
+          },
+          "name": {
+            "description": "e.g. Weekly, Session (5h), or one model's limit",
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "resets_at": {
+            "description": "When the current window ends; later ones follow every window_hours",
+            "format": "date-time",
+            "title": "Resets At",
+            "type": "string"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The limit in its measure's unit; not for PERCENT",
+            "title": "Size"
+          },
+          "used_percent": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "PERCENT: the share used now, as the plan shows it",
+            "title": "Used Percent"
+          },
+          "window_hours": {
+            "description": "5 for a 5-hour session, 168 for a 7-day week",
+            "exclusiveMinimum": 0.0,
+            "maximum": 744.0,
+            "title": "Window Hours",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "window_hours",
+          "resets_at",
+          "measure"
+        ],
+        "title": "UsageLimitIn",
+        "type": "object"
+      },
+      "UsageLimitOut": {
+        "properties": {
+          "hours_to_full": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Hours until used up at this pace; null if it is not",
+            "title": "Hours To Full"
+          },
+          "hours_to_full_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Hours until used up if the suggestions are followed",
+            "title": "Hours To Full After"
+          },
+          "hours_to_reset": {
+            "title": "Hours To Reset",
+            "type": "number"
+          },
+          "lasts_after": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether following the suggestions makes it last until the reset",
+            "title": "Lasts After"
+          },
+          "limit_id": {
+            "format": "uuid",
+            "title": "Limit Id",
+            "type": "string"
+          },
+          "measure": {
+            "enum": [
+              "USD",
+              "TOKENS",
+              "REQUESTS",
+              "PERCENT"
+            ],
+            "title": "Measure",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rate_per_hour": {
+            "title": "Rate Per Hour",
+            "type": "number"
+          },
+          "resets_at": {
+            "description": "The end of the current window",
+            "format": "date-time",
+            "title": "Resets At",
+            "type": "string"
+          },
+          "share_used": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share Used"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "state": {
+            "enum": [
+              "OK",
+              "AT_RISK",
+              "EXHAUSTED",
+              "UNKNOWN"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/LimitSuggestionOut"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          },
+          "used": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Used this window, in the measure's unit (list-price dollars for PERCENT)",
+            "title": "Used"
+          },
+          "window_hours": {
+            "title": "Window Hours",
+            "type": "integer"
+          },
+          "window_start": {
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "limit_id",
+          "name",
+          "window_hours",
+          "measure",
+          "size",
+          "model",
+          "window_start",
+          "resets_at",
+          "used",
+          "share_used",
+          "rate_per_hour",
+          "hours_to_reset",
+          "hours_to_full",
+          "state",
+          "message",
+          "suggestions",
+          "hours_to_full_after",
+          "lasts_after"
+        ],
+        "title": "UsageLimitOut",
+        "type": "object"
+      },
+      "UsedPercentIn": {
+        "properties": {
+          "used_percent": {
+            "description": "The share of the limit used now, as the plan shows it",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Used Percent",
+            "type": "number"
+          }
+        },
+        "required": [
+          "used_percent"
+        ],
+        "title": "UsedPercentIn",
+        "type": "object"
+      },
+      "UserOut": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture Url"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "email",
+          "name",
+          "picture_url"
+        ],
+        "title": "UserOut",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Model & Cost Memory API",
+    "version": "0.0.1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/auth/config": {
+      "get": {
+        "operationId": "auth_config_auth_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthConfig"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Auth Config",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/dev/login": {
+      "post": {
+        "description": "Local development only: sign in as any email. Off unless DEV_LOGIN=true.",
+        "operationId": "dev_login_auth_dev_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DevLogin"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dev Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/google/callback": {
+      "get": {
+        "operationId": "google_callback_auth_google_callback_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Google Callback",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/google/login": {
+      "get": {
+        "operationId": "google_login_auth_google_login_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "next",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Next"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Google Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logout_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/healthz": {
+      "get": {
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthz",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/v1/alerts": {
+      "get": {
+        "description": "Every job's alerts in the project, newest first: open ones by default.",
+        "operationId": "list_alerts_v1_alerts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_resolved",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Resolved",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AlertOut"
+                  },
+                  "title": "Response List Alerts V1 Alerts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Alerts",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/v1/alerts/{alert_id}/resolve": {
+      "post": {
+        "description": "Mark an alert handled. The same finding can raise a new alert later.",
+        "operationId": "resolve_alert_v1_alerts__alert_id__resolve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alert_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Alert Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Alert",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/v1/flow": {
+      "get": {
+        "description": "The live data-flow view, polled: each run's steps, oldest first.",
+        "operationId": "get_flow_v1_flow_get",
+        "parameters": [
+          {
+            "description": "Only events after this event_id; 0 = the latest ones",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Only events after this event_id; 0 = the latest ones",
+              "minimum": 0,
+              "title": "After",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FlowEventOut"
+                  },
+                  "title": "Response Get Flow V1 Flow Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Flow",
+        "tags": [
+          "flow"
+        ]
+      }
+    },
+    "/v1/flow/stream": {
+      "get": {
+        "description": "Server-Sent Events: each run's steps as they happen. The browser reconnects by itself and\nresumes from Last-Event-ID. Read-only, one short query a second, no WebSockets.",
+        "operationId": "stream_flow_v1_flow_stream_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "last-event-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Flow",
+        "tags": [
+          "flow"
+        ]
+      }
+    },
+    "/v1/insights/spend": {
+      "get": {
+        "description": "Production spend per job over the last `days` days, most expensive first.",
+        "operationId": "get_spend_v1_insights_spend_get",
+        "parameters": [
+          {
+            "description": "How many days back to count",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "description": "How many days back to count",
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SpendOut"
+                  },
+                  "title": "Response Get Spend V1 Insights Spend Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Spend",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
+    "/v1/jobs": {
+      "get": {
+        "description": "Every job in the project, with how many runs it has, in total and per state.",
+        "operationId": "list_jobs_v1_jobs_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobOut"
+                  },
+                  "title": "Response List Jobs V1 Jobs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Jobs",
+        "tags": [
+          "jobs"
+        ]
+      },
+      "post": {
+        "description": "Define a job and how a correct answer is recognised.",
+        "operationId": "create_job_endpoint_v1_jobs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Job Endpoint",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{job}/history": {
+      "get": {
+        "description": "Every recommendation the job has had, newest first: what changed, when and why.\n\nFollowed through `superseded_by_id` with a recursive query; each entry's runs are listed by\n`GET /v1/runs?recommendation=<id>`.",
+        "operationId": "get_history_v1_jobs__job__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get History",
+        "tags": [
+          "recommendations"
+        ]
+      }
+    },
+    "/v1/jobs/{job}/insights": {
+      "get": {
+        "description": "Cost per success per model, and pass rate per model by input-size band and by prompt version,\neach with its run count and 95% interval.",
+        "operationId": "get_job_insights_v1_jobs__job__insights_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "description": "How many days back to count",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 90,
+              "description": "How many days back to count",
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobInsightsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Job Insights",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
+    "/v1/jobs/{job}/recommendation": {
+      "get": {
+        "description": "The cheapest model that does this job properly, with the evidence and failing runs behind it.\n\nRefuses with INSUFFICIENT_EVIDENCE, and progress toward the floor, until there is enough to judge.",
+        "operationId": "get_recommendation_v1_jobs__job__recommendation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Recommendation",
+        "tags": [
+          "recommendations"
+        ]
+      }
+    },
+    "/v1/jobs/{job}/regressions": {
+      "get": {
+        "description": "The job's alerts, newest first: open ones by default.",
+        "operationId": "get_regressions_v1_jobs__job__regressions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Also return alerts already resolved",
+            "in": "query",
+            "name": "include_resolved",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Also return alerts already resolved",
+              "title": "Include Resolved",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AlertOut"
+                  },
+                  "title": "Response Get Regressions V1 Jobs  Job  Regressions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Regressions",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/v1/jobs/{job}/retest": {
+      "post": {
+        "description": "Queue a re-test: replay sampled past runs on `candidate_model`, spending at most `budget_usd`.\n\n409 with `{\"code\", \"message\"}` when it cannot start; `code` is one of consent_off, project_off,\nnot_checkable, provider_key_required (ask for the key, then try again), cap_reached, already_running.\nPoll `GET /v1/jobs/{job}/retest/{id}` for progress.",
+        "operationId": "start_retest_v1_jobs__job__retest_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetestCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Retest",
+        "tags": [
+          "retests"
+        ]
+      }
+    },
+    "/v1/jobs/{job}/retest/{retest_id}": {
+      "get": {
+        "description": "One re-test's progress and spend so far; the web app polls it every 2 s while it runs.",
+        "operationId": "get_retest_v1_jobs__job__retest__retest_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "retest_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Retest Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Retest",
+        "tags": [
+          "retests"
+        ]
+      }
+    },
+    "/v1/jobs/{job}/retests": {
+      "get": {
+        "description": "The job's re-tests, newest first.",
+        "operationId": "list_retests_v1_jobs__job__retests_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RetestOut"
+                  },
+                  "title": "Response List Retests V1 Jobs  Job  Retests Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Retests",
+        "tags": [
+          "retests"
+        ]
+      }
+    },
+    "/v1/limits": {
+      "get": {
+        "description": "Every usage limit of the project, with whether it runs out before it resets at the current pace and,\nif so, what to change per job.",
+        "operationId": "list_limits_v1_limits_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UsageLimitOut"
+                  },
+                  "title": "Response List Limits V1 Limits Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Limits",
+        "tags": [
+          "limits"
+        ]
+      },
+      "post": {
+        "operationId": "create_limit_v1_limits_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsageLimitIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageLimitOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Limit",
+        "tags": [
+          "limits"
+        ]
+      }
+    },
+    "/v1/limits/{limit_id}": {
+      "delete": {
+        "operationId": "delete_limit_v1_limits__limit_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "limit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Limit Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Limit",
+        "tags": [
+          "limits"
+        ]
+      }
+    },
+    "/v1/limits/{limit_id}/used": {
+      "put": {
+        "description": "For a plan that only shows a percentage: the share used now, as the plan shows it.",
+        "operationId": "report_limit_used_v1_limits__limit_id__used_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "limit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Limit Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsedPercentIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageLimitOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Limit Used",
+        "tags": [
+          "limits"
+        ]
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "operationId": "me_v1_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Me",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "description": "The model catalog: price, status and shutdown date, so a retirement is seen before it bites.",
+        "operationId": "list_models_v1_models_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(ACTIVE|DEPRECATED|RETIRED)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "description": "Only models this project has recorded runs on",
+            "in": "query",
+            "name": "used",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only models this project has recorded runs on",
+              "title": "Used",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Substring of the model name",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Substring of the model name",
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Models",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/projects": {
+      "get": {
+        "operationId": "list_projects_v1_projects_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectOut"
+                  },
+                  "title": "Response List Projects V1 Projects Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Projects",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "description": "Create a project you own. Its key is in the response once; copy it into the SDK.",
+        "operationId": "new_project_v1_projects_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "New Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}": {
+      "get": {
+        "operationId": "get_project_v1_projects__project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Project",
+        "tags": [
+          "projects"
+        ]
+      },
+      "patch": {
+        "description": "Change the name, the alert webhook (https only; null removes it), the monthly re-test cap or\nthe project-wide re-test switch. Only the fields sent change.",
+        "operationId": "patch_project_v1_projects__project_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/key": {
+      "post": {
+        "operationId": "new_project_key_v1_projects__project_id__key_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectKey"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "New Project Key",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/v1/provider-key": {
+      "delete": {
+        "description": "Remove the key. Running re-tests finish the call in flight; no new ones start.",
+        "operationId": "delete_provider_key_v1_provider_key_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Provider Key",
+        "tags": [
+          "retests"
+        ]
+      },
+      "put": {
+        "description": "Give (or replace) the key re-tests use. With the monthly cap, this is standing permission for\nre-tests to run within the cap. Encrypted at rest; never returned again.",
+        "operationId": "put_provider_key_v1_provider_key_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderKeyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Provider Key",
+        "tags": [
+          "retests"
+        ]
+      }
+    },
+    "/v1/retest/limits": {
+      "get": {
+        "description": "This month's re-test cap, what is spent, and whether the provider key has been given.",
+        "operationId": "get_retest_limits_v1_retest_limits_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetestLimits"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Retest Limits",
+        "tags": [
+          "retests"
+        ]
+      }
+    },
+    "/v1/runs": {
+      "get": {
+        "description": "Recorded runs, newest first, one page at a time (pass `next_cursor` as `cursor`).",
+        "operationId": "list_runs_v1_runs_get",
+        "parameters": [
+          {
+            "description": "Job name",
+            "in": "query",
+            "name": "job",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Job name",
+              "title": "Job"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            }
+          },
+          {
+            "in": "query",
+            "name": "outcome",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(PASS|FAIL|UNKNOWN)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Outcome"
+            }
+          },
+          {
+            "description": "Only the runs this verdict rests on",
+            "in": "query",
+            "name": "recommendation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the runs this verdict rests on",
+              "title": "Recommendation"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runs",
+        "tags": [
+          "runs"
+        ]
+      },
+      "post": {
+        "description": "Record one model call. Safe to retry: the same `run_id` is only ever stored once.",
+        "operationId": "record_run_endpoint_v1_runs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Run Endpoint",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/v1/runs/{run_id}": {
+      "get": {
+        "description": "One run in full: the whole prompt and output, and why it passed or failed.",
+        "operationId": "get_run_v1_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/v1/runs/{run_id}/label": {
+      "post": {
+        "description": "Supply the outcome for a run that was stored UNKNOWN (a late label).",
+        "operationId": "label_run_endpoint_v1_runs__run_id__label_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LabelCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Label Run Endpoint",
+        "tags": [
+          "runs"
+        ]
+      }
+    }
+  }
+}

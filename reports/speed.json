@@ -1,0 +1,89 @@
+{
+  "recommendation": [
+    {
+      "runs": 10000,
+      "seed_seconds": 0.3,
+      "verdict": "HOLD",
+      "cold": {
+        "median_ms": 43.5,
+        "p95_ms": 44.5,
+        "max_ms": 44.5,
+        "samples": 5
+      },
+      "after_new_run": {
+        "median_ms": 45.5,
+        "p95_ms": 51.8,
+        "max_ms": 51.8,
+        "samples": 5
+      },
+      "cached": {
+        "median_ms": 8.0,
+        "p95_ms": 9.0,
+        "max_ms": 9.0,
+        "samples": 5
+      }
+    },
+    {
+      "runs": 100000,
+      "seed_seconds": 3.8,
+      "verdict": "HOLD",
+      "cold": {
+        "median_ms": 286.5,
+        "p95_ms": 299.5,
+        "max_ms": 299.5,
+        "samples": 5
+      },
+      "after_new_run": {
+        "median_ms": 280.4,
+        "p95_ms": 309.9,
+        "max_ms": 309.9,
+        "samples": 5
+      },
+      "cached": {
+        "median_ms": 57.1,
+        "p95_ms": 73.8,
+        "max_ms": 73.8,
+        "samples": 5
+      }
+    },
+    {
+      "runs": 500000,
+      "seed_seconds": 19.7,
+      "verdict": "HOLD",
+      "cold": {
+        "median_ms": 991.3,
+        "p95_ms": 1007.6,
+        "max_ms": 1007.6,
+        "samples": 5
+      },
+      "after_new_run": {
+        "median_ms": 94.9,
+        "p95_ms": 103.0,
+        "max_ms": 103.0,
+        "samples": 5
+      },
+      "cached": {
+        "median_ms": 85.2,
+        "p95_ms": 89.0,
+        "max_ms": 89.0,
+        "samples": 5
+      }
+    }
+  ],
+  "recording": {
+    "api_up": {
+      "median_ms": 0.009,
+      "p95_ms": 0.015,
+      "max_ms": 15.782,
+      "samples": 5000,
+      "p99_ms": 0.168
+    },
+    "api_down": {
+      "median_ms": 0.009,
+      "p95_ms": 0.017,
+      "max_ms": 0.384,
+      "samples": 5000,
+      "p99_ms": 0.028
+    }
+  }
+}

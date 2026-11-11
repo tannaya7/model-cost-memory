@@ -1,0 +1,391 @@
+{
+  "nearly-as-good": {
+    "what": "A cheaper model is truly 1.4 points worse: inside the margin, so it is the right pick",
+    "current": "gemini-2.5-pro",
+    "right": "gemini-2.5-flash",
+    "true_pass_rates": {
+      "gemini-2.5-flash-lite": 0.90008,
+      "gemini-2.5-flash": 0.96336,
+      "gemini-2.5-pro": 0.97668
+    },
+    "results": [
+      {
+        "evidence_per_model": 25,
+        "splits": 500,
+        "safe": 500,
+        "exact": 0,
+        "refused": 0,
+        "saving_offered": 0.2864286358267178,
+        "saving_realised": 0.0,
+        "picks": {
+          "gemini-2.5-pro": 500
+        },
+        "safe_rate": 1.0,
+        "exact_rate": 0.0,
+        "refused_rate": 0.0,
+        "saving_captured": 0.0
+      },
+      {
+        "evidence_per_model": 50,
+        "splits": 500,
+        "safe": 499,
+        "exact": 5,
+        "refused": 0,
+        "saving_offered": 0.2864286358267178,
+        "saving_realised": 0.0035898126951533346,
+        "picks": {
+          "gemini-2.5-flash": 5,
+          "gemini-2.5-flash-lite": 1,
+          "gemini-2.5-pro": 494
+        },
+        "safe_rate": 0.998,
+        "exact_rate": 0.01,
+        "refused_rate": 0.0,
+        "saving_captured": 0.012533009085464075
+      },
+      {
+        "evidence_per_model": 100,
+        "splits": 500,
+        "safe": 500,
+        "exact": 24,
+        "refused": 0,
+        "saving_offered": 0.2864286358267178,
+        "saving_realised": 0.013748574519682406,
+        "picks": {
+          "gemini-2.5-flash": 24,
+          "gemini-2.5-pro": 476
+        },
+        "safe_rate": 1.0,
+        "exact_rate": 0.048,
+        "refused_rate": 0.0,
+        "saving_captured": 0.047999999999999834
+      },
+      {
+        "evidence_per_model": 200,
+        "splits": 500,
+        "safe": 500,
+        "exact": 36,
+        "refused": 0,
+        "saving_offered": 0.2864286358267178,
+        "saving_realised": 0.020622861779523594,
+        "picks": {
+          "gemini-2.5-flash": 36,
+          "gemini-2.5-pro": 464
+        },
+        "safe_rate": 1.0,
+        "exact_rate": 0.072,
+        "refused_rate": 0.0,
+        "saving_captured": 0.0719999999999997
+      },
+      {
+        "evidence_per_model": 400,
+        "splits": 500,
+        "safe": 500,
+        "exact": 73,
+        "refused": 0,
+        "saving_offered": 0.2864286358267178,
+        "saving_realised": 0.04181858083070058,
+        "picks": {
+          "gemini-2.5-flash": 73,
+          "gemini-2.5-pro": 427
+        },
+        "safe_rate": 1.0,
+        "exact_rate": 0.146,
+        "refused_rate": 0.0,
+        "saving_captured": 0.14599999999999924
+      }
+    ]
+  },
+  "as-good": {
+    "what": "A cheaper model is truly as good as the one in use",
+    "current": "gemini-2.5-pro",
+    "right": "gemini-2.5-flash",
+    "true_pass_rates": {
+      "gemini-2.5-flash-lite": 0.90008,
+      "gemini-2.5-flash": 0.97668,
+      "gemini-2.5-pro": 0.97668
+    },
+    "results": [
+      {
+        "evidence_per_model": 25,
+        "splits": 500,
+        "safe": 500,
+        "exact": 0,
+        "refused": 0,
+        "saving_offered": 0.28774087981733887,
+        "saving_realised": 0.0,
+        "picks": {
+          "gemini-2.5-pro": 500
+        },
+        "safe_rate": 1.0,
+        "exact_rate": 0.0,
+        "refused_rate": 0.0,
+        "saving_captured": 0.0
+      },
+      {
+        "evidence_per_model": 50,
+        "splits": 500,
+        "safe": 499,
+        "exact": 6,
+        "refused": 0,
+        "saving_offered": 0.28774087981733887,
+        "saving_realised": 0.004178416894694252,
+        "picks": {
+          "gemini-2.5-flash": 6,
+          "gemini-2.5-flash-lite": 1,
+          "gemini-2.5-pro": 493
+        },
+        "safe_rate": 0.998,
+        "exact_rate": 0.012,
+        "refused_rate": 0.0,
+        "saving_captured": 0.01452145728249235
+      },
+      {
+        "evidence_per_model": 100,
+        "splits": 500,
+        "safe": 500,
+        "exact": 62,
+        "refused": 0,
+        "saving_offered": 0.28774087981733887,
+        "saving_realised": 0.035679869097350186,
+        "picks": {
+          "gemini-2.5-flash": 62,
+          "gemini-2.5-pro": 438
+        },
+        "safe_rate": 1.0,
+        "exact_rate": 0.124,
+        "refused_rate": 0.0,
+        "saving_captured": 0.12400000000000058
+      },
+      {
+        "evidence_per_model": 200,
+        "splits": 500,
+        "safe": 500,
+        "exact": 130,
+        "refused": 0,
+        "saving_offered": 0.28774087981733887,
+        "saving_realised": 0.07481262875250824,
+        "picks": {
+          "gemini-2.5-flash": 130,
+          "gemini-2.5-pro": 370
+        },
+        "safe_rate": 1.0,
+        "exact_rate": 0.26,
+        "refused_rate": 0.0,
+        "saving_captured": 0.26000000000000045
+      },
+      {
+        "evidence_per_model": 400,
+        "splits": 500,
+        "safe": 500,
+        "exact": 281,
+        "refused": 0,
+        "saving_offered": 0.28774087981733887,
+        "saving_realised": 0.1617103744573445,
+        "picks": {
+          "gemini-2.5-flash": 281,
+          "gemini-2.5-pro": 219
+        },
+        "safe_rate": 1.0,
+        "exact_rate": 0.562,
+        "refused_rate": 0.0,
+        "saving_captured": 0.5620000000000003
+      }
+    ]
+  },
+  "current-is-worse": {
+    "what": "The model in use is truly 6-8 points behind: the right move is up",
+    "current": "gemini-2.5-flash-lite",
+    "right": "gemini-2.5-flash",
+    "true_pass_rates": {
+      "gemini-2.5-flash-lite": 0.90008,
+      "gemini-2.5-flash": 0.96336,
+      "gemini-2.5-pro": 0.97668
+    },
+    "results": [
+      {
+        "evidence_per_model": 25,
+        "splits": 500,
+        "safe": 10,
+        "exact": 4,
+        "refused": 0,
+        "saving_offered": 0.0,
+        "saving_realised": 0.0,
+        "picks": {
+          "gemini-2.5-flash": 4,
+          "gemini-2.5-flash-lite": 490,
+          "gemini-2.5-pro": 6
+        },
+        "safe_rate": 0.02,
+        "exact_rate": 0.008,
+        "refused_rate": 0.0,
+        "saving_captured": null
+      },
+      {
+        "evidence_per_model": 50,
+        "splits": 500,
+        "safe": 36,
+        "exact": 8,
+        "refused": 0,
+        "saving_offered": 0.0,
+        "saving_realised": 0.0,
+        "picks": {
+          "gemini-2.5-flash": 8,
+          "gemini-2.5-flash-lite": 464,
+          "gemini-2.5-pro": 28
+        },
+        "safe_rate": 0.072,
+        "exact_rate": 0.016,
+        "refused_rate": 0.0,
+        "saving_captured": null
+      },
+      {
+        "evidence_per_model": 100,
+        "splits": 500,
+        "safe": 81,
+        "exact": 19,
+        "refused": 0,
+        "saving_offered": 0.0,
+        "saving_realised": 0.0,
+        "picks": {
+          "gemini-2.5-flash": 19,
+          "gemini-2.5-flash-lite": 419,
+          "gemini-2.5-pro": 62
+        },
+        "safe_rate": 0.162,
+        "exact_rate": 0.038,
+        "refused_rate": 0.0,
+        "saving_captured": null
+      },
+      {
+        "evidence_per_model": 200,
+        "splits": 500,
+        "safe": 156,
+        "exact": 30,
+        "refused": 0,
+        "saving_offered": 0.0,
+        "saving_realised": 0.0,
+        "picks": {
+          "gemini-2.5-flash": 30,
+          "gemini-2.5-flash-lite": 344,
+          "gemini-2.5-pro": 126
+        },
+        "safe_rate": 0.312,
+        "exact_rate": 0.06,
+        "refused_rate": 0.0,
+        "saving_captured": null
+      },
+      {
+        "evidence_per_model": 400,
+        "splits": 500,
+        "safe": 319,
+        "exact": 43,
+        "refused": 0,
+        "saving_offered": 0.0,
+        "saving_realised": 0.0,
+        "picks": {
+          "gemini-2.5-flash": 43,
+          "gemini-2.5-flash-lite": 181,
+          "gemini-2.5-pro": 276
+        },
+        "safe_rate": 0.638,
+        "exact_rate": 0.086,
+        "refused_rate": 0.0,
+        "saving_captured": null
+      }
+    ]
+  },
+  "already-right": {
+    "what": "The model in use is already the right pick: nothing cheaper is good enough",
+    "current": "gemini-2.5-flash",
+    "right": "gemini-2.5-flash",
+    "true_pass_rates": {
+      "gemini-2.5-flash-lite": 0.90008,
+      "gemini-2.5-flash": 0.97668,
+      "gemini-2.5-pro": 0.97668
+    },
+    "results": [
+      {
+        "evidence_per_model": 25,
+        "splits": 500,
+        "safe": 500,
+        "exact": 500,
+        "refused": 0,
+        "saving_offered": 0.0,
+        "saving_realised": 0.0,
+        "picks": {
+          "gemini-2.5-flash": 500
+        },
+        "safe_rate": 1.0,
+        "exact_rate": 1.0,
+        "refused_rate": 0.0,
+        "saving_captured": null
+      },
+      {
+        "evidence_per_model": 50,
+        "splits": 500,
+        "safe": 499,
+        "exact": 499,
+        "refused": 0,
+        "saving_offered": 0.0,
+        "saving_realised": 0.0,
+        "picks": {
+          "gemini-2.5-flash": 499,
+          "gemini-2.5-flash-lite": 1
+        },
+        "safe_rate": 0.998,
+        "exact_rate": 0.998,
+        "refused_rate": 0.0,
+        "saving_captured": null
+      },
+      {
+        "evidence_per_model": 100,
+        "splits": 500,
+        "safe": 500,
+        "exact": 500,
+        "refused": 0,
+        "saving_offered": 0.0,
+        "saving_realised": 0.0,
+        "picks": {
+          "gemini-2.5-flash": 500
+        },
+        "safe_rate": 1.0,
+        "exact_rate": 1.0,
+        "refused_rate": 0.0,
+        "saving_captured": null
+      },
+      {
+        "evidence_per_model": 200,
+        "splits": 500,
+        "safe": 500,
+        "exact": 500,
+        "refused": 0,
+        "saving_offered": 0.0,
+        "saving_realised": 0.0,
+        "picks": {
+          "gemini-2.5-flash": 500
+        },
+        "safe_rate": 1.0,
+        "exact_rate": 1.0,
+        "refused_rate": 0.0,
+        "saving_captured": null
+      },
+      {
+        "evidence_per_model": 400,
+        "splits": 500,
+        "safe": 500,
+        "exact": 500,
+        "refused": 0,
+        "saving_offered": 0.0,
+        "saving_realised": 0.0,
+        "picks": {
+          "gemini-2.5-flash": 500
+        },
+        "safe_rate": 1.0,
+        "exact_rate": 1.0,
+        "refused_rate": 0.0,
+        "saving_captured": null
+      }
+    ]
+  }
+}

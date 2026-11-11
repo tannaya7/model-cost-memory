@@ -15,38 +15,154 @@ recommended and why it changed.
 
 - A small SDK (`RunRecorder`) wraps the app's existing model call and sends a copy of each run in
   the background. The production call never passes through this system.
-- Each run is checked automatically (answer key, tests in a sandbox, or schema) and stored.
+- Each run is checked automatically (an answer key or a JSON schema, or a label supplied later) and stored
+  with the reason it passed or failed.
 - Evidence fades with age, faster for model versions that have been superseded, so conclusions stay
   current without anyone curating a test set.
-- Scheduled jobs consolidate runs into recommendations, detect regressions across version changes,
-  track model retirements, and re-test new models within a budget.
+- A cheaper model is recommended only when the system is **95% sure it is at most 3 points worse** than the
+  best, ranked by **cost per successful run**, with a savings forecast and the failing runs behind it.
+  Advising a move away from the model in use asks for **99%**, so the advice does not flip on daily noise.
+- Scheduled jobs store each changed verdict with its lineage, detect regressions across version changes (and
+  silent drops under an unchanged name), alert a signed webhook, track model retirements, and **re-test**
+  cheaper candidates on the customer's own key, always within a budget and a monthly cap.
+- **Usage limits**: a plan's 5-hour or weekly limit, a one-model limit, an API budget or daily quota. From the
+  recorded runs it forecasts whether a limit runs out before it resets and, if so, names per job the cheaper
+  option proven to still do it, at a model and reasoning effort (`sonnet-5@low` instead of `opus-5-5@medium`).
+- A React web app: Google sign-in, projects and keys, recommendations, evidence, history, alerts, re-tests,
+  spend, breakdowns and a live view of runs crossing the pipeline.
 
 Full design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 illustrated walkthrough: [`docs/Architecture_Overview.pdf`](docs/Architecture_Overview.pdf) ·
-database schema: [`db/schema.sql`](db/schema.sql)
+database schema: [`db/schema.sql`](db/schema.sql) · API contract: [`contract/`](contract/) ·
+measured results: [`reports/`](reports/)
 
 ## Status
 
-**Week 1 of 12: repository structure and architecture.** Modules exist with their responsibilities
-documented; logic is implemented week by week.
+| Weeks | Milestone | State |
+|---|---|---|
+| 1–6 | Repository, data model, SDK and ingest, outcome checks, sync worker and vector search, decay, model catalog | done |
+| 7 | Recommendation engine (95% intervals, 3-point tolerance), spend by job | done |
+| 8 | Consolidation, supersession, history and lineage, result cache, savings forecast | done |
+| 9 | Simulated-time harness, regression and silent-drop detection, signed webhook alerts | done |
+| 10 | Re-test runner: budget and cap before every call, just-in-time provider key, automatic triggers | done |
+| 11 | Google sign-in, project ownership and setup, public read-only demo, breakdown insights | done |
+| 12 | Staleness experiment, live data-flow view (SSE), optional recommendation summary | done |
+| — | Public deployment on the server | waiting for the server and domain |
 
-| Weeks | Milestone |
-|---|---|
-| 1–4 | Record and check: data model, SDK and ingest API, outcome checkers with sandbox |
-| 5–8 | Score and recommend: similar-run search, decay, model catalog, recommendations, history. **Public deployment from Week 7** |
-| 9–12 | Detect, prove and ship: regression alerts, re-test runner, lineage graph, staleness experiment, demo |
+## Results
+
+Simulated data, run through the production engine, decay, consolidation and regression code:
+
+- **Staleness experiment** ([report](reports/staleness_experiment.md)), 5 timelines of 120 days: as the
+  workload drifts and a new model version arrives, the self-maintaining memory picks the right model 75% of
+  the time over the whole timeline (92% in the second half), a test set frozen at day 14 25% (0%), and one
+  re-checked every month 69% (88%). Its wrong answers are all the safe kind: a good model that costs more.
+  Keeping the evidence fresh costs 9% of production spend. In a world where nothing changes it does not
+  wander: 2-3 changes of answer per timeline, never to a model that is not good enough.
+- **Regression detection** ([version](reports/regression_detection.json),
+  [silent](reports/silent_drop_detection.json)), 100 trials per size: a version upgrade that costs 5 points is
+  caught 93% of the time (likely 86-97%) and 10 points always, the day after it lands, with 2 false alarms in
+  100 unchanged upgrades. A silent drop under an unchanged name, watched for 28 days, is caught at 5 points
+  77% of the time at 50 runs a day and 100/100 at 100 runs a day, and always at 10 points, with 1 false
+  alarm in 100 at 50 runs a day: **90% of 5-point silent drops once a job has about 100 runs a day**. False
+  alarms at 100 runs a day are still to be measured.
+- **Speed** ([report](reports/speed.md)): a recommendation for a job with 100,000 runs in under 300 ms, and
+  for 500,000 runs about 1 s cold and under 100 ms under live traffic; recording adds about 0.01 ms (p99
+  0.2 ms) to the application's own call, whether the API is up or not.
+- **Held-out check** ([report](reports/holdout_check.md)): on simulated answers at real Gemini prices, every
+  model the engine moves a job to is truly within 3 points of the best, at every amount of evidence. The cost
+  is caution: a cheaper model only 1.4 points worse takes several hundred runs per model to prove.
+
+Reproduce with `python scripts/staleness_experiment.py`, `python scripts/simulate.py` (an embedded Postgres
+is started for them), `python scripts/holdout_check.py --simulated` and `python scripts/benchmark.py`.
 
 ## Getting started
 
+Development needs Python 3.11+ and a PostgreSQL database with the pgvector extension. A free hosted
+[Neon](https://neon.tech) database works well and needs no Docker. Tests need neither: they start their own
+embedded Postgres.
+
 ```bash
-cp .env.example .env
-docker compose up -d db          # Postgres with pgvector; db/schema.sql is applied on first start
+python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-pytest
+cp .env.example .env                                  # set DATABASE_URL and SECRET_KEY
+
+alembic upgrade head                                  # create the tables
+python scripts/create_project.py my-company           # prints the project key once; copy it
+python scripts/sync_catalog.py                        # model prices and shutdown dates (optional)
+
+uvicorn agent_memory.api:app --reload                 # the API on http://127.0.0.1:8000
+python -m agent_memory.pipeline.sync_worker           # embeds recorded runs (second terminal)
+python -m agent_memory.scheduler                      # maintenance, regressions, re-tests (third terminal)
+
+cd frontend && npm ci && npm run dev                  # the web app on http://localhost:5174
 ```
 
-The API, worker, scheduler and demo UI are already defined in `docker-compose.yml` under the
-`full` profile and are switched on as they are implemented.
+Open the web app and either paste the project key in **Settings**, or sign in: with `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET` set, through Google; on a development machine, with `DEV_LOGIN=true`, by email.
+
+Record a call from your own code:
+
+```python
+from agent_memory.recorder import RunRecorder, provider_for
+
+with RunRecorder(job="invoice-extract", provider=provider_for(client.base_url)) as rec:
+    response = client.chat.completions.create(model="my-model", messages=[...])   # your call, unchanged
+    rec.capture(response, prompt=prompt, model="my-model", expected={"total": 1250.0})
+```
+
+Set `MCM_API_KEY` to the project key (and `MCM_API_URL` if the API is not local). The recorder sends in the
+background, adds well under 5 ms, and never raises into your application. `provider` says who served the call
+(`openai`, `gemini`, `groq`, `together_ai`, ... as the price list names them): the same open-weight model can cost
+several times more on one provider than another, so naming it gets each run that provider's price.
+
+Try it with the built-in corpus of invoices with known answers, on a free hosted model:
+
+```bash
+python scripts/build_corpus.py
+python scripts/run_corpus.py --model <a Gemini model name> --limit 50 \
+    --base-url https://generativelanguage.googleapis.com/v1beta/openai/ --api-key-env GEMINI_API_KEY
+```
+
+Pick a model your key's free tier offers that is also in the price catalog (`GET /v1/models?q=gemini`), so each
+run is priced at its real list price. The script names the provider from `--base-url`, so Gemma through the
+Gemini API is priced at Gemini's $0, not another provider's rate. Groq works the same way with
+`--base-url https://api.groq.com/openai/v1`.
+
+Or fill a demo project with 90 days of simulated history (recommendations that change, a regression alert,
+spend), and let anyone read it without signing in:
+
+```bash
+python scripts/seed_demo.py --database-url "$DATABASE_URL"     # then set DEMO_PROJECT_ID=demo
+```
+
+Re-tests run on the customer's own provider key, asked for in the web app the first time a re-test needs it
+and stored encrypted with `SECRET_KEY`. Every re-test has a budget, and every project a monthly cap (default
+$10, counted at list price so it limits free keys too), checked before each call.
+
+Logs are JSON lines carrying `run_id`, `job_id` and `project_id`, so one run can be followed end to end
+(`LOG_FORMAT=text` gives a readable form for a terminal). To check that the sync worker is healthy:
+
+```bash
+python scripts/outbox_status.py        # prints the queue counts; exits 1 if anything is failed, stuck or slow
+```
+
+Tool-call arguments can hold sensitive data, so only each tool's name and call id are kept. A project can opt in
+to keeping arguments with `create_project.py --store-tool-arguments`.
+
+Run the tests and lint:
+
+```bash
+pytest
+ruff check .
+cd frontend && npm run build
+```
+
+Docker is for the server only. See [`deploy/README.md`](deploy/README.md).
+
+## Contributing
+
+Branch names, commit messages and sign-off rules are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Team
 

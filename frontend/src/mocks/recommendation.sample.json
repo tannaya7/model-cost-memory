@@ -1,0 +1,104 @@
+{
+  "computed_at": "2026-10-14T09:30:00Z",
+  "current": {
+    "model": "acme-large",
+    "model_version": "acme-large-2026-06-01"
+  },
+  "evidence": {
+    "evidence_weight": 1032.5,
+    "failing_runs": [
+      {
+        "created_at": "2026-10-14T06:30:00Z",
+        "model": "acme-mini",
+        "model_version": "acme-mini-2026-08-15",
+        "outcome_reason": "total: expected 1250.00, got 1205.00",
+        "run_id": "00000000-0000-0000-0000-000000002003"
+      },
+      {
+        "created_at": "2026-10-12T09:30:00Z",
+        "model": "acme-large",
+        "model_version": "acme-large-2026-06-01",
+        "outcome_reason": "date: expected 2026-10-02, got 2026-02-10",
+        "run_id": "00000000-0000-0000-0000-000000002011"
+      }
+    ],
+    "floor": 25.0,
+    "n_runs": 1084
+  },
+  "forecast": null,
+  "job": "invoice-extract",
+  "models": [
+    {
+      "catalog_status": "ACTIVE",
+      "cost_per_success_usd": 0.03502839116719243,
+      "effective_n": 560.0,
+      "eligible": true,
+      "evidence_weight": 610.0,
+      "failures": 6,
+      "mean_cost_usd": 0.0347,
+      "model": "acme-large",
+      "model_version": "acme-large-2026-06-01",
+      "n_runs": 640,
+      "pass_rate_high": 0.9959105982039863,
+      "pass_rate_low": 0.9786541334305231,
+      "shutdown_date": null,
+      "status": "GOOD_ENOUGH",
+      "weighted_pass_rate": 0.990625,
+      "why": "Highest pass rate we can be sure of"
+    },
+    {
+      "catalog_status": "ACTIVE",
+      "cost_per_success_usd": 0.003129807692307692,
+      "effective_n": 380.0,
+      "eligible": true,
+      "evidence_weight": 400.0,
+      "failures": 4,
+      "mean_cost_usd": 0.0031,
+      "model": "acme-mini",
+      "model_version": "acme-mini-2026-08-15",
+      "n_runs": 420,
+      "pass_rate_high": 0.9964533432507873,
+      "pass_rate_low": 0.9746817339948289,
+      "shutdown_date": null,
+      "status": "GOOD_ENOUGH",
+      "weighted_pass_rate": 0.9904761904761905,
+      "why": "At most 3 points worse than acme-large, 95% sure"
+    },
+    {
+      "catalog_status": "ACTIVE",
+      "cost_per_success_usd": 0.0009391304347826086,
+      "effective_n": 21.0,
+      "eligible": false,
+      "evidence_weight": 22.5,
+      "failures": 1,
+      "mean_cost_usd": 0.0009,
+      "model": "acme-nano",
+      "model_version": "acme-nano-2026-09-01",
+      "n_runs": 24,
+      "pass_rate_high": 0.9932789480693299,
+      "pass_rate_low": 0.7816352845828939,
+      "shutdown_date": null,
+      "status": "BELOW_FLOOR",
+      "weighted_pass_rate": 0.9583333333333334,
+      "why": "Evidence 22.5 of the 25 needed to judge it"
+    }
+  ],
+  "next_step": "Re-test acme-nano: cheaper, but not enough evidence yet",
+  "progress": 1.0,
+  "recommended": {
+    "model": "acme-mini",
+    "model_version": "acme-mini-2026-08-15"
+  },
+  "reference": "acme-large",
+  "retest_candidates": [
+    "acme-nano"
+  ],
+  "rules": {
+    "confidence": 0.95,
+    "evidence_floor": 25.0,
+    "margin": 0.03,
+        "switch_confidence": 0.99
+  },
+  "verdict": "DOWNGRADE",
+  "warnings": []
+}

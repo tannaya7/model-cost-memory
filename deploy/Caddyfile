@@ -1,0 +1,27 @@
+# Caddy: automatic HTTPS (Let's Encrypt), the web app, and the API on one origin.
+# DOMAIN is set in .env (for example mcm.example.xyz). Both A/AAAA records must point at this server.
+{$DOMAIN} {
+	encode gzip
+
+	# The API and sign-in. flush_interval -1 turns off buffering so Server-Sent Events arrive live.
+	@api path /v1/* /auth/* /healthz
+	handle @api {
+		reverse_proxy api:8000 {
+			flush_interval -1
+		}
+	}
+
+	# Everything else is the built web app (frontend/dist). Unknown paths fall back to index.html
+	# so client-side routes such as /runs work when reloaded.
+	handle {
+		root * /srv/frontend
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}

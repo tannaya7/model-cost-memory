@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Model &amp; Cost Memory · Engine V1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;800&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: control column + live data-flow log on top, answer cards below; colours encode the three paths. */
+:root {
+  color-scheme: dark;
+  --bg: #0a0e1c; --panel: #121830; --panel2: #18203f; --rule: #263058;
+  --fg: #edf0ff; --dim: #9aa3cf;
+  --write: #4fd1ff; --read: #b79cff; --maint: #ffc15e;
+  --ok: #5ee6a6; --bad: #ff7a8a; --warn: #ffcf5c;
+  --f-d: "Sora", "Segoe UI", sans-serif; --f-b: "Figtree", "Segoe UI", sans-serif; --f-m: "IBM Plex Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14.5px/1.55 var(--f-b); }
+.wrap { max-width: 1320px; margin: 0 auto; padding-inline: 18px; padding-block: 0 60px; }
+h1, h2, h3 { font-family: var(--f-d); margin: 0; line-height: 1.15; }
+code, .mono { font-family: var(--f-m); font-size: 12.5px; }
+button, select, textarea { font: inherit; color: inherit; }
+button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--write); outline-offset: 2px; }
+
+header { padding-block: 26px 14px; display: grid; gap: 8px; }
+header h1 { font-size: clamp(24px, 3vw, 34px); font-weight: 800; }
+header h1 span { color: var(--write); }
+header p { color: var(--dim); max-width: 90ch; margin: 0; }
+
+/* pipeline strip */
+.pipe { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 12px 0 18px; }
+.node { font: 600 12px var(--f-m); padding: 7px 10px; border-radius: 8px; background: var(--panel); border: 1px solid var(--rule); color: var(--dim); transition: all .25s; }
+.node.w { --c: var(--write); } .node.r { --c: var(--read); } .node.m { --c: var(--maint); }
+.node.on { color: #0a0e1c; background: var(--c); border-color: var(--c); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 25%, transparent); transform: translateY(-2px); }
+.arr { color: var(--rule); }
+
+.top { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 14px; padding: 16px; display: grid; gap: 12px; min-width: 0; align-content: start; }
+.card h2 { font-size: 17px; }
+.card h3 { font-size: 14px; }
+.step { font: 700 10.5px var(--f-m); letter-spacing: .12em; text-transform: uppercase; color: var(--maint); }
+.hint { color: var(--dim); font-size: 13px; margin: 0; }
+
+.btn { cursor: pointer; border: 1px solid var(--rule); background: var(--panel2); padding: 10px 14px; border-radius: 10px; font-weight: 600; text-align: left; display: grid; gap: 2px; transition: border-color .2s, transform .1s; }
+.btn small { color: var(--dim); font-weight: 400; font-size: 12.5px; }
+.btn:hover { border-color: var(--write); }
+.btn:active { transform: scale(.99); }
+.btn.primary { background: var(--write); color: #0a0e1c; border-color: var(--write); }
+.btn.primary small { color: #12304a; }
+.btn.amber { background: var(--maint); color: #1c1300; border-color: var(--maint); }
+.btn.amber small { color: #4a3600; }
+.btn.ghost { background: transparent; padding: 7px 10px; font-size: 13px; }
+.btn[disabled] { opacity: .5; cursor: progress; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+select { background: var(--panel2); border: 1px solid var(--rule); border-radius: 8px; padding: 8px; }
+textarea { width: 100%; min-height: 170px; background: #070a16; border: 1px solid var(--rule); border-radius: 8px; padding: 10px; font: 12px/1.5 var(--f-m); resize: vertical; }
+details > summary { cursor: pointer; font-weight: 600; }
+.box { background: #070a16; border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; font: 12px/1.55 var(--f-m); white-space: pre-wrap; overflow-x: auto; max-height: 280px; }
+
+/* flow log */
+.log { display: grid; gap: 6px; max-height: 560px; overflow-y: auto; padding-right: 4px; }
+.ev { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; padding: 8px 10px; border-radius: 9px; background: var(--panel2); border-left: 3px solid var(--c, var(--rule)); animation: slide .35s ease-out; }
+@keyframes slide { from { transform: translateX(-6px); background: #222c55; } to { transform: none; } }
+.ev .stg { font: 700 10.5px var(--f-m); text-transform: uppercase; letter-spacing: .06em; color: var(--c, var(--dim)); }
+.ev .t { font: 11px var(--f-m); color: var(--dim); }
+.ev .msg { font-size: 13.5px; }
+.ev details { margin-top: 4px; } .ev details summary { font: 11px var(--f-m); color: var(--dim); font-weight: 400; }
+.ev pre { margin: 4px 0 0; font: 11.5px/1.45 var(--f-m); color: #cfd6ff; white-space: pre-wrap; }
+
+/* answers */
+.answers-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; margin: 34px 0 12px; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tab { cursor: pointer; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--rule); background: var(--panel); font: 600 13px var(--f-m); }
+.tab[aria-pressed="true"] { background: var(--read); color: #120a2a; border-color: var(--read); }
+.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; }
+.span12 { grid-column: span 12; } .span7 { grid-column: span 7; } .span5 { grid-column: span 5; } .span6 { grid-column: span 6; }
+.cardhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ep { font: 11px var(--f-m); color: var(--read); }
+.verdict { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.pill { font: 800 13px var(--f-m); padding: 6px 12px; border-radius: 8px; letter-spacing: .04em; }
+.pill.SWITCH { background: #3a1f5e; color: var(--read); } .pill.DOWNGRADE { background: #11402f; color: var(--ok); }
+.pill.HOLD { background: var(--panel2); color: var(--fg); } .pill.INSUFFICIENT_EVIDENCE { background: #4a3a10; color: var(--warn); }
+.big { font: 800 22px var(--f-d); }
+.big b { color: var(--ok); }
+.cmp { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.stat { background: var(--panel2); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; }
+.stat span { color: var(--dim); font-size: 12px; }
+.stat b { font: 700 18px var(--f-d); font-variant-numeric: tabular-nums; }
+.good { color: var(--ok); } .badc { color: var(--bad); } .warnc { color: var(--warn); }
+.warnbox { border: 1px solid var(--warn); background: rgba(255,207,92,.08); border-radius: 10px; padding: 9px 12px; font-size: 13.5px; }
+.tw { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--rule); white-space: nowrap; vertical-align: top; }
+th { font: 600 10.5px var(--f-m); text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
+td.wrap { white-space: normal; min-width: 240px; }
+.tag { font: 600 10.5px var(--f-m); padding: 2px 7px; border-radius: 5px; }
+.tag.PASS, .tag.ACTIVE, .tag.yes { background: rgba(94,230,166,.14); color: var(--ok); }
+.tag.FAIL, .tag.RETIRED, .tag.no { background: rgba(255,122,138,.14); color: var(--bad); }
+.tag.UNKNOWN, .tag.DEPRECATED { background: rgba(255,207,92,.14); color: var(--warn); }
+.tag.state { background: var(--panel2); color: var(--dim); }
+.timeline { display: grid; gap: 8px; }
+.tl { display: grid; grid-template-columns: 14px 1fr; gap: 10px; }
+.tl i { width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; background: var(--ok); }
+.tl.old i { background: var(--dim); }
+.alert { border-left: 3px solid var(--bad); background: var(--panel2); border-radius: 8px; padding: 9px 12px; font-size: 13.5px; }
+.alert.MODEL_DEPRECATED { border-left-color: var(--warn); }
+.bar { height: 10px; border-radius: 5px; background: var(--write); }
+.empty { color: var(--dim); font-style: italic; font-size: 13px; }
+.json { display: none; } .showjson .json { display: block; }
+@media (max-width: 980px) { .top { grid-template-columns: 1fr; } .span7, .span5, .span6 { grid-column: span 12; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Model &amp; Cost Memory · <span>engine V1</span></h1>
+  <p>A working proof of concept. Send in runs the way a customer's app would, watch every step they go through, then read the answers the system gives: which model to use per job, whether an upgrade broke something, why the recommendation changed, and where the money goes. The AI models are simulated, so nothing costs real money.</p>
+</header>
+
+<div class="pipe" id="pipe" aria-label="The path data takes">
+  <span class="node w" data-s="app">Customer app</span><span class="arr">→</span>
+  <span class="node w" data-s="sdk">SDK</span><span class="arr">→</span>
+  <span class="node w" data-s="api">API</span><span class="arr">→</span>
+  <span class="node w" data-s="validate">Validate</span><span class="arr">→</span>
+  <span class="node w" data-s="cost">Cost</span><span class="arr">→</span>
+  <span class="node w" data-s="check">Pass/fail check</span><span class="arr">→</span>
+  <span class="node w" data-s="score">Score</span><span class="arr">→</span>
+  <span class="node w" data-s="store">Run + outbox</span><span class="arr">→</span>
+  <span class="node w" data-s="worker">Sync worker</span><span class="arr">⋯</span>
+  <span class="node m" data-s="scheduler decay regression consolidate catalog alert">Scheduler</span><span class="arr">⋯</span>
+  <span class="node r" data-s="read">Answers</span>
+</div>
+
+<div class="top">
+  <div class="card">
+    <div class="step">1 · Give it input</div>
+    <button class="btn primary" id="b-sim"><span>Simulate 30 days of traffic</span><small>~1,500 runs from two jobs go through the real SDK and POST /v1/runs</small></button>
+    <button class="btn amber" id="b-maint"><span>Run the scheduled jobs</span><small>Decay · regression check · consolidation · catalog · alerts (normally on a timer)</small></button>
+
+    <details open>
+      <summary>Make one call from the customer's app</summary>
+      <div class="row" style="margin-top:8px">
+        <select id="c-job" aria-label="Job"><option>invoice-extract</option><option>ticket-classify</option></select>
+        <select id="c-model" aria-label="Model"><option>mini</option><option>pro</option><option>max</option><option>classic</option></select>
+        <select id="c-pv" aria-label="Prompt version"><option value="v1">prompt v1</option><option value="v2">prompt v2</option></select>
+      </div>
+      <button class="btn" id="b-call" style="margin-top:8px"><span>Call the model and record it</span><small>Watch the run travel through every step on the right</small></button>
+      <div class="box" id="call-out" hidden></div>
+    </details>
+
+    <details>
+      <summary>Send your own run (raw API)</summary>
+      <p class="hint" style="margin-top:6px">This is exactly what the SDK sends. Change the output to see the check fail, or the job to see a 404.</p>
+      <textarea id="raw" spellcheck="false" aria-label="Run JSON"></textarea>
+      <button class="btn" id="b-raw"><span>POST /v1/runs</span></button>
+      <div class="box" id="raw-out" hidden></div>
+    </details>
+
+    <button class="btn ghost" id="b-reset">Reset everything</button>
+  </div>
+
+  <div class="card">
+    <div class="cardhead"><div class="step">2 · Watch the data travel</div><span class="ep">GET /v1/flow · live</span></div>
+    <div class="log" id="log"><p class="empty">Waiting for the first event. Start with “Simulate 30 days of traffic”.</p></div>
+  </div>
+</div>
+
+<div class="answers-head">
+  <div>
+    <div class="step" style="color:var(--read)">3 · Read the answers</div>
+    <h2 style="font-size:22px;margin-top:4px">What the engineer gets back</h2>
+  </div>
+  <div class="row">
+    <div class="tabs" id="tabs"></div>
+    <button class="btn ghost" id="b-json">Show raw JSON</button>
+  </div>
+</div>
+
+<div class="grid" id="answers">
+  <section class="card span12" id="rec"></section>
+  <section class="card span7" id="cands"></section>
+  <section class="card span5" id="alerts"></section>
+  <section class="card span5" id="hist"></section>
+  <section class="card span7" id="ins"></section>
+  <section class="card span6" id="spend"></section>
+  <section class="card span6" id="cat"></section>
+  <section class="card span12" id="runs"></section>
+</div>
+
+</div>
+
+<script>
+const KEY = "demo-key";
+const STAGE_COLOR = { app: "write", sdk: "write", api: "write", validate: "write", cost: "write", check: "write", score: "write", store: "write", worker: "write", label: "write",
+  scheduler: "maint", decay: "maint", regression: "maint", consolidate: "maint", catalog: "maint", alert: "maint", simulate: "maint", setup: "maint", read: "read" };
+let lastEvent = 0, job = "invoice-extract", jobs = [];
+
+async function api(method, path, body) {
+  const r = await fetch(path, { method, headers: { "X-API-Key": KEY, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const data = await r.json().catch(() => ({}));
+  return { status: r.status, data };
+}
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const pct = (x) => x == null ? "—" : (x * 100).toFixed(1) + "%";
+const usd = (x, d = 4) => x == null ? "—" : "$" + Number(x).toFixed(d);
+const raw = (obj) => `<pre class="box json">${esc(JSON.stringify(obj, null, 2))}</pre>`;
+const head = (title, ep) => `<div class="cardhead"><h3>${title}</h3><span class="ep">${ep}</span></div>`;
+
+/* ---------- flow log ---------- */
+function light(stage) {
+  document.querySelectorAll(".node").forEach((n) => {
+    if (n.dataset.s.split(" ").includes(stage)) { n.classList.add("on"); setTimeout(() => n.classList.remove("on"), 900); }
+  });
+}
+async function pollFlow() {
+  const { data } = await api("GET", `/v1/flow?after=${lastEvent}&limit=200`);
+  if (!Array.isArray(data) || !data.length) return;
+  const log = $("log");
+  if (lastEvent === 0) log.innerHTML = "";
+  let answersChanged = false;
+  data.forEach((e, i) => {
+    lastEvent = Math.max(lastEvent, e.event_id);
+    const c = STAGE_COLOR[e.stage] || "dim";
+    const el = document.createElement("div");
+    el.className = "ev";
+    el.style.setProperty("--c", `var(--${c})`);
+    el.innerHTML = `<div><div class="stg">${esc(e.stage)}</div><div class="t">${e.ts.slice(11, 19)}${e.run_id ? "<br>run " + esc(e.run_id.slice(0, 6)) : ""}</div></div>
+      <div><div class="msg">${esc(e.message)}</div>${e.data ? `<details><summary>data</summary><pre>${esc(JSON.stringify(e.data, null, 2))}</pre></details>` : ""}</div>`;
+    log.prepend(el);
+    setTimeout(() => light(e.stage), i * 120);
+    if (["consolidate", "regression", "alert", "simulate", "store", "label"].includes(e.stage)) answersChanged = true;
+  });
+  while (log.children.length > 300) log.lastChild.remove();
+  if (answersChanged) loadAnswers();
+}
+
+/* ---------- answers ---------- */
+async function loadJobs() {
+  const { data } = await api("GET", "/v1/jobs");
+  jobs = data;
+  $("tabs").innerHTML = jobs.map((j) => `<button class="tab" aria-pressed="${j.job_id === job}" data-j="${j.job_id}">${j.job_id} · ${j.runs} runs</button>`).join("");
+  $("tabs").querySelectorAll(".tab").forEach((t) => t.onclick = () => { job = t.dataset.j; loadJobs(); loadAnswers(); });
+}
+
+async function loadAnswers() {
+  loadJobs();
+  const [rec, regs, hist, ins, spend, models, runs] = await Promise.all([
+    api("GET", `/v1/jobs/${job}/recommendation`), api("GET", `/v1/jobs/${job}/regressions`), api("GET", `/v1/jobs/${job}/history`),
+    api("GET", `/v1/jobs/${job}/insights`), api("GET", "/v1/insights/spend"), api("GET", "/v1/models"), api("GET", `/v1/runs?job=${job}&limit=25`)]);
+  renderRec(rec.data); renderCands(rec.data); renderAlerts(regs.data); renderHist(hist.data);
+  renderIns(ins.data); renderSpend(spend.data); renderCat(models.data); renderRuns(runs.data);
+}
+
+function renderRec(r) {
+  const el = $("rec");
+  if (!r || !r.verdict) { el.innerHTML = head("Which model should this job use?", `GET /v1/jobs/${job}/recommendation`) + `<p class="empty">No runs yet.</p>`; return; }
+  if (r.verdict === "INSUFFICIENT_EVIDENCE") {
+    el.innerHTML = head("Which model should this job use?", `GET /v1/jobs/${job}/recommendation`) +
+      `<div class="verdict"><span class="pill INSUFFICIENT_EVIDENCE">INSUFFICIENT_EVIDENCE</span><span>${esc(r.progress)} · ${esc(r.next_step)}</span></div>` + raw(r);
+    return;
+  }
+  const rc = r.comparison.recommended, cu = r.comparison.current;
+  const words = { SWITCH: "Your current model no longer does the job well enough.", DOWNGRADE: "A cheaper model does this job just as well.", HOLD: "Keep the current model; nothing cheaper passes as well." }[r.verdict];
+  const f = r.forecast;
+  el.innerHTML = head("Which model should this job use?", `GET /v1/jobs/${job}/recommendation`) + `
+    <div class="verdict"><span class="pill ${r.verdict}">${r.verdict}</span>
+      <div class="big">Use <b>${esc(r.recommended.model)}</b> <span class="mono" style="color:var(--dim)">${esc(r.recommended.model_version)}</span>${cu && r.verdict !== "HOLD" ? ` instead of ${esc(r.current_model)}` : ""}</div></div>
+    <p class="hint">${words}</p>
+    <div class="cmp">
+      <div class="stat"><span>Pass rate · recommended</span><b class="good">${pct(rc.weighted_pass_rate)}</b></div>
+      <div class="stat"><span>Pass rate · current (${esc(r.current_model)})</span><b>${pct(cu && cu.weighted_pass_rate)}</b></div>
+      <div class="stat"><span>Cost per success · recommended</span><b>${usd(rc.cost_per_success_usd, 5)}</b></div>
+      <div class="stat"><span>Cost per success · current</span><b>${usd(cu && cu.cost_per_success_usd, 5)}</b></div>
+      ${f ? `<div class="stat"><span>Money per month</span><b class="${f.monthly_saving_usd >= 0 ? "good" : "warnc"}">${f.monthly_saving_usd >= 0 ? "saves " : "costs "}${usd(Math.abs(f.monthly_saving_usd), 2)}</b></div>
+      <div class="stat"><span>Failures per month</span><b class="${f.extra_failures_per_month <= 0 ? "good" : "badc"}">${f.extra_failures_per_month <= 0 ? Math.abs(f.extra_failures_per_month) + " fewer" : f.extra_failures_per_month + " more"}</b></div>` : ""}
+    </div>
+    ${r.warnings.map((w) => `<div class="warnbox">⚠ ${esc(w)}</div>`).join("")}
+    <div><h3 style="margin-bottom:6px">The evidence behind it</h3>
+      <p class="hint">${rc.n_runs} runs · freshness-weighted evidence ${rc.evidence_weight} · ${rc.failures} failures. Most recent failures, shown on purpose:</p>
+      <div class="tw"><table><thead><tr><th>Run</th><th>Version</th><th>Why it failed</th><th>When</th></tr></thead><tbody>
+      ${r.evidence.recent_failing_runs.map((x) => `<tr><td class="mono">${x.run_id}</td><td class="mono">${x.model_version}</td><td class="wrap">${esc(x.outcome_reason)}</td><td>${x.created_at.slice(0, 10)}</td></tr>`).join("") || `<tr><td colspan="4" class="empty">No failures.</td></tr>`}
+      </tbody></table></div></div>` + raw(r);
+}
+
+function renderCands(r) {
+  const el = $("cands");
+  const rows = (r && r.candidates) || [];
+  const excl = Object.fromEntries(((r && r.excluded) || []).map((e) => [e.model, e.why]));
+  el.innerHTML = head("How every model compares on this job", "same response") + `
+    <p class="hint">Older runs count less (decay), runs on superseded versions fade ~4× faster. A model is eligible if it is within ${r && r.rules ? r.rules.tolerance * 100 : 2} points of the best pass rate; the cheapest per success wins.</p>
+    <div class="tw"><table><thead><tr><th>Model</th><th>Catalog</th><th>Runs</th><th>Evidence</th><th>Pass rate</th><th>Mean cost</th><th>Cost / success</th><th>Eligible?</th></tr></thead><tbody>
+    ${rows.map((s) => `<tr><td><b>${s.model}</b></td><td><span class="tag ${s.catalog_status}">${s.catalog_status}</span></td><td>${s.n_runs}</td><td>${s.evidence_weight}</td>
+      <td>${pct(s.weighted_pass_rate)}</td><td>${usd(s.mean_cost_usd, 5)}</td><td>${usd(s.cost_per_success_usd, 5)}</td>
+      <td class="wrap">${excl[s.model] ? `<span class="tag no">no</span> ${esc(excl[s.model])}` : s.eligible ? `<span class="tag yes">yes</span>` : `<span class="tag no">no</span> too far below the best`}</td></tr>`).join("") || `<tr><td colspan="8" class="empty">No runs yet.</td></tr>`}
+    </tbody></table></div>`;
+}
+
+function renderAlerts(a) {
+  $("alerts").innerHTML = head("Did something break? Alerts", `GET /v1/jobs/${job}/regressions`) +
+    ((a && a.length) ? a.map((x) => `<div class="alert ${x.kind}"><span class="tag ${x.kind === "VERSION_REGRESSION" ? "FAIL" : "DEPRECATED"}">${x.kind}</span><div style="margin-top:4px">${esc(x.detail.summary)}</div>
+      <div class="hint">${x.delivered_at ? "Sent to the team's webhook" : "Waiting to be sent"} · ${x.created_at.slice(0, 16).replace("T", " ")}</div></div>`).join("")
+      : `<p class="empty">No alerts. Run the scheduled jobs to check for regressions.</p>`) + raw(a);
+}
+
+function renderHist(h) {
+  $("hist").innerHTML = head("Why are we using this model? History", `GET /v1/jobs/${job}/history`) +
+    ((h && h.length) ? `<div class="timeline">${h.map((x) => `<div class="tl ${x.invalid_at ? "old" : ""}"><i></i><div>
+      <b>${x.model}</b> <span class="mono" style="color:var(--dim)">${x.verdict}</span> · ${pct(x.weighted_pass_rate)} · ${usd(x.cost_per_success, 5)}/success · from ${x.n_source_runs} runs
+      <div class="hint">${x.valid_at.slice(0, 10)} → ${x.invalid_at ? x.invalid_at.slice(0, 10) + ` · replaced, reason <b>${x.supersession_reason}</b>` : "now (current)"}</div></div></div>`).join("")}</div>`
+      : `<p class="empty">Nothing recorded yet. Recommendations are written when the scheduled jobs run.</p>`) + raw(h);
+}
+
+function renderIns(d) {
+  const el = $("ins");
+  if (!d || !d.by_input_size) { el.innerHTML = ""; return; }
+  const models = [...new Set(d.by_input_size.map((x) => x.model))];
+  const bands = ["short (<1k tokens)", "medium (1k-2.5k)", "long (>2.5k)"];
+  const cell = (m, b) => { const x = d.by_input_size.find((y) => y.model === m && y.group === b); return x ? `<td class="${x.pass_rate >= 0.97 ? "good" : x.pass_rate < 0.9 ? "badc" : ""}">${pct(x.pass_rate)} <span style="color:var(--dim)">(${x.n_runs})</span></td>` : "<td>—</td>"; };
+  el.innerHTML = head("Breakdowns", `GET /v1/jobs/${job}/insights`) + `
+    <h3>Pass rate by input size</h3><p class="hint">Cheap models often do fine on short inputs and struggle on long ones.</p>
+    <div class="tw"><table><thead><tr><th>Model</th>${bands.map((b) => `<th>${b}</th>`).join("")}</tr></thead><tbody>
+    ${models.map((m) => `<tr><td><b>${m}</b></td>${bands.map((b) => cell(m, b)).join("")}</tr>`).join("")}</tbody></table></div>
+    <h3>Pass rate by prompt version</h3>
+    <div class="tw"><table><thead><tr><th>Model</th><th>Prompt</th><th>Runs</th><th>Pass rate</th></tr></thead><tbody>
+    ${d.by_prompt_version.map((x) => `<tr><td>${x.model}</td><td class="mono">${x.group}</td><td>${x.n_runs}</td><td>${pct(x.pass_rate)}</td></tr>`).join("")}</tbody></table></div>` + raw(d);
+}
+
+function renderSpend(s) {
+  const max = Math.max(...(s || []).map((x) => x.spend_usd), 0.0001);
+  $("spend").innerHTML = head("Where does the money go? Spend by job", "GET /v1/insights/spend") +
+    ((s && s.length) ? s.map((x) => `<div><div class="row" style="justify-content:space-between"><b>${x.job}</b><span>${usd(x.spend_usd, 2)} · ${pct(x.share)} · ${x.runs} runs</span></div>
+      <div class="bar" style="width:${(x.spend_usd / max) * 100}%"></div></div>`).join("") : `<p class="empty">No spend yet.</p>`) + raw(s);
+}
+
+function renderCat(c) {
+  $("cat").innerHTML = head("Model catalog", "GET /v1/models") + `<div class="tw"><table><thead><tr><th>Version</th><th>Status</th><th>Shuts down</th><th>$/1M in</th><th>$/1M out</th><th>Replaced by</th></tr></thead><tbody>
+    ${(c || []).map((x) => `<tr><td class="mono">${x.model_version}</td><td><span class="tag ${x.status}">${x.status}</span></td><td>${x.shutdown_date || "—"}</td><td>${x.price_in}</td><td>${x.price_out}</td><td class="mono">${x.superseded_by || "—"}</td></tr>`).join("")}
+    </tbody></table></div>` + raw(c);
+}
+
+function renderRuns(r) {
+  $("runs").innerHTML = head("Latest recorded runs (episodic memory)", `GET /v1/runs?job=${job}`) + `<div class="tw"><table><thead><tr>
+    <th>Run</th><th>When</th><th>Kind</th><th>Version</th><th>Prompt</th><th>Tokens in/out</th><th>Cache r/w</th><th>Cost</th><th>Outcome</th><th>Why</th><th>Importance</th><th>Weight</th><th>State</th></tr></thead><tbody>
+    ${(r || []).map((x) => `<tr><td class="mono">${x.run_id.slice(0, 8)}</td><td>${x.created_at.slice(5, 16).replace("T", " ")}</td><td>${x.run_kind}</td><td class="mono">${x.model_version}</td><td>${x.prompt_version || "—"}</td>
+      <td>${x.tokens_in}/${x.tokens_out}</td><td>${x.cache_read_tokens}/${x.cache_write_tokens}</td><td>${usd(x.cost_usd, 5)}</td><td><span class="tag ${x.outcome}">${x.outcome}</span></td>
+      <td class="wrap">${esc(x.outcome_reason)}</td><td>${x.importance}</td><td>${Number(x.weight).toFixed(2)}</td><td><span class="tag state">${x.state}</span></td></tr>`).join("") || `<tr><td colspan="13" class="empty">No runs yet.</td></tr>`}
+    </tbody></table></div>` + raw(r);
+}
+
+/* ---------- actions ---------- */
+async function busy(btn, fn) { btn.disabled = true; try { await fn(); } finally { btn.disabled = false; pollFlow(); loadAnswers(); } }
+$("b-sim").onclick = (e) => busy(e.currentTarget, () => api("POST", "/demo/simulate?days=30"));
+$("b-maint").onclick = (e) => busy(e.currentTarget, () => api("POST", "/v1/maintenance/run"));
+$("b-reset").onclick = (e) => busy(e.currentTarget, async () => { await api("POST", "/demo/reset"); lastEvent = 0; $("log").innerHTML = ""; });
+$("b-call").onclick = (e) => busy(e.currentTarget, async () => {
+  const { data } = await api("POST", "/demo/customer-call", { job: $("c-job").value, model: $("c-model").value, prompt_version: $("c-pv").value });
+  const box = $("call-out"); box.hidden = false;
+  box.textContent = data.error ? "✗ " + data.error :
+    `The app got:   ${data.app_saw.output}\nAnswer key:    ${data.answer_key ? JSON.stringify(data.answer_key) : "(none: schema check)"}\n\nRecorded as:   ${data.recorded.outcome} — ${data.recorded.reason}\nCost:          $${data.recorded.cost_usd}\nRun id:        ${data.recorded.run_id}`;
+});
+$("raw").value = JSON.stringify({ job: "ticket-classify", model: "mini", model_version: "mini-2026-06", prompt: "Classify: customer cannot log in", prompt_version: "v1",
+  tokens_in: 320, tokens_out: 64, cache_read_tokens: 350, cache_write_tokens: 0, latency_ms: 610, output: "{\"category\": \"account\", \"priority\": 2}", run_kind: "PRODUCTION" }, null, 2);
+$("b-raw").onclick = (e) => busy(e.currentTarget, async () => {
+  let body; try { body = JSON.parse($("raw").value); } catch { $("raw-out").hidden = false; $("raw-out").textContent = "That isn't valid JSON."; return; }
+  const r = await api("POST", "/v1/runs", body);
+  $("raw-out").hidden = false; $("raw-out").textContent = `HTTP ${r.status}\n` + JSON.stringify(r.data, null, 2);
+});
+$("b-json").onclick = () => { const on = document.body.classList.toggle("showjson"); $("b-json").textContent = on ? "Hide raw JSON" : "Show raw JSON"; };
+
+loadAnswers(); pollFlow(); setInterval(pollFlow, 1000);
+</script>
+</body>
+</html>
