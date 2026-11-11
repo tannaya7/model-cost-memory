@@ -31,7 +31,7 @@ async def evaluate(url: str, args: argparse.Namespace):
     try:
         return await detection(
             async_sessionmaker(engine, expire_on_commit=False), drops=tuple(args.drops), trials=args.trials,
-            kind=args.kind, runs_per_day=args.runs_per_day, days_after=args.days_after,
+            kind=args.kind, runs_per_day=args.runs_per_day, days_after=args.days_after, drift=args.drift,
         )
     finally:
         await engine.dispose()
@@ -53,7 +53,7 @@ def main(args: argparse.Namespace) -> int:
         results = asyncio.run(evaluate(url, args))
 
     print(f"{args.kind}: {args.trials} trials per drop, {args.runs_per_day} runs a day, "
-          f"watched {args.days_after} days after the change")
+          f"watched {args.days_after} days after the change" + (", inputs drifting" if args.drift else ""))
     print(f"{'drop':>7}  {'flagged':>8}  {'rate':>6}  {'95% range':>11}  {'median days to detect':>22}")
     rows = []
     for r in results:
@@ -67,7 +67,7 @@ def main(args: argparse.Namespace) -> int:
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).write_text(json.dumps({"kind": args.kind, "runs_per_day": args.runs_per_day,
-                                              "days_after": args.days_after, "results": rows}, indent=2) + "\n", encoding="utf8")
+                                              "days_after": args.days_after, "drift": args.drift, "results": rows}, indent=2) + "\n", encoding="utf8")
         print("wrote", args.out)
     return 0
 
@@ -80,5 +80,7 @@ if __name__ == "__main__":
     parser.add_argument("--drops", type=float, nargs="+", default=[0.0, 0.05, 0.10, 0.15])
     parser.add_argument("--runs-per-day", type=int, default=50)
     parser.add_argument("--days-after", type=int, default=14, help="how long each trial watches after the change")
+    parser.add_argument("--drift", action="store_true",
+                        help="inputs get harder over the trial with no model change (the drift controls)")
     parser.add_argument("--out", help="also write the results as JSON")
     sys.exit(main(parser.parse_args()))

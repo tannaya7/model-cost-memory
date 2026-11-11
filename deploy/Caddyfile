@@ -6,6 +6,10 @@
 	# The API and sign-in. flush_interval -1 turns off buffering so Server-Sent Events arrive live.
 	@api path /v1/* /auth/* /healthz
 	handle @api {
+		# Refuse oversized bodies before they reach the API (which also checks: ratelimit.py, 5 MB).
+		request_body {
+			max_size 5MB
+		}
 		reverse_proxy api:8000 {
 			flush_interval -1
 		}

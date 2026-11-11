@@ -34,7 +34,10 @@ services:
     environment: *app-env
     depends_on:
       db: { condition: service_healthy }
-    command: ["uvicorn", "agent_memory.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    # Caddy is the only client on the compose network, so its X-Forwarded-For is trusted: the per-IP
+    # limits (ratelimit.py) then see each visitor's address, not Caddy's.
+    command: ["uvicorn", "agent_memory.api:app", "--host", "0.0.0.0", "--port", "8000",
+              "--proxy-headers", "--forwarded-allow-ips", "*"]
     ports: ["127.0.0.1:8000:8000"]
     profiles: ["full"]
     restart: unless-stopped

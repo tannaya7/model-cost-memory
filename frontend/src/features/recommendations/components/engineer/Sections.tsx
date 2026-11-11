@@ -73,7 +73,13 @@ export function AlertsSection({ jobName }: { jobName: string }) {
               <Tag tone={a.kind === "MODEL_DEPRECATED" ? "warn" : "bad"}>{a.kind}</Tag>
               <div className="mt-1 text-sm text-ink">{a.summary}</div>
               <div className="mt-0.5 text-xs text-dim">
-                {a.delivered_at ? "Sent to the team's webhook" : a.delivery_attempts > 0 ? "Not delivered yet, retrying" : "Waiting to be sent"}{" "}
+                {a.delivered_at
+                  ? "Sent to the team's webhook"
+                  : a.delivery_failed_at
+                    ? "Webhook unreachable; stopped trying"
+                    : a.delivery_attempts > 0
+                      ? "Not delivered yet, retrying"
+                      : "Waiting to be sent"}{" "}
                 · {minute(a.created_at)}
                 {a.resolved_at ? ` · resolved ${minute(a.resolved_at)}` : ""}
               </div>

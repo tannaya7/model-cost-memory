@@ -17,7 +17,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .checks import Outcome, check_run
+from .checks import CheckResult, Outcome, check_run
 from .costing import Price, compute_cost
 from .pipeline import flow
 from .options import normalize_effort
@@ -103,9 +103,14 @@ async def find_price(
 
 
 async def record_run(
-    session: AsyncSession, project: Project, body: RunCreate, *, run_kind: str = "PRODUCTION", retest_id=None
+    session: AsyncSession, project: Project, body: RunCreate, *, run_kind: str = "PRODUCTION", retest_id=None,
+    unknown_reason: str | None = None,
 ) -> bool:
     """Store a run and its outbox row. Returns False when this run_id was already recorded.
+
+    `unknown_reason` (server-side callers only, never the API) records the run as UNKNOWN without
+    checking it, e.g. a re-test answer cut off at its output limit: failing it would blame the model
+    for the limit, and passing a partial answer would be worse.
 
     The answer key (`expected`) is kept only when the job has re-test consent, because a re-test can
     only check a replayed run against the same answers; otherwise it is used for the check and dropped.
@@ -126,7 +131,10 @@ async def record_run(
         # every cost comparison.
         cost = Decimal(str(body.cost_usd)) if body.cost_usd is not None else None
 
-    result = check_run(job.check_kind, job.check_config, body.output, body.expected)
+    if unknown_reason is not None:
+        result = CheckResult(Outcome.UNKNOWN, unknown_reason)
+    else:
+        result = check_run(job.check_kind, job.check_config, body.output, body.expected)
     state = "CAPTURED" if result.outcome is Outcome.UNKNOWN else "CHECKED"
 
     digest = prompt_hash(body.prompt)

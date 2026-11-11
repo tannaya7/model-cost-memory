@@ -46,8 +46,8 @@ standby, so a re-test can never be started twice.
 ```
 freshness            R(t) = e^(-t / S),  S = importance × 30 × version_factor
                      version_factor = 1.00 current, 0.25 superseded (fades ~4× faster)
-weighted pass rate   Σ(R × passed) / Σ R, with S = 30 × version_factor (importance decides archiving
-                     and re-test sampling, never the average: an outcome-dependent weight biases it)
+weighted pass rate   Σ(R × passed) / Σ R, with S = 30 × version_factor (importance decides archiving,
+                     never the average or the re-test sample: an outcome-dependent weight biases both)
 cost per run         usage × catalog price (input, output incl. thinking, cache read, cache write)
 cost per success     mean cost / weighted pass rate
 pass-rate interval   Wilson 95%, over the Kish effective sample size (Σ R)² / Σ R²
@@ -74,14 +74,22 @@ usage limit          window = [resets_at − window_hours, resets_at), rolled fo
                      a one-model limit, the cheapest other option judged good enough
 savings forecast     saving = (cost per success now − recommended) × successes per month;
                      extra failures = (pass rate now − recommended) × runs per month, with its interval
-regression           one-sided two-proportion z-test, the current version against the one it replaced:
-                     p < boundary AND drop ≥ 3 points AND ≥ 30 runs a side. The sweep checks daily,
-                     so the boundary is strict early (z ≥ z₀.₀₀₅ × √(500 / n), but never past
+regression           one-sided two-proportion z-test, the current version against the one it replaced,
+                     within each input-size band (< 8k, 8k-32k, > 32k tokens in) and weighted by the new
+                     version's mix: drop = Σ w_b (p_old,b − p_new,b), var = Σ w_b² p̄_b(1 − p̄_b)(1/n_old,b
+                     + 1/n_new,b), so inputs that merely got longer are not a drop (one band: the plain
+                     test). p < boundary AND drop ≥ 3 points AND ≥ 30 runs a side. The sweep checks
+                     daily, so the boundary is strict early (z ≥ z₀.₀₀₅ × √(500 / n), but never past
                      p < 0.0001) and p < 0.005 from 500 runs on the new version
-silent drop          same version, last 28 days (≥ 20 with runs) split in half: p < 0.001 AND drop ≥ 3
-                     points, plus a standardized one-sided CUSUM over the second half (k = 0.5, h = 4)
-re-test spend        before every call: re-test spend + reserved + this call ≤ budget, and this month's
-                     project re-test spend (at list price) + reserved + this call ≤ the monthly cap
+silent drop          same version, last 28 days (≥ 20 with runs) split in half, compared band by band as
+                     above: p < 0.001 AND drop ≥ 3 points, plus a standardized one-sided CUSUM over the
+                     second half against what the first half's band rates predict for each day's own
+                     mix (k = 0.5, h = 4)
+re-test call         output limit = max(4 × the source run's output, 500 tokens); an answer cut off at it
+                     is UNKNOWN, not FAIL. Prompts sampled uniformly (importance over-sampled failures ~3×)
+re-test spend        each call reserves its worst case (input × price + output limit × price). Before it:
+                     spend + this call > budget (or month + this call > cap): stop; spend + reserved +
+                     this call > budget or cap: wait for a call in flight to settle; otherwise go
 ```
 
 Measured on the simulated-time harness (`scripts/simulate.py`, 100 trials each, 50 runs a day, watched 14
@@ -109,10 +117,24 @@ which is why a DOWNGRADE now needs that comparison.
 | **Three independent paths** | Each can be slow or fail without dragging the others down |
 | **Swappable storage** | `VectorStoreClient` interface (pgvector now, Chroma as a fallback) |
 
+## Security and abuse limits
+
+| Risk | What stops it |
+|---|---|
+| A webhook or re-test URL pointing inside the server's network (metadata service, database) | `urls.py`: every address the host resolves to must be public, checked when saved and again before each call (DNS rebinding); redirects are not followed. `ALLOW_PRIVATE_URLS=true` lifts it for development or a local Ollama, and is refused on an https server |
+| A flood of requests or huge bodies | `ratelimit.py`: a token bucket per project key (1,200/min) or per IP without one (120/min) on `/v1` and `/auth`; bodies over 5 MB refused (also in Caddy); at most 200,000 runs per project per day |
+| Many people watching the live flow | one shared poller per watched project (`pipeline/flow_hub.py`) instead of a query per viewer per second; 3 live views per IP, 200 in all |
+| The public demo exposing the operator's account | the demo reads only the pages it shows; re-test history, key status and the re-test cap answer 403 |
+| A weak or development configuration on a public server | the API and the scheduler refuse to start when `PUBLIC_URL` is https and `SECRET_KEY` is missing, or with `DEV_LOGIN` or `ALLOW_PRIVATE_URLS` on; a `SECRET_KEY` must be 32+ characters |
+| One key used for two jobs | cookies and stored provider keys use different keys derived from `SECRET_KEY` (HMAC); keys stored before the split still decrypt |
+| A runaway re-test answer or a free quota emptied in a burst | every re-test call has an output limit and reserves its worst case; calls start at least 1 s apart, back off on 429 (Retry-After up to 5 min, with jitter) |
+
+The limits live in the one API process's memory; behind several API processes each would count on its own.
+
 ## Data model
 
 The authoritative schema is [`db/schema.sql`](../db/schema.sql): `users`, `projects`, `provider_keys`,
-`jobs`, `retests`, `runs`, `recommendations`, `outbox`, `model_catalog`, `model_prices`, `alerts`, `flow_events`.
+`jobs`, `retests`, `runs`, `recommendations`, `outbox`, `model_catalog`, `model_prices`, `alerts`, `flow_events`, `usage_limits`, `recommendation_summaries`.
 
 - `recommendations.consolidated_from` links a conclusion to every run behind it.
 - `recommendations.superseded_by_id` links it to the conclusion that replaced it, with a date and
@@ -142,11 +164,14 @@ The authoritative schema is [`db/schema.sql`](../db/schema.sql): `users`, `proje
 - `recommendations.current_model` records what production used when a verdict was made, so history can say what
   was recommended instead of what.
 - `alerts.dedupe_key` (one open alert per finding) and `delivery_attempts` / `next_attempt_at` (webhook retries with
-  backoff). Payloads are signed with `projects.webhook_secret` (HMAC-SHA256, header `X-MCM-Signature`) and carry a
+  backoff, sent in parallel); after 10 failed attempts `delivery_failed_at` records that delivery gave up, and saving a
+  new webhook URL tries again. The reason (`last_error`) stays on the server. Payloads are signed with `projects.webhook_secret` (HMAC-SHA256, header `X-MCM-Signature`) and carry a
   one-line `text`/`content` message, so a Slack, Discord, Google Chat or Mattermost incoming webhook works directly.
-- `retests` records each replay: trigger (`MANUAL`, `NEW_MODEL`, `UNSURE`), budget, spend, progress and why it
-  stopped. `provider_keys` holds the customer's key for re-tests, encrypted with the server's `SECRET_KEY`; only the
-  last four characters are ever shown.
+- `retests` records each replay: trigger (`MANUAL`, `NEW_MODEL`, `UNSURE`, `FIRST_KEY`), budget, spend, progress and
+  why it stopped. `provider_keys` holds the customer's key for re-tests, encrypted with a key derived from the server's
+  `SECRET_KEY` (a different one signs cookies); only the last four characters are ever shown.
+- `recommendation_summaries` stores the optional two-sentence summary once per verdict (job, summary model, prompt
+  version and what the verdict says, not its exact figures), with a server-wide daily limit on calls.
 - `users` and `projects.owner_user_id`: Google sign-in; a signed-in user sees only their own projects.
 - `flow_events` is the live data-flow view's trail (`sdk → api → check → index → consolidate`), written in the same
   transaction as each step and deleted after a day.
@@ -221,7 +246,7 @@ src/agent_memory/
 ├── pipeline/          sync_worker, janitor, scoring, decay, consolidation, regression, flow events
 ├── catalog/           model catalog: daily sync from the public price list, manual overrides
 ├── recommend/         stats (intervals, tolerance rule), engine, forecast, cache, optional summary
-├── retest/            budgeted, importance-sampled replay: the only code that spends money
+├── retest/            budgeted, uniformly sampled replay: the only code that spends money
 ├── simulation/        simulated-time harness, regression evaluation, staleness experiment
 ├── auth/              Google sign-in, session cookie, project ownership, the public demo
 ├── insights/          spend and pass-rate breakdowns

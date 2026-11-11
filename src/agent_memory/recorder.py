@@ -256,6 +256,15 @@ def read_response(response: Any, *, include_arguments: bool = False) -> dict[str
     return out
 
 
+def was_cut_off(response: Any) -> bool:
+    """True when the answer stopped at its output limit rather than finishing: OpenAI-shaped
+    `finish_reason == "length"`, or Anthropic-shaped `stop_reason == "max_tokens"`."""
+    if _get(response, "stop_reason") == "max_tokens":
+        return True
+    choices = _get(response, "choices")
+    return isinstance(choices, list) and bool(choices) and _get(choices[0], "finish_reason") == "length"
+
+
 class RunRecorder:
     """Context manager around one model call. Observes; never intercepts."""
 

@@ -32,7 +32,7 @@ from sqlalchemy.pool import NullPool
 from .alerts.notifier import deliver_pending
 from .alerts.service import catalog_alerts
 from .catalog.sync import fetch_price_list, sync_catalog
-from .config import Settings, get_settings, load_dotenv_file, normalize_database_url
+from .config import Settings, check_startup, get_settings, load_dotenv_file, normalize_database_url
 from .logging_config import configure_logging
 from .pipeline.consolidation import consolidate_all
 from .pipeline.decay import recompute
@@ -149,6 +149,7 @@ async def _main() -> None:
     load_dotenv_file()
     configure_logging()
     settings = get_settings()
+    check_startup(settings)  # the scheduler makes the outbound calls, so it refuses unsafe settings too
     lock_engine = create_async_engine(normalize_database_url(settings.database_url), poolclass=NullPool)
     leader = await become_leader(lock_engine)
     sessions = session_factory()

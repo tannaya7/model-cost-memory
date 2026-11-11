@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # prints a harmless "Logging error" at the very end of every run. Its own logs are not needed in test output.
 logging.getLogger("pgserver").propagate = False
 TABLES = ["alerts", "outbox", "recommendations", "runs", "retests", "provider_keys", "model_catalog", "model_prices",
-          "jobs", "projects", "users", "flow_events"]
+          "jobs", "projects", "users", "flow_events", "recommendation_summaries"]
 
 
 @pytest.fixture(scope="session")
@@ -91,3 +91,28 @@ async def client(engine):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
+
+
+# Test hosts (hooks.example, acme.example, ...) have no DNS. Outbound-URL checks resolve every name to a
+# public documentation address instead, unless a test replaces the resolver to try a private one.
+PUBLIC_TEST_ADDRESS = "93.184.215.14"
+
+
+@pytest.fixture(autouse=True)
+def fake_dns(monkeypatch):
+    from agent_memory import urls
+
+    async def resolve(host, port):
+        return [PUBLIC_TEST_ADDRESS]
+
+    monkeypatch.setattr(urls, "_resolve", resolve)
+
+
+@pytest.fixture(autouse=True)
+def fresh_limits():
+    """Rate-limit buckets, daily run counts and stream slots start empty in every test."""
+    from agent_memory import ratelimit
+
+    ratelimit.reset()
+    yield
+    ratelimit.reset()
