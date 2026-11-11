@@ -6,6 +6,7 @@
       "cost_usd": 0.0031,
       "created_at": "2026-10-14T09:29:00Z",
       "effort": null,
+      "importance_score": 1.0,
       "job": "invoice-extract",
       "job_id": "00000000-0000-0000-0000-000000001001",
       "latency_ms": 640,
@@ -20,7 +21,8 @@
       "run_kind": "PRODUCTION",
       "state": "INDEXED",
       "tokens_in": 820,
-      "tokens_out": 140
+      "tokens_out": 140,
+      "weight": null
     },
     {
       "cache_read_tokens": 0,
@@ -28,6 +30,7 @@
       "cost_usd": 0.0347,
       "created_at": "2026-10-14T09:28:00Z",
       "effort": null,
+      "importance_score": 1.0,
       "job": "invoice-extract",
       "job_id": "00000000-0000-0000-0000-000000001001",
       "latency_ms": 640,
@@ -42,7 +45,8 @@
       "run_kind": "PRODUCTION",
       "state": "INDEXED",
       "tokens_in": 820,
-      "tokens_out": 140
+      "tokens_out": 140,
+      "weight": null
     },
     {
       "cache_read_tokens": 0,
@@ -50,6 +54,7 @@
       "cost_usd": 0.0031,
       "created_at": "2026-10-14T09:27:00Z",
       "effort": null,
+      "importance_score": 1.0,
       "job": "invoice-extract",
       "job_id": "00000000-0000-0000-0000-000000001001",
       "latency_ms": 640,
@@ -64,7 +69,8 @@
       "run_kind": "PRODUCTION",
       "state": "INDEXED",
       "tokens_in": 820,
-      "tokens_out": 140
+      "tokens_out": 140,
+      "weight": null
     }
   ],
   "next_cursor": "MjAyNi0xMC0xNFQwOToyNzowMCswMDowMHwwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDIwMDM="

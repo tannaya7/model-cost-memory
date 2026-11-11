@@ -1603,6 +1603,12 @@ export interface components {
             /** Effort */
             effort?: string | null;
             /**
+             * Importance Score
+             * @description How much the run matters (failures and costly runs more): what decides archiving and re-test sampling
+             * @default 1
+             */
+            importance_score: number;
+            /**
              * Job
              * @description The job's name
              */
@@ -1664,6 +1670,11 @@ export interface components {
             tool_calls: {
                 [key: string]: unknown;
             }[] | null;
+            /**
+             * Weight
+             * @description How much it counts in the recommendation now: e^(-age/S), S shorter once its version is replaced
+             */
+            weight?: number | null;
         };
         /**
          * RunOut
@@ -1686,6 +1697,12 @@ export interface components {
             created_at: string;
             /** Effort */
             effort?: string | null;
+            /**
+             * Importance Score
+             * @description How much the run matters (failures and costly runs more): what decides archiving and re-test sampling
+             * @default 1
+             */
+            importance_score: number;
             /**
              * Job
              * @description The job's name
@@ -1740,6 +1757,11 @@ export interface components {
             tokens_in: number;
             /** Tokens Out */
             tokens_out: number;
+            /**
+             * Weight
+             * @description How much it counts in the recommendation now: e^(-age/S), S shorter once its version is replaced
+             */
+            weight?: number | null;
         };
         /** RunPage */
         RunPage: {

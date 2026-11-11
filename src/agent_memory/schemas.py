@@ -103,6 +103,10 @@ class RunOut(Model):
     created_at: datetime
     prompt_preview: str = Field(description="First 200 characters of the prompt")
     output_preview: str | None = Field(description="First 200 characters of the output")
+    importance_score: float = Field(default=1.0, description="How much the run matters (failures and costly runs "
+                                                             "more): what decides archiving and re-test sampling")
+    weight: float | None = Field(default=None, description="How much it counts in the recommendation now: "
+                                                          "e^(-age/S), S shorter once its version is replaced")
 
 
 class RunPage(Model):

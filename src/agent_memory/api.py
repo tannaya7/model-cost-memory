@@ -79,6 +79,8 @@ from .auth.access import current_project
 from .config import get_settings
 from .security import SecretKeyMissing
 from .pipeline import flow
+from .pipeline.decay import current_versions, family_key
+from .pipeline.scoring import age_days, freshness, stability_days
 from .storage import lineage
 from .versions import normalize
 
@@ -146,7 +148,24 @@ async def list_jobs(
     ]
 
 
-def _run_fields(r: Run, job_name: str) -> dict:
+async def _weights(session: AsyncSession, runs: list[Run], now: datetime | None = None) -> dict:
+    """Each run's weight in the recommendation now, as the engine counts it: its age, and whether its
+    version has been replaced (superseded versions fade faster)."""
+    settings, now = get_settings(), now or datetime.now(UTC)
+    current: dict = {}
+    for job_id in {r.job_id for r in runs}:
+        current.update(await current_versions(session, job_id))
+    out = {}
+    for r in runs:
+        version = normalize(r.model_version)
+        superseded = version != current.get((r.job_id, family_key(r.model, r.model_version)), version)
+        stability = stability_days(1.0, superseded=superseded, base_days=settings.decay_base_days,
+                                   superseded_factor=settings.version_factor_superseded)
+        out[r.run_id] = freshness(age_days(r.created_at, now), stability)
+    return out
+
+
+def _run_fields(r: Run, job_name: str, weight: float | None = None) -> dict:
     return dict(
         run_id=r.run_id, job_id=r.job_id, job=job_name, model=r.model, model_version=r.model_version,
         prompt_version=r.prompt_version, effort=r.effort, tokens_in=r.tokens_in, tokens_out=r.tokens_out,
@@ -155,11 +174,12 @@ def _run_fields(r: Run, job_name: str) -> dict:
         outcome_reason=r.outcome_reason, run_kind=r.run_kind, state=r.state, created_at=r.created_at,
         prompt_preview=r.prompt[:PREVIEW_CHARS],
         output_preview=r.output[:PREVIEW_CHARS] if r.output is not None else None,
+        importance_score=float(r.importance_score), weight=weight,
     )
 
 
-def _run_out(r: Run, job_name: str) -> RunOut:
-    return RunOut(**_run_fields(r, job_name))
+def _run_out(r: Run, job_name: str, weight: float | None = None) -> RunOut:
+    return RunOut(**_run_fields(r, job_name, weight))
 
 
 async def _job_name(session: AsyncSession, job_id, project_id: str) -> str:
@@ -213,7 +233,8 @@ async def list_runs(
         query = query.where(tuple_(Run.created_at, Run.run_id) < tuple_(stamp, run_id))
     rows = (await session.execute(query)).all()
     page, more = rows[:limit], len(rows) > limit
-    items = [_run_out(r, job_name) for r, job_name in page]
+    weights = await _weights(session, [r for r, _ in page])
+    items = [_run_out(r, job_name, weights.get(r.run_id)) for r, job_name in page]
     next_cursor = _encode_cursor(page[-1][0].created_at, page[-1][0].run_id) if more else None
     return RunPage(items=items, next_cursor=next_cursor)
 
@@ -264,7 +285,8 @@ async def get_run(
     if run is None:
         raise HTTPException(404, "Run not found")
     return RunDetail(
-        **_run_fields(run, await _job_name(session, run.job_id, project.project_id)),
+        **_run_fields(run, await _job_name(session, run.job_id, project.project_id),
+                      (await _weights(session, [run])).get(run.run_id)),
         prompt=run.prompt, output=run.output, tool_calls=run.tool_calls,
     )
 

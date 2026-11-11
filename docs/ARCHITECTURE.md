@@ -84,10 +84,13 @@ re-test spend        before every call: re-test spend + reserved + this call ≤
                      project re-test spend (at list price) + reserved + this call ≤ the monthly cap
 ```
 
-Measured on the simulated-time harness (`scripts/simulate.py`, 50 trials each, 50 runs a day):
-version regressions of 5 points caught 48/50 and of 10 and 15 points 50/50, a 10-point one the day after
-the upgrade, with 1 false alarm in 50 controls; silent drops of 5 points caught 34/50, of 10 and 15 points
-50/50, with no false alarms. The earlier rule (a fixed p < 0.05 checked daily, 5-point minimum) looked
+Measured on the simulated-time harness (`scripts/simulate.py`, 100 trials each, 50 runs a day, watched 14
+days after a version change and 28 after a silent drop): version regressions of 5 points caught 93/100
+(likely 86-97%) and of 10 points 100/100, a 10-point one the day after the upgrade, with 2 false alarms in
+100 controls; silent drops of 5 points caught 77/100, of 10 points 100/100, with 1 false alarm in 100. At
+100 runs a day silent 5-point drops are caught 100/100 (median 8 days), so the stated target is 90% once a
+job has about 100 runs a day. An earlier 68% came from trials that ended 14 days after the drop, before the
+28-day window could split it cleanly, not from the detector. The earlier rule (a fixed p < 0.05 checked daily, 5-point minimum) looked
 alarm-free over 20 trials, but over 20,000 simulated ones it raised a false alarm on 7% of unchanged
 upgrades. Results in `reports/`.
 
