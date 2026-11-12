@@ -112,9 +112,12 @@ class Settings:
     dev_login: bool = False  # local development only: sign in as any email without Google
     # A project anyone may read without a key (the public demo); empty means none.
     demo_project_id: str = ""
-    # Optional two-sentence recommendation summary (Claude). Off unless a key is set. Written once per
-    # verdict and stored; at most summary_daily_limit calls a day across the server.
-    summary_model: str = "claude-haiku-5-5"
+    # Optional two-sentence recommendation summary, from any OpenAI-compatible endpoint (Gemini's free
+    # tier by default). Off unless SUMMARY_API_KEY or GEMINI_API_KEY is set. Written once per verdict and
+    # stored; at most summary_daily_limit calls a day across the server.
+    summary_model: str = "gemini-3.5-flash-lite"
+    summary_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    summary_effort: str = "minimal"  # Gemini 3.x cannot switch thinking off; empty sends no reasoning_effort
     summary_daily_limit: int = 200
     # Outbound URLs (webhooks, re-test endpoints) must be public addresses unless this is on (urls.py).
     allow_private_urls: bool = False
@@ -162,6 +165,8 @@ class Settings:
             dev_login=_bool("DEV_LOGIN"),
             demo_project_id=os.environ.get("DEMO_PROJECT_ID", ""),
             summary_model=os.environ.get("SUMMARY_MODEL", cls.summary_model),
+            summary_base_url=os.environ.get("SUMMARY_BASE_URL", cls.summary_base_url),
+            summary_effort=os.environ.get("SUMMARY_EFFORT", cls.summary_effort),
             summary_daily_limit=_int("SUMMARY_DAILY_LIMIT", 200),
             allow_private_urls=_bool("ALLOW_PRIVATE_URLS"),
             rate_limit_key_per_minute=_int("RATE_LIMIT_KEY_PER_MINUTE", 1200),

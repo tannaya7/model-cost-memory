@@ -266,7 +266,7 @@ db/schema.sql · tests/ · docker-compose.yml · Dockerfile · pyproject.toml
 
 Python 3.11 · FastAPI · Pydantic v2 · PostgreSQL + SQLAlchemy 2 + Alembic · pgvector with local
 `all-MiniLM-L6-v2` embeddings · scipy · APScheduler · cachetools · `cryptography` (provider keys) · `openai` client
-for re-tests and demo data against any OpenAI-compatible endpoint (Gemini and Groq free tiers) · `anthropic` for the
-optional summary (Claude Haiku) · React + Vite +
+for re-tests, demo data and the optional summary against any OpenAI-compatible endpoint (Gemini and Groq free
+tiers; the summary defaults to gemini-3.5-flash-lite at minimal thinking) · React + Vite +
 TypeScript web app (TanStack Query, React Router, Recharts) with Google sign-in via `authlib` ·
 Neon (hosted PostgreSQL) for development, docker-compose on one VPS behind Caddy (HTTPS) for production.

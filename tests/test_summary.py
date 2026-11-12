@@ -1,6 +1,7 @@
 """The optional summary: off without a key, figures only, once per verdict, a daily limit, dropped when
-it disagrees. No real API calls."""
+it disagrees, and a slow answer shown on the next request. No real API calls."""
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 
@@ -37,7 +38,7 @@ async def job(session):
 
 @pytest.fixture
 def calls(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setenv("SUMMARY_API_KEY", "test")
     seen = []
 
     async def fake(settings, instructions, payload):
@@ -49,7 +50,8 @@ def calls(monkeypatch):
 
 
 async def test_without_a_key_there_is_no_summary_and_no_call(session, job, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("SUMMARY_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
     async def boom(*args):
         raise AssertionError("must not be called")
@@ -93,8 +95,8 @@ async def test_the_daily_limit_stops_further_calls(session, job, calls):
     assert len(calls) == 2
 
 
-async def test_a_failed_call_is_retried_only_after_an_hour(session, job, monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+async def test_a_failed_call_is_retried_only_after_ten_minutes(session, job, monkeypatch):
+    monkeypatch.setenv("SUMMARY_API_KEY", "test")
     answers = [None, SUMMARY]
 
     async def flaky(settings, instructions, payload):
@@ -105,14 +107,43 @@ async def test_a_failed_call_is_retried_only_after_an_hour(session, job, monkeyp
     assert await summary.summarize(session, job, result(), SETTINGS, now=now) == (None, None)
     assert await summary.summarize(session, job, result(), SETTINGS, now=now + timedelta(minutes=5)) == (None, None)
     assert answers == [SUMMARY]  # not called again yet
-    text, _ = await summary.summarize(session, job, result(), SETTINGS, now=now + timedelta(hours=2))
+    text, _ = await summary.summarize(session, job, result(), SETTINGS, now=now + timedelta(minutes=11))
     assert text == SUMMARY
     stored = (await session.execute(select(RecommendationSummary))).scalar_one()
     assert stored.attempts == 2
 
 
+async def test_a_slow_answer_does_not_hold_up_the_recommendation_and_appears_next_time(session, job, monkeypatch):
+    monkeypatch.setenv("SUMMARY_API_KEY", "test")
+    monkeypatch.setattr(summary, "DEADLINE_SECONDS", 0.05)
+    calls = []
+
+    async def slow(settings, instructions, payload):
+        calls.append(1)
+        await asyncio.sleep(0.3)  # a free tier taking its time
+        return SUMMARY
+
+    monkeypatch.setattr(summary, "_call", slow)
+    assert await summary.summarize(session, job, result(), SETTINGS) == (None, None)  # returned without waiting
+    await asyncio.gather(*summary._writing)  # the call finishes in the background and stores its answer
+    text, _ = await summary.summarize(session, job, result(), SETTINGS)
+    assert text == SUMMARY and len(calls) == 1
+
+
+async def test_figures_read_from_postgres_as_decimal_are_sent_as_numbers(session, job, calls):
+    from decimal import Decimal
+
+    found = result()
+    for m in found.decision.models:  # costs come back from the database as Decimal
+        m.cost_per_success_usd = Decimal(str(m.cost_per_success_usd))
+        m.pass_rate_low, m.pass_rate_high = Decimal(str(m.pass_rate_low)), Decimal(str(m.pass_rate_high))
+    text, _ = await summary.summarize(session, job, found, SETTINGS)
+    assert text == SUMMARY
+    assert all(isinstance(m["cost_per_success_usd"], float) for m in calls[0][1]["models"])
+
+
 async def test_a_summary_that_does_not_name_the_recommended_model_is_dropped(session, job, monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setenv("SUMMARY_API_KEY", "test")
 
     async def off(settings, instructions, payload):
         return "Keep using big. Nothing to change."
@@ -122,7 +153,7 @@ async def test_a_summary_that_does_not_name_the_recommended_model_is_dropped(ses
 
 
 async def test_an_unexpected_error_never_breaks_the_recommendation(session, job, monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setenv("SUMMARY_API_KEY", "test")
 
     async def broken(settings, instructions, payload):
         raise RuntimeError("bug")
@@ -131,26 +162,76 @@ async def test_an_unexpected_error_never_breaks_the_recommendation(session, job,
     assert await summary.summarize(session, job, result(), SETTINGS) == (None, None)
 
 
-async def test_the_request_turns_thinking_off_and_asks_for_low_effort(monkeypatch):
-    """The call's shape, checked against a stand-in client (the real one is checked with one live call)."""
-    import anthropic
+class _Client:
+    """A stand-in for openai.AsyncOpenAI that records the request and answers as told."""
 
-    sent = {}
+    sent: dict = {}
+    made: dict = {}
+    answer: object = None
 
-    class Messages:
-        async def create(self, **kwargs):
-            sent.update(kwargs)
-            block = type("B", (), {"type": "text", "text": SUMMARY})()
-            return type("R", (), {"stop_reason": "end_turn", "content": [block]})()
+    def __init__(self, **kwargs):
+        _Client.made = kwargs
+        self.chat = self
+        self.completions = self
 
-    class Client:
-        def __init__(self, **kwargs):
-            self.messages = Messages()
+    async def create(self, **kwargs):
+        _Client.sent = kwargs
+        if isinstance(_Client.answer, Exception):
+            raise _Client.answer
+        text, finish = _Client.answer
+        message = type("M", (), {"content": text})()
+        return type("R", (), {"choices": [type("C", (), {"message": message, "finish_reason": finish})()]})()
 
-        async def close(self):
-            pass
+    async def close(self):
+        pass
 
-    monkeypatch.setattr(anthropic, "AsyncAnthropic", Client)
+
+@pytest.fixture
+def client(monkeypatch):
+    import openai
+
+    monkeypatch.setenv("SUMMARY_API_KEY", "test")
+    monkeypatch.setattr(openai, "AsyncOpenAI", _Client)
+    _Client.answer = (SUMMARY, "stop")
+    return _Client
+
+
+async def test_the_request_goes_to_gemini_with_the_least_thinking(client):
+    """The call's shape, checked against a stand-in client (the real one was checked with live calls)."""
     assert await summary._call(SETTINGS, "instructions", "{}") == SUMMARY
-    assert sent["model"] == "claude-haiku-5-5" and sent["thinking"] == {"type": "disabled"}
-    assert sent["output_config"] == {"effort": "low"} and sent["max_tokens"] == summary.MAX_TOKENS
+    assert client.made["base_url"] == "https://generativelanguage.googleapis.com/v1beta/openai/"
+    assert client.made["api_key"] == "test" and client.made["max_retries"] == 0
+    assert client.made["timeout"] == summary.CALL_SECONDS  # longer than a request waits; see the slow-answer test
+    assert client.sent["model"] == "gemini-3.5-flash-lite" and client.sent["reasoning_effort"] == "minimal"
+    assert client.sent["max_tokens"] == summary.MAX_TOKENS
+    assert [m["role"] for m in client.sent["messages"]] == ["system", "user"]
+
+
+async def test_no_effort_is_sent_when_it_is_switched_off(client):
+    await summary._call(Settings(summary_effort=""), "instructions", "{}")
+    assert "reasoning_effort" not in client.sent
+
+
+async def test_the_server_gemini_key_is_used_when_there_is_no_summary_key(monkeypatch):
+    monkeypatch.delenv("SUMMARY_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini")
+    assert summary.api_key() == "gemini"
+    monkeypatch.setenv("SUMMARY_API_KEY", "own")
+    assert summary.api_key() == "own"
+
+
+async def test_a_cut_off_answer_is_not_shown(client):
+    client.answer = ("Switch invoice to mini: it passes as", "length")
+    assert await summary._call(SETTINGS, "instructions", "{}") is None
+
+
+async def test_an_overloaded_free_tier_gives_no_summary_and_no_error(session, job, client):
+    import httpx
+    import openai
+
+    request = httpx.Request("POST", "https://example.test")
+    client.answer = openai.InternalServerError(
+        "This model is currently experiencing high demand.", response=httpx.Response(503, request=request), body=None)
+    assert await summary.summarize(session, job, result(), SETTINGS) == (None, None)
+    stored = (await session.execute(select(RecommendationSummary))).scalar_one()
+    assert stored.summary is None and stored.attempts == 1  # tried again for this verdict after an hour

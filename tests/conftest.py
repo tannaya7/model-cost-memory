@@ -109,6 +109,13 @@ def fake_dns(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_summary_key(monkeypatch):
+    """A key in the developer's shell must never make a real summary call from the tests."""
+    monkeypatch.delenv("SUMMARY_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def fresh_limits():
     """Rate-limit buckets, daily run counts and stream slots start empty in every test."""
     from agent_memory import ratelimit

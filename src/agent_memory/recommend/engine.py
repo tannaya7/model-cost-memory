@@ -406,8 +406,8 @@ async def recommend(
         # An unrecognised version is treated as current (TIP 3.7): never discount evidence by accident.
         superseded = normalize(r.model_version) != current_version.get((job.job_id, base), normalize(r.model_version))
         f = families[name]
-        f.n_runs += r.n
-        f.failures += r.failures
+        f.n_runs += int(r.n)  # SUM() comes back from Postgres as Decimal
+        f.failures += int(r.failures)
         sums = ((r.total_s_superseded, r.squares_s_superseded, r.passing_s_superseded, r.cost_s_superseded,
                  r.priced_s_superseded) if superseded
                 else (r.total_s_current, r.squares_s_current, r.passing_s_current, r.cost_s_current, r.priced_s_current))
