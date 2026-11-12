@@ -29,6 +29,12 @@ class Health(Model):
     status: Literal["ok"]
 
 
+class SchedulerHealth(Model):
+    status: Literal["ok", "overdue"]
+    overdue: dict[str, float | None] = Field(
+        description="Jobs with no success within their allowance: minutes since the last success, null if never")
+
+
 ModelStatus = Literal["ACTIVE", "DEPRECATED", "RETIRED"]
 
 
@@ -101,8 +107,11 @@ class RunOut(Model):
     run_kind: RunKind
     state: RunState
     created_at: datetime
-    prompt_preview: str = Field(description="First 200 characters of the prompt")
+    prompt_preview: str | None = Field(description="First 200 characters of the prompt; null once retention cleared it")
     output_preview: str | None = Field(description="First 200 characters of the output")
+    content_removed_at: datetime | None = Field(
+        default=None, description="When the prompt, output, tool calls and answer key were cleared under the "
+                                  "project's retention; the figures are kept")
     importance_score: float = Field(default=1.0, description="How much the run matters (failures and costly runs "
                                                              "more): what decides archiving and re-test sampling")
     weight: float | None = Field(default=None, description="How much it counts in the recommendation now: "
@@ -178,7 +187,7 @@ class RunCreate(Model):
 class RunDetail(RunOut):
     """One run in full, for the detail panel."""
 
-    prompt: str
+    prompt: str | None
     output: str | None
     tool_calls: list[dict] | None
 
@@ -455,6 +464,8 @@ class ProjectOut(Model):
     retest_monthly_cap_usd: float
     retest_allowed: bool
     key_prefix: str | None = Field(description="The first characters of the live project key")
+    content_retention_days: int = Field(
+        default=90, description="Days a run keeps its prompt, output, tool calls and answer key; the figures stay")
     created_at: datetime
 
 
@@ -473,6 +484,9 @@ class ProjectPatch(Model):
                                     description="Must be https; send null to remove")
     retest_monthly_cap_usd: float | None = Field(default=None, ge=0, le=10_000)
     retest_allowed: bool | None = None
+    content_retention_days: int | None = Field(
+        default=None, ge=1, le=3650,
+        description="Days a run keeps its prompt, output, tool calls and answer key (1 to 3650)")
 
 
 class ProjectKey(Model):

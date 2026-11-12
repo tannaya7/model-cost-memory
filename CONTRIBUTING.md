@@ -45,7 +45,12 @@ git commit -s -S -m "feat(scope): summary"
 ```bash
 pytest          # starts its own Postgres; no Docker or database account needed
 ruff check .
+cd frontend && npm test && npm run build
 ```
+
+Install Python packages with `pip install -c requirements-lock.txt -e ".[dev]"`, the exact versions CI uses. After
+adding a dependency to `pyproject.toml`, regenerate the lock with the command at the top of `requirements-lock.txt`
+(a test fails until every dependency is pinned there).
 
 If you change a response model in `src/agent_memory/schemas.py` or add an endpoint, regenerate the API
 contract and commit it with the change:

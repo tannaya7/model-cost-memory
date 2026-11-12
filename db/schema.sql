@@ -29,7 +29,9 @@ CREATE TABLE projects (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     owner_user_id UUID REFERENCES users(user_id),   -- NULL = created by the operator script
     name          TEXT,                             -- display name chosen in the web app
-    key_prefix    TEXT                              -- first characters of the live key, for display
+    key_prefix    TEXT,                             -- first characters of the live key, for display
+    content_retention_days INTEGER NOT NULL DEFAULT 90  -- days runs keep their prompt and answer (0015)
+        CONSTRAINT projects_retention_check CHECK (content_retention_days BETWEEN 1 AND 3650)
 );
 CREATE INDEX idx_projects_owner ON projects(owner_user_id);
 
@@ -81,7 +83,7 @@ CREATE TABLE runs (
                                                          -- hits the same row (INSERT ... ON CONFLICT DO NOTHING)
     job_id            UUID NOT NULL REFERENCES jobs(job_id),
     project_id        TEXT NOT NULL REFERENCES projects(project_id),
-    prompt            TEXT NOT NULL,
+    prompt            TEXT,                         -- NULL once retention cleared it (0015)
     prompt_hash       TEXT NOT NULL,                -- dedupe + cache key
     model             TEXT NOT NULL,
     model_version     TEXT NOT NULL,                -- provider-resolved; what decay is keyed to
@@ -113,8 +115,10 @@ CREATE TABLE runs (
     invalid_at        TIMESTAMPTZ,
     retest_id         UUID REFERENCES retests(retest_id),  -- which re-test produced a RETEST run
     expected          JSONB,                        -- answer key, kept only for jobs with re-test consent
-    provider          TEXT                          -- who served the call, e.g. 'groq'; picks the price (0010)
+    provider          TEXT,                         -- who served the call, e.g. 'groq'; picks the price (0010)
+    content_removed_at TIMESTAMPTZ                  -- when retention cleared prompt, output, tool calls, answer key, embedding (0015)
 );
+CREATE INDEX idx_runs_content_kept ON runs(created_at) WHERE content_removed_at IS NULL;
 CREATE INDEX idx_runs_retest ON runs(retest_id) WHERE retest_id IS NOT NULL;
 CREATE INDEX idx_runs_job_model ON runs(job_id, model, model_version);
 CREATE INDEX idx_runs_job_created ON runs(job_id, created_at DESC);   -- "recent runs for this job"
@@ -244,3 +248,10 @@ CREATE TABLE flow_events (                          -- the live data-flow view; 
 );
 CREATE INDEX idx_flow_events_project ON flow_events(project_id, event_id);
 CREATE INDEX idx_flow_events_ts ON flow_events(ts);
+
+CREATE TABLE scheduler_heartbeats (                 -- when each scheduled job last succeeded or failed (0015)
+    job           TEXT PRIMARY KEY,                 -- a job id, or 'scheduler' for when the leader started
+    last_ok_at    TIMESTAMPTZ,
+    last_error    TEXT,
+    last_error_at TIMESTAMPTZ
+);

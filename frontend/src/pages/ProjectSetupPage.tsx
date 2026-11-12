@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -12,6 +12,7 @@ import {
   useRegenerateProjectKey,
 } from "../features/projects/hooks/useProjects";
 import { ApiKeyRevealBox } from "../features/projects/components/ApiKeyRevealBox";
+import { DeleteProjectCard } from "../features/projects/components/DeleteProjectCard";
 import { ApiError } from "../shared/api/apiFetch";
 
 const projectSetupSchema = z.object({
@@ -31,6 +32,11 @@ const projectSetupSchema = z.object({
     .min(0, "Cap must be at least $0")
     .max(500, "Cap cannot exceed $500"),
   retest_allowed: z.boolean(),
+  content_retention_days: z
+    .number({ error: "Enter a number of days" })
+    .int("Whole days only")
+    .min(1, "Keep content for at least 1 day")
+    .max(3650, "At most 3650 days (10 years)"),
 });
 
 type ProjectSetupFormValues = z.infer<typeof projectSetupSchema>;
@@ -40,6 +46,7 @@ export default function ProjectSetupPage() {
   const projectQuery = useProject(projectId);
   const patchMutation = usePatchProject();
   const regenerateMutation = useRegenerateProjectKey();
+  const navigate = useNavigate();
 
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -58,6 +65,7 @@ export default function ProjectSetupPage() {
       webhook_url: "",
       retest_monthly_cap_usd: 10,
       retest_allowed: true,
+      content_retention_days: 90,
     },
   });
 
@@ -71,6 +79,7 @@ export default function ProjectSetupPage() {
         webhook_url: project.webhook_url || "",
         retest_monthly_cap_usd: project.retest_monthly_cap_usd,
         retest_allowed: project.retest_allowed,
+        content_retention_days: project.content_retention_days,
       });
     }
   }, [project, reset]);
@@ -88,6 +97,7 @@ export default function ProjectSetupPage() {
           webhook_url: data.webhook_url ? data.webhook_url : null,
           retest_monthly_cap_usd: data.retest_monthly_cap_usd,
           retest_allowed: data.retest_allowed,
+          content_retention_days: data.content_retention_days,
         },
       });
       setSavedSuccess(true);
@@ -314,6 +324,35 @@ export default function ProjectSetupPage() {
             </label>
           </div>
 
+          {/* Content retention */}
+          <div>
+            <label
+              htmlFor="retention-days"
+              className="block text-sm font-medium text-ink mb-1"
+            >
+              Keep prompts and answers for (days) <span className="text-bad">*</span>
+            </label>
+            <input
+              id="retention-days"
+              type="number"
+              step="1"
+              min="1"
+              max="3650"
+              {...register("content_retention_days", { valueAsNumber: true })}
+              className="w-full max-w-xs rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            {errors.content_retention_days && (
+              <p className="mt-1 text-xs text-bad">
+                {errors.content_retention_days.message}
+              </p>
+            )}
+            <p className="mt-1 text-xs text-dim">
+              After this many days a run's prompt, answer, tool calls and answer key are deleted each night.
+              Pass or fail, cost and tokens are kept, so recommendations are unaffected; older runs can no
+              longer be replayed in a re-test.
+            </p>
+          </div>
+
           {/* Save Button */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-rule">
             <button
@@ -391,6 +430,12 @@ export default function ProjectSetupPage() {
           </div>
         )}
       </Card>
+
+      <DeleteProjectCard
+        projectId={project.project_id}
+        projectName={project.name}
+        onDeleted={() => navigate("/projects")}
+      />
     </div>
   );
 }

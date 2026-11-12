@@ -42,3 +42,11 @@ export function regenerateProjectKey(id: string): Promise<ProjectKeyResult> {
     },
   );
 }
+
+/** Deletes the project and everything recorded under it. `confirm` must repeat the project id. */
+export function deleteProject(id: string): Promise<null> {
+  return apiFetch<null>(
+    `/v1/projects/${encodeURIComponent(id)}?confirm=${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+}

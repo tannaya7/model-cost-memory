@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -90,6 +91,12 @@ export default defineConfig(() => {
             "/v1": "http://127.0.0.1:8000",
             "/auth": "http://127.0.0.1:8000",
           },
+    },
+    test: {
+      environment: "jsdom",
+      setupFiles: ["./src/test/setup.ts"],
+      include: ["src/**/*.test.{ts,tsx}"],
+      testTimeout: 30_000, // a cold start on a busy laptop is slow; CI finishes each test in well under a second
     },
   };
 });

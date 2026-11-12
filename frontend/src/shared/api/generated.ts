@@ -109,6 +109,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/healthz/scheduler": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Scheduler Health
+         * @description Is the scheduler keeping up? 503 when any job has had no success within its allowance, so an
+         *     uptime monitor can alert on it. Shows job names and ages only, never error text.
+         */
+        get: operations["scheduler_health_healthz_scheduler_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/alerts": {
         parameters: {
             query?: never;
@@ -513,13 +534,20 @@ export interface paths {
         get: operations["get_project_v1_projects__project_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Project Endpoint
+         * @description Delete the project and everything recorded under it: jobs, runs with their prompts and answers,
+         *     re-tests, recommendations, alerts, the stored provider key and usage limits. It cannot be undone,
+         *     and the project key stops working at once.
+         */
+        delete: operations["delete_project_endpoint_v1_projects__project_id__delete"];
         options?: never;
         head?: never;
         /**
          * Patch Project
-         * @description Change the name, the alert webhook (https only; null removes it), the monthly re-test cap or
-         *     the project-wide re-test switch. Only the fields sent change.
+         * @description Change the name, the alert webhook (https only; null removes it), the monthly re-test cap, the
+         *     project-wide re-test switch or how long run content is kept. Only the fields sent change. A shorter
+         *     retention applies at the next daily clean-up.
          */
         patch: operations["patch_project_v1_projects__project_id__patch"];
         trace?: never;
@@ -1231,6 +1259,12 @@ export interface components {
         /** ProjectOut */
         ProjectOut: {
             /**
+             * Content Retention Days
+             * @description Days a run keeps its prompt, output, tool calls and answer key; the figures stay
+             * @default 90
+             */
+            content_retention_days: number;
+            /**
              * Created At
              * Format: date-time
              */
@@ -1258,6 +1292,11 @@ export interface components {
         };
         /** ProjectPatch */
         ProjectPatch: {
+            /**
+             * Content Retention Days
+             * @description Days a run keeps its prompt, output, tool calls and answer key (1 to 3650)
+             */
+            content_retention_days?: number | null;
             /** Name */
             name?: string | null;
             /** Retest Allowed */
@@ -1598,6 +1637,11 @@ export interface components {
             /** Cache Write Tokens */
             cache_write_tokens: number;
             /**
+             * Content Removed At
+             * @description When the prompt, output, tool calls and answer key were cleared under the project's retention; the figures are kept
+             */
+            content_removed_at?: string | null;
+            /**
              * Cost Usd
              * @description Null when the model has no catalog price and none was sent
              */
@@ -1646,12 +1690,12 @@ export interface components {
              */
             output_preview: string | null;
             /** Prompt */
-            prompt: string;
+            prompt: string | null;
             /**
              * Prompt Preview
-             * @description First 200 characters of the prompt
+             * @description First 200 characters of the prompt; null once retention cleared it
              */
-            prompt_preview: string;
+            prompt_preview: string | null;
             /** Prompt Version */
             prompt_version: string | null;
             /**
@@ -1692,6 +1736,11 @@ export interface components {
             cache_read_tokens: number;
             /** Cache Write Tokens */
             cache_write_tokens: number;
+            /**
+             * Content Removed At
+             * @description When the prompt, output, tool calls and answer key were cleared under the project's retention; the figures are kept
+             */
+            content_removed_at?: string | null;
             /**
              * Cost Usd
              * @description Null when the model has no catalog price and none was sent
@@ -1740,9 +1789,9 @@ export interface components {
             output_preview: string | null;
             /**
              * Prompt Preview
-             * @description First 200 characters of the prompt
+             * @description First 200 characters of the prompt; null once retention cleared it
              */
-            prompt_preview: string;
+            prompt_preview: string | null;
             /** Prompt Version */
             prompt_version: string | null;
             /**
@@ -1779,6 +1828,21 @@ export interface components {
              * @description Pass as ?cursor= to get the next page; null on the last page
              */
             next_cursor: string | null;
+        };
+        /** SchedulerHealth */
+        SchedulerHealth: {
+            /**
+             * Overdue
+             * @description Jobs with no success within their allowance: minutes since the last success, null if never
+             */
+            overdue: {
+                [key: string]: number | null;
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "overdue";
         };
         /** SpendOut */
         SpendOut: {
@@ -2099,6 +2163,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+        };
+    };
+    scheduler_health_healthz_scheduler_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchedulerHealth"];
+                };
+            };
+            /** @description A scheduled job is overdue */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchedulerHealth"];
                 };
             };
         };
@@ -2879,6 +2972,38 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProjectOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_project_endpoint_v1_projects__project_id__delete: {
+        parameters: {
+            query: {
+                /** @description The project id again, so a project is never deleted by accident */
+                confirm: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

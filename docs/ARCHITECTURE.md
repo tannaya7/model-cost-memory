@@ -131,13 +131,19 @@ which is why a DOWNGRADE now needs that comparison.
 | A weak or development configuration on a public server | the API and the scheduler refuse to start when `PUBLIC_URL` is https and `SECRET_KEY` is missing, or with `DEV_LOGIN` or `ALLOW_PRIVATE_URLS` on; a `SECRET_KEY` must be 32+ characters |
 | One key used for two jobs | cookies and stored provider keys use different keys derived from `SECRET_KEY` (HMAC); keys stored before the split still decrypt |
 | A runaway re-test answer or a free quota emptied in a burst | every re-test call has an output limit and reserves its worst case; calls start at least 1 s apart, back off on 429 (Retry-After up to 5 min, with jitter) |
+| Customers' prompts kept forever, or a customer asking for erasure | `retention.py`: a run's prompt, answer, tool calls, answer key and embedding are cleared after the project's `content_retention_days` (90 by default, 1-3650) by a nightly job, keeping the figures the statistics use; `DELETE /v1/projects/{id}` (owner, with `?confirm=`) or `scripts/delete_project.py` removes a project and everything under it in one transaction |
+| Another site framing the app or injecting script | Caddy sends a strict `Content-Security-Policy` (scripts and data from this origin only, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, HSTS and `nosniff` |
+| A database left on a default password | `docker-compose.yml` refuses to start without `POSTGRES_PASSWORD`; the database port is bound to localhost |
+| A dependency changing or turning vulnerable between builds | every Python version is pinned in `requirements-lock.txt` (installed by CI and the image), npm in `package-lock.json`; CI runs `pip-audit` and `npm audit`, and Dependabot proposes updates weekly |
+| A stopped scheduler or failing job going unnoticed | every scheduled job leaves a heartbeat (`heartbeat.py`); `GET /healthz/scheduler` answers 503 when one is overdue, for an uptime monitor, and `OPERATOR_WEBHOOK_URL` hears about each failure |
+| Losing the server and its backups together | `deploy/backup.sh` copies each nightly dump off the machine (`BACKUP_REMOTE`, an rclone crypt remote) and pings `BACKUP_PING_URL`, so a backup that stops is noticed |
 
 The limits live in the one API process's memory; behind several API processes each would count on its own.
 
 ## Data model
 
 The authoritative schema is [`db/schema.sql`](../db/schema.sql): `users`, `projects`, `provider_keys`,
-`jobs`, `retests`, `runs`, `recommendations`, `outbox`, `model_catalog`, `model_prices`, `alerts`, `flow_events`, `usage_limits`, `recommendation_summaries`.
+`jobs`, `retests`, `runs`, `recommendations`, `outbox`, `model_catalog`, `model_prices`, `alerts`, `flow_events`, `usage_limits`, `recommendation_summaries`, `scheduler_heartbeats`.
 
 - `recommendations.consolidated_from` links a conclusion to every run behind it.
 - `recommendations.superseded_by_id` links it to the conclusion that replaced it, with a date and
@@ -176,6 +182,9 @@ The authoritative schema is [`db/schema.sql`](../db/schema.sql): `users`, `proje
 - `recommendation_summaries` stores the optional two-sentence summary once per verdict (job, summary model, prompt
   version and what the verdict says, not its exact figures), with a server-wide daily limit on calls.
 - `users` and `projects.owner_user_id`: Google sign-in; a signed-in user sees only their own projects.
+- `runs.content_removed_at` marks a run whose prompt, output, tool calls, answer key and embedding were cleared
+  under `projects.content_retention_days`; `runs.prompt` is then null, and re-tests and similar-run search skip it.
+- `scheduler_heartbeats` holds when each scheduled job last succeeded or failed, read by `/healthz/scheduler`.
 - `flow_events` is the live data-flow view's trail (`sdk → api → check → index → consolidate`), written in the same
   transaction as each step and deleted after a day.
 - The schema changes only through Alembic migrations (`migrations/versions/`). `db/schema.sql` is the reference
@@ -191,6 +200,7 @@ The machine-readable contract is [`contract/openapi.json`](../contract/openapi.j
 | Method | Path | Purpose | Built |
 |---|---|---|---|
 | `GET` | `/healthz` | Liveness and database check (no key) | W2 |
+| `GET` | `/healthz/scheduler` | 503 when a scheduled job is overdue; job names and ages only (no key) | W12 |
 | `GET` | `/v1/jobs` | Jobs with run counts, in total and per state | W2 |
 | `POST` | `/v1/jobs` | Define a job and its success check | W3 |
 | `GET` | `/v1/runs` | Recorded runs, newest first, filtered and paged; `?recommendation=` lists a verdict's runs | W2, W8 |
@@ -218,7 +228,8 @@ The machine-readable contract is [`contract/openapi.json`](../contract/openapi.j
 | `POST` | `/auth/logout` | End the session | W11 |
 | `GET` | `/v1/me` | The signed-in user | W11 |
 | `GET` / `POST` | `/v1/projects` | The user's own projects; create one (its key is returned once) | W11 |
-| `GET` / `PATCH` | `/v1/projects/{id}` | Name, alert webhook, monthly re-test cap, re-test switch | W11 |
+| `GET` / `PATCH` | `/v1/projects/{id}` | Name, alert webhook, monthly re-test cap, re-test switch, days run content is kept | W11, W12 |
+| `DELETE` | `/v1/projects/{id}?confirm={id}` | Delete the project and everything recorded under it | W12 |
 | `POST` | `/v1/projects/{id}/key` | A new project key, shown once; the old one stops working | W11 |
 | `GET` | `/v1/jobs/{job}/insights` | Cost per success per model; pass rate by input size and prompt version | W11 |
 | `GET` | `/v1/flow` | The live data-flow trail, polled | W12 |
@@ -235,6 +246,8 @@ src/agent_memory/
 ├── security.py        project keys, webhook secrets, encryption of stored provider keys
 ├── logging_config.py  structured JSON logs carrying run_id, job_id and project_id
 ├── privacy.py         what is kept about a run: tool names and ids only, unless a project opts in
+├── retention.py       clearing old run content after each project's retention; deleting a project
+├── heartbeat.py       scheduled-job heartbeats, the overdue check and the operator's failure message
 ├── api.py             FastAPI routes (data); auth/routes.py adds sign-in and projects
 ├── ingest.py          write path: jobs, runs, outcomes, late labels (run + outbox row in one transaction)
 ├── projects.py        create a project and its key
@@ -243,7 +256,7 @@ src/agent_memory/
 ├── embeddings.py      MiniLM and hashing embedders behind an LRU cache
 ├── corpus.py          invoice-extraction corpus with exact known answers
 ├── recorder.py        RunRecorder SDK
-├── scheduler.py       maintenance jobs: janitor, decay, consolidation, regression sweep, re-tests, alerts, catalog
+├── scheduler.py       maintenance jobs: janitor, decay, consolidation, regression sweep, re-tests, alerts, catalog, retention
 ├── checks/            OutcomeChecker interface; answer key, schema, late label (test command and sandbox: later)
 ├── storage/           vector_store (pgvector); lineage (recursive SQL over superseded_by_id)
 ├── pipeline/          sync_worker, janitor, scoring, decay, consolidation, regression, flow events
@@ -255,7 +268,7 @@ src/agent_memory/
 ├── insights/          spend and pass-rate breakdowns
 ├── alerts/            alert records, signed webhook delivery with backoff
 └── prompts/           the one prompt file the system owns
-migrations/            Alembic: the only way the schema changes (0001-0008)
+migrations/            Alembic: the only way the schema changes (0001-0015)
 contract/              OpenAPI file and sample responses the web app is built against
 corpus/                the generated invoice corpus
 deploy/                Caddy, backup, restore and deploy files for the server
