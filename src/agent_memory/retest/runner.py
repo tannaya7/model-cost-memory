@@ -158,7 +158,7 @@ async def sample_sources(
     query = (
         select(Run.run_id, Run.prompt, Run.prompt_hash, Run.expected, Run.tokens_in, Run.tokens_out)
         .where(Run.job_id == job.job_id, Run.run_kind == "PRODUCTION", Run.outcome.in_(("PASS", "FAIL")),
-               Run.invalid_at.is_(None), Run.prompt_hash.not_in(already))
+               Run.invalid_at.is_(None), Run.prompt.is_not(None), Run.prompt_hash.not_in(already))
         .ext(distinct_on(Run.prompt_hash)).order_by(Run.prompt_hash, Run.created_at.desc())
     )
     if job.check_kind == "ANSWER_KEY":

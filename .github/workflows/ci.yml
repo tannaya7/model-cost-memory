@@ -27,9 +27,11 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install -e ".[dev]"
+      - run: pip install -c requirements-lock.txt -e ".[dev]"
       - run: ruff check .
       - run: pytest
+      # Known vulnerabilities in the locked Python dependencies fail the build.
+      - run: pip install pip-audit && pip-audit --skip-editable
 
   frontend:
     runs-on: ubuntu-24.04
@@ -44,8 +46,11 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      # Known high or critical vulnerabilities in what the web app ships fail the build.
+      - run: npm audit --omit=dev --audit-level=high
       # The frontend's API types must match contract/openapi.json; regenerate and fail on any difference.
       - run: npm run gen:types && git diff --exit-code -- src/shared/api/generated.ts
+      - run: npm test
       - run: npm run build
 
   # The server setup, end to end, on a throwaway machine: build every image, migrate, start the whole

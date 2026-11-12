@@ -55,7 +55,10 @@ class User(Base):
 
 class Project(Base):
     __tablename__ = "projects"
-    __table_args__ = (Index("idx_projects_owner", "owner_user_id"),)
+    __table_args__ = (
+        Index("idx_projects_owner", "owner_user_id"),
+        CheckConstraint("content_retention_days BETWEEN 1 AND 3650", name="projects_retention_check"),
+    )
 
     project_id: Mapped[str] = mapped_column(Text, primary_key=True)
     api_key_hash: Mapped[str] = mapped_column(Text)  # the key itself is shown once, never stored
@@ -70,6 +73,8 @@ class Project(Base):
     owner_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.user_id"))
     name: Mapped[str | None] = mapped_column(Text)  # display name chosen in the web app
     key_prefix: Mapped[str | None] = mapped_column(Text)  # first characters of the live key, for display
+    # Days a run keeps its prompt, answer, tool calls and answer key (retention.py; 0015).
+    content_retention_days: Mapped[int] = mapped_column(Integer, server_default=text("90"))
 
 
 class ProviderKey(Base):
@@ -126,13 +131,14 @@ class Run(Base):
             "idx_runs_embedding_cache", "project_id", "prompt_hash", "embedding_model",
             postgresql_where=text("embedding IS NOT NULL"),
         ),
+        Index("idx_runs_content_kept", "created_at", postgresql_where=text("content_removed_at IS NULL")),
     )
 
     # Supplied by the SDK, so a retried send hits the same row (INSERT ... ON CONFLICT DO NOTHING).
     run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("jobs.job_id"))
     project_id: Mapped[str] = mapped_column(Text, ForeignKey("projects.project_id"))
-    prompt: Mapped[str] = mapped_column(Text)
+    prompt: Mapped[str | None] = mapped_column(Text)  # NULL once cleared by retention (content_removed_at)
     prompt_hash: Mapped[str] = mapped_column(Text)
     model: Mapped[str] = mapped_column(Text)
     model_version: Mapped[str] = mapped_column(Text)
@@ -160,6 +166,8 @@ class Run(Base):
     retest_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("retests.retest_id"))
     expected: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # kept only for jobs with re-test consent
     provider: Mapped[str | None] = mapped_column(Text)  # who served the call; picks the price
+    # When retention cleared prompt, output, tool_calls, expected and embedding (retention.py; 0015).
+    content_removed_at: Mapped[datetime | None] = mapped_column(Timestamp)
 
 
 class Retest(Base):
@@ -369,3 +377,15 @@ class UsageLimit(Base):
     reported_used: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))  # PERCENT: the share the user last saw
     reported_at: Mapped[datetime | None] = mapped_column(Timestamp)
     created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+
+
+class SchedulerHeartbeat(Base):
+    """When each scheduled job last succeeded or failed (heartbeat.py; 0015). The row named 'scheduler'
+    records when the running scheduler took the lead."""
+
+    __tablename__ = "scheduler_heartbeats"
+
+    job: Mapped[str] = mapped_column(Text, primary_key=True)
+    last_ok_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    last_error_at: Mapped[datetime | None] = mapped_column(Timestamp)

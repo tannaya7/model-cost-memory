@@ -119,6 +119,9 @@ class Settings:
     summary_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     summary_effort: str = "minimal"  # Gemini 3.x cannot switch thinking off; empty sends no reasoning_effort
     summary_daily_limit: int = 200
+    # The operator's own incoming webhook (Slack, Discord, ...): a failing scheduled job posts there,
+    # at most once an hour per job (heartbeat.py). Empty: failures are only logged and shown as overdue.
+    operator_webhook_url: str = ""
     # Outbound URLs (webhooks, re-test endpoints) must be public addresses unless this is on (urls.py).
     allow_private_urls: bool = False
     # Abuse limits (ratelimit.py). Requests per minute per project key, and per IP for requests without
@@ -169,6 +172,7 @@ class Settings:
             summary_effort=os.environ.get("SUMMARY_EFFORT", cls.summary_effort),
             summary_daily_limit=_int("SUMMARY_DAILY_LIMIT", 200),
             allow_private_urls=_bool("ALLOW_PRIVATE_URLS"),
+            operator_webhook_url=os.environ.get("OPERATOR_WEBHOOK_URL", ""),
             rate_limit_key_per_minute=_int("RATE_LIMIT_KEY_PER_MINUTE", 1200),
             rate_limit_ip_per_minute=_int("RATE_LIMIT_IP_PER_MINUTE", 120),
             runs_per_day_per_project=_int("RUNS_PER_DAY_PER_PROJECT", 200_000),

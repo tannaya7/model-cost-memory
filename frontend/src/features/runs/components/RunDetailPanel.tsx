@@ -208,15 +208,27 @@ export function RunDetailPanel({
                 </div>
               </div>
 
+              {run.content_removed_at && (
+                <p className="rounded-md border border-rule bg-bg p-3 text-xs text-dim">
+                  The prompt, output and tool calls were removed on{" "}
+                  {new Date(run.content_removed_at).toLocaleDateString()} under this project's retention
+                  setting. The result, cost and tokens are kept.
+                </p>
+              )}
+
               {/* Full Prompt */}
               <div>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-dim">
                   Full Prompt
                 </h3>
                 <div className="rounded-md border border-rule bg-bg p-3">
-                  <pre className="font-mono text-xs text-ink whitespace-pre-wrap break-words">
-                    {run.prompt}
-                  </pre>
+                  {run.prompt != null ? (
+                    <pre className="font-mono text-xs text-ink whitespace-pre-wrap break-words">
+                      {run.prompt}
+                    </pre>
+                  ) : (
+                    <p className="italic text-dim text-xs">Removed under the retention setting</p>
+                  )}
                 </div>
               </div>
 
@@ -231,7 +243,9 @@ export function RunDetailPanel({
                       {formatOutput(run.output)}
                     </pre>
                   ) : (
-                    <p className="italic text-dim text-xs">No output recorded</p>
+                    <p className="italic text-dim text-xs">
+                      {run.content_removed_at ? "Removed under the retention setting" : "No output recorded"}
+                    </p>
                   )}
                 </div>
               </div>

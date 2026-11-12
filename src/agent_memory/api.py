@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import func, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
@@ -44,6 +44,7 @@ from .schemas import (
     FlowEventOut,
     ForecastOut,
     Health,
+    SchedulerHealth,
     HistoryEntryOut,
     HistoryOut,
     JobCreate,
@@ -77,6 +78,7 @@ from .schemas import (
 from .auth import routes as auth_routes
 from .auth.access import current_project
 from .config import check_startup, get_settings
+from .heartbeat import overdue
 from .ratelimit import DAILY_RUNS, STREAMS, RateLimitMiddleware
 from .security import SecretKeyMissing, session_secret
 from .pipeline import flow
@@ -122,6 +124,16 @@ app.include_router(auth_routes.router)
 async def healthz(session: AsyncSession = Depends(get_session)) -> Health:
     await session.execute(text("SELECT 1"))
     return Health(status="ok")
+
+
+@app.get("/healthz/scheduler", response_model=SchedulerHealth, tags=["system"],
+         responses={503: {"model": SchedulerHealth, "description": "A scheduled job is overdue"}})
+async def scheduler_health(session: AsyncSession = Depends(get_session)) -> JSONResponse:
+    """Is the scheduler keeping up? 503 when any job has had no success within its allowance, so an
+    uptime monitor can alert on it. Shows job names and ages only, never error text."""
+    late = await overdue(session)
+    body = SchedulerHealth(status="overdue" if late else "ok", overdue=late)
+    return JSONResponse(body.model_dump(), status_code=503 if late else 200)
 
 
 @app.get("/v1/jobs", response_model=list[JobOut], tags=["jobs"])
@@ -176,9 +188,9 @@ def _run_fields(r: Run, job_name: str, weight: float | None = None) -> dict:
         cache_read_tokens=r.cache_read_tokens, cache_write_tokens=r.cache_write_tokens,
         cost_usd=float(r.cost_usd) if r.cost_usd is not None else None, latency_ms=r.latency_ms, outcome=r.outcome,
         outcome_reason=r.outcome_reason, run_kind=r.run_kind, state=r.state, created_at=r.created_at,
-        prompt_preview=r.prompt[:PREVIEW_CHARS],
+        prompt_preview=r.prompt[:PREVIEW_CHARS] if r.prompt is not None else None,
         output_preview=r.output[:PREVIEW_CHARS] if r.output is not None else None,
-        importance_score=float(r.importance_score), weight=weight,
+        importance_score=float(r.importance_score), weight=weight, content_removed_at=r.content_removed_at,
     )
 
 

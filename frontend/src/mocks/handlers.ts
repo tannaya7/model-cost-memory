@@ -62,6 +62,7 @@ const projects: Project[] = [
     webhook_secret: "whsec_mock_secret",
     retest_monthly_cap_usd: 10,
     retest_allowed: true,
+    content_retention_days: 90,
     key_prefix: "mcm_live_prod",
     created_at: "2026-09-01T00:00:00Z",
   },
@@ -72,6 +73,7 @@ const projects: Project[] = [
     webhook_secret: "whsec_mock_secret",
     retest_monthly_cap_usd: 50,
     retest_allowed: false,
+    content_retention_days: 90,
     key_prefix: "mcm_live_stag",
     created_at: "2026-09-15T00:00:00Z",
   },
@@ -986,6 +988,7 @@ export const handlers = [
       webhook_secret: "whsec_mock_secret",
       retest_monthly_cap_usd: 10,
       retest_allowed: true,
+      content_retention_days: 90,
       key_prefix: keyPrefix,
       created_at: new Date().toISOString(),
     };
@@ -1009,6 +1012,7 @@ export const handlers = [
       webhook_url?: string | null;
       retest_monthly_cap_usd?: number;
       retest_allowed?: boolean;
+      content_retention_days?: number;
     };
     if (body.name !== undefined) {
       const name = body.name.trim();
@@ -1043,7 +1047,35 @@ export const handlers = [
     if (body.retest_allowed !== undefined) {
       project.retest_allowed = Boolean(body.retest_allowed);
     }
+    if (body.content_retention_days !== undefined) {
+      const days = Number(body.content_retention_days);
+      if (!Number.isInteger(days) || days < 1 || days > 3650) {
+        return HttpResponse.json(
+          { detail: "content_retention_days must be between 1 and 3650" },
+          { status: 422 },
+        );
+      }
+      project.content_retention_days = days;
+    }
     return HttpResponse.json(project);
+  }),
+
+  // DELETE /v1/projects/:project_id?confirm=<project_id>
+  http.delete("/v1/projects/:project_id", async ({ request, params }) => {
+    await delay(350);
+    if (!isMockSignedIn(request)) {
+      return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
+    }
+    const id = String(params.project_id);
+    const index = projects.findIndex((p) => p.project_id === id);
+    if (index === -1) {
+      return HttpResponse.json({ detail: "Project not found" }, { status: 404 });
+    }
+    if (new URL(request.url).searchParams.get("confirm") !== id) {
+      return HttpResponse.json({ detail: "confirm must equal the project id" }, { status: 422 });
+    }
+    projects.splice(index, 1);
+    return new HttpResponse(null, { status: 204 });
   }),
 
   // POST /v1/projects/:project_id/key

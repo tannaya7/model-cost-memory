@@ -30,6 +30,8 @@ recommended and why it changed.
   option proven to still do it, at a model and reasoning effort (`sonnet-5@low` instead of `opus-5-5@medium`).
 - A React web app: Google sign-in, projects and keys, recommendations, evidence, history, alerts, re-tests,
   spend, breakdowns and a live view of runs crossing the pipeline.
+- **Customers' data has an end**: a run's prompt and answer are deleted after the project's retention (90 days
+  by default; the figures stay), and an owner can delete a project and everything recorded under it.
 
 Full design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 illustrated walkthrough: [`docs/Architecture_Overview.pdf`](docs/Architecture_Overview.pdf) ·
@@ -91,7 +93,7 @@ embedded Postgres.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -c requirements-lock.txt -e ".[dev]"   # the exact versions CI tests
 cp .env.example .env                                  # set DATABASE_URL and SECRET_KEY
 
 alembic upgrade head                                  # create the tables
@@ -162,7 +164,7 @@ Run the tests and lint:
 ```bash
 pytest
 ruff check .
-cd frontend && npm run build
+cd frontend && npm test && npm run build
 ```
 
 Docker is for the server only. See [`deploy/README.md`](deploy/README.md).

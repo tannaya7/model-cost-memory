@@ -16,8 +16,8 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +26,7 @@ from ..config import get_settings
 from ..db import get_session
 from ..models import Project, User
 from ..projects import ProjectExists, create_project, rotate_key, slug_for
+from ..retention import delete_project
 from ..schemas import AuthConfig, DevLogin, ProjectCreate, ProjectCreated, ProjectKey, ProjectOut, ProjectPatch, UserOut
 from ..alerts.notifier import retry_given_up_alerts
 from ..security import generate_webhook_secret
@@ -132,6 +133,7 @@ def _project_out(p: Project) -> ProjectOut:
         project_id=p.project_id, name=p.name or p.project_id, webhook_url=p.webhook_url,
         webhook_secret=p.webhook_secret, retest_monthly_cap_usd=float(p.retest_monthly_cap_usd),
         retest_allowed=p.retest_allowed, key_prefix=p.key_prefix, created_at=p.created_at,
+        content_retention_days=p.content_retention_days,
     )
 
 
@@ -167,8 +169,9 @@ async def get_project(project: Project = Depends(owned_project)) -> ProjectOut:
 async def patch_project(
     body: ProjectPatch, project: Project = Depends(owned_project), session: AsyncSession = Depends(get_session)
 ) -> ProjectOut:
-    """Change the name, the alert webhook (https only; null removes it), the monthly re-test cap or
-    the project-wide re-test switch. Only the fields sent change."""
+    """Change the name, the alert webhook (https only; null removes it), the monthly re-test cap, the
+    project-wide re-test switch or how long run content is kept. Only the fields sent change. A shorter
+    retention applies at the next daily clean-up."""
     sent = body.model_fields_set
     if "name" in sent and body.name:
         project.name = body.name.strip()
@@ -187,8 +190,27 @@ async def patch_project(
         project.retest_monthly_cap_usd = Decimal(str(body.retest_monthly_cap_usd))
     if "retest_allowed" in sent and body.retest_allowed is not None:
         project.retest_allowed = body.retest_allowed
+    if "content_retention_days" in sent and body.content_retention_days is not None:
+        project.content_retention_days = body.content_retention_days
     await session.commit()
     return _project_out(project)
+
+
+@router.delete("/v1/projects/{project_id}", status_code=204, tags=["projects"])
+async def delete_project_endpoint(
+    confirm: str = Query(description="The project id again, so a project is never deleted by accident"),
+    project: Project = Depends(owned_project), session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Delete the project and everything recorded under it: jobs, runs with their prompts and answers,
+    re-tests, recommendations, alerts, the stored provider key and usage limits. It cannot be undone,
+    and the project key stops working at once."""
+    if confirm != project.project_id:
+        raise HTTPException(422, "confirm must equal the project id")
+    project_id = project.project_id
+    await delete_project(session, project_id)
+    await session.commit()
+    log.info("project deleted by its owner", extra={"project_id": project_id})
+    return Response(status_code=204)
 
 
 @router.post("/v1/projects/{project_id}/key", response_model=ProjectKey, tags=["projects"])

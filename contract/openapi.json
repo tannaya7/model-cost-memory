@@ -1214,6 +1214,12 @@
       },
       "ProjectOut": {
         "properties": {
+          "content_retention_days": {
+            "default": 90,
+            "description": "Days a run keeps its prompt, output, tool calls and answer key; the figures stay",
+            "title": "Content Retention Days",
+            "type": "integer"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -1286,6 +1292,20 @@
       },
       "ProjectPatch": {
         "properties": {
+          "content_retention_days": {
+            "anyOf": [
+              {
+                "maximum": 3650.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Days a run keeps its prompt, output, tool calls and answer key (1 to 3650)",
+            "title": "Content Retention Days"
+          },
           "name": {
             "anyOf": [
               {
@@ -2065,6 +2085,19 @@
             "title": "Cache Write Tokens",
             "type": "integer"
           },
+          "content_removed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the prompt, output, tool calls and answer key were cleared under the project's retention; the figures are kept",
+            "title": "Content Removed At"
+          },
           "cost_usd": {
             "anyOf": [
               {
@@ -2172,13 +2205,27 @@
             "title": "Output Preview"
           },
           "prompt": {
-            "title": "Prompt",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
           },
           "prompt_preview": {
-            "description": "First 200 characters of the prompt",
-            "title": "Prompt Preview",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "First 200 characters of the prompt; null once retention cleared it",
+            "title": "Prompt Preview"
           },
           "prompt_version": {
             "anyOf": [
@@ -2291,6 +2338,19 @@
             "title": "Cache Write Tokens",
             "type": "integer"
           },
+          "content_removed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the prompt, output, tool calls and answer key were cleared under the project's retention; the figures are kept",
+            "title": "Content Removed At"
+          },
           "cost_usd": {
             "anyOf": [
               {
@@ -2387,9 +2447,16 @@
             "title": "Output Preview"
           },
           "prompt_preview": {
-            "description": "First 200 characters of the prompt",
-            "title": "Prompt Preview",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "First 200 characters of the prompt; null once retention cleared it",
+            "title": "Prompt Preview"
           },
           "prompt_version": {
             "anyOf": [
@@ -2500,6 +2567,39 @@
           "next_cursor"
         ],
         "title": "RunPage",
+        "type": "object"
+      },
+      "SchedulerHealth": {
+        "properties": {
+          "overdue": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "description": "Jobs with no success within their allowance: minutes since the last success, null if never",
+            "title": "Overdue",
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "overdue"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "overdue"
+        ],
+        "title": "SchedulerHealth",
         "type": "object"
       },
       "SpendOut": {
@@ -3059,6 +3159,38 @@
           }
         },
         "summary": "Healthz",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/healthz/scheduler": {
+      "get": {
+        "description": "Is the scheduler keeping up? 503 when any job has had no success within its allowance, so an\nuptime monitor can alert on it. Shows job names and ages only, never error text.",
+        "operationId": "scheduler_health_healthz_scheduler_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulerHealth"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulerHealth"
+                }
+              }
+            },
+            "description": "A scheduled job is overdue"
+          }
+        },
+        "summary": "Scheduler Health",
         "tags": [
           "system"
         ]
@@ -5027,6 +5159,51 @@
       }
     },
     "/v1/projects/{project_id}": {
+      "delete": {
+        "description": "Delete the project and everything recorded under it: jobs, runs with their prompts and answers,\nre-tests, recommendations, alerts, the stored provider key and usage limits. It cannot be undone,\nand the project key stops working at once.",
+        "operationId": "delete_project_endpoint_v1_projects__project_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The project id again, so a project is never deleted by accident",
+            "in": "query",
+            "name": "confirm",
+            "required": true,
+            "schema": {
+              "description": "The project id again, so a project is never deleted by accident",
+              "title": "Confirm",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Project Endpoint",
+        "tags": [
+          "projects"
+        ]
+      },
       "get": {
         "operationId": "get_project_v1_projects__project_id__get",
         "parameters": [
@@ -5068,7 +5245,7 @@
         ]
       },
       "patch": {
-        "description": "Change the name, the alert webhook (https only; null removes it), the monthly re-test cap or\nthe project-wide re-test switch. Only the fields sent change.",
+        "description": "Change the name, the alert webhook (https only; null removes it), the monthly re-test cap, the\nproject-wide re-test switch or how long run content is kept. Only the fields sent change. A shorter\nretention applies at the next daily clean-up.",
         "operationId": "patch_project_v1_projects__project_id__patch",
         "parameters": [
           {
