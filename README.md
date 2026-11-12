@@ -53,19 +53,26 @@ measured results: [`reports/`](reports/)
 
 Simulated data, run through the production engine, decay, consolidation and regression code:
 
-- **Staleness experiment** ([report](reports/staleness_experiment.md)), 5 timelines of 120 days: as the
-  workload drifts and a new model version arrives, the self-maintaining memory picks the right model 75% of
+- **Staleness experiment** ([report](reports/staleness_experiment.md)), 20 timelines of 120 days: as the
+  workload drifts and a new model version arrives, the self-maintaining memory picks the right model 76% of
   the time over the whole timeline (92% in the second half), a test set frozen at day 14 25% (0%), and one
-  re-checked every month 69% (88%). Its wrong answers are all the safe kind: a good model that costs more.
-  Keeping the evidence fresh costs 9% of production spend. In a world where nothing changes it does not
-  wander: 2-3 changes of answer per timeline, never to a model that is not good enough.
+  re-checked every month 65% (81%). 76 of its 77 wrong answers were the safe kind, a good model that costs
+  more; once in 320 checkpoints it had just moved to the cheap model as that model stopped being good
+  enough, and it moved back within a week. Keeping the evidence fresh costs 9% of production spend (with a
+  third of the re-test runs, 3% of spend but 51% accuracy). In a world where nothing changes it does not
+  wander: 1.9 changes of answer per timeline, never to a model that is not good enough.
 - **Regression detection** ([version](reports/regression_detection.json),
-  [silent](reports/silent_drop_detection.json)), 100 trials per size: a version upgrade that costs 5 points is
-  caught 93% of the time (likely 86-97%) and 10 points always, the day after it lands, with 2 false alarms in
-  100 unchanged upgrades. A silent drop under an unchanged name, watched for 28 days, is caught at 5 points
-  77% of the time at 50 runs a day and 100/100 at 100 runs a day, and always at 10 points, with 1 false
-  alarm in 100 at 50 runs a day: **90% of 5-point silent drops once a job has about 100 runs a day**. False
-  alarms at 100 runs a day are still to be measured.
+  [silent](reports/silent_drop_detection.json), [silent at 100 a day](reports/silent_drop_detection_100.json),
+  with drifting inputs: [version](reports/regression_detection_drift.json),
+  [silent](reports/silent_drop_detection_drift.json)), 100 trials per size: a version upgrade that costs 5
+  points is caught 93% of the time (likely 86-97%) and 10 points always, the day after it lands, with 2 false
+  alarms in 100 unchanged upgrades. A silent drop under an unchanged name, watched for 28 days, is caught at 5
+  points 77% of the time at 50 runs a day and 100/100 at 100 runs a day, and always at 10 points, with 1 false
+  alarm in 100 at 50 runs a day and none in 100 at 100 a day: **90% of 5-point silent drops once a job has
+  about 100 runs a day**. When the inputs themselves get harder (long documents growing from 10% to 50%), the
+  detector still raises 2 false alarms in 100 upgrades and 1 in 100 silent controls, because it compares
+  versions within each input-size band; it catches 81% of 5-point upgrade drops and 65% of silent ones there.
+  Before that change, the same drift raised false alarms in 14 of 20 upgrades and 9 of 20 silent controls.
 - **Speed** ([report](reports/speed.md)): a recommendation for a job with 100,000 runs in under 300 ms, and
   for 500,000 runs about 1 s cold and under 100 ms under live traffic; recording adds about 0.01 ms (p99
   0.2 ms) to the application's own call, whether the API is up or not.

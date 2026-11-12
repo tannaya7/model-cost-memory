@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 from pathlib import Path
 
 from openai import OpenAI
@@ -39,6 +40,8 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=0, help="only the first N invoices")
     parser.add_argument("--prompt-version", default="v1")
     parser.add_argument("--provider", default="", help="who serves the model, for its price (default: from --base-url)")
+    parser.add_argument("--pause", type=float, default=0.0,
+                        help="seconds to wait between calls, to stay under a free tier's requests-per-minute limit")
     args = parser.parse_args()
 
     project_key = os.environ.get("MCM_API_KEY", "")
@@ -54,10 +57,13 @@ def main() -> int:
     print("created the invoice-extract job" if created else "the invoice-extract job already exists")
 
     provider_key = os.environ.get(args.api_key_env, "") if args.api_key_env else "ollama"
-    client = OpenAI(base_url=args.base_url, api_key=provider_key or "none")
+    # Free tiers answer 429 (rate limit) and 503 (busy) often; the client backs off and retries those.
+    client = OpenAI(base_url=args.base_url, api_key=provider_key or "none", max_retries=8, timeout=120)
     sender = Sender(args.api_url, project_key)
 
     def complete(prompt: str):
+        if args.pause:
+            time.sleep(args.pause)
         return client.chat.completions.create(
             model=args.model, messages=[{"role": "user", "content": prompt}], temperature=0
         )
