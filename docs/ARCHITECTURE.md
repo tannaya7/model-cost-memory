@@ -97,7 +97,10 @@ days after a version change and 28 after a silent drop): version regressions of 
 (likely 86-97%) and of 10 points 100/100, a 10-point one the day after the upgrade, with 2 false alarms in
 100 controls; silent drops of 5 points caught 77/100, of 10 points 100/100, with 1 false alarm in 100. At
 100 runs a day silent 5-point drops are caught 100/100 (median 8 days), so the stated target is 90% once a
-job has about 100 runs a day. An earlier 68% came from trials that ended 14 days after the drop, before the
+job has about 100 runs a day, with no false alarm in 100 controls there. With inputs drifting harder (long
+documents from 10% to 50% of the mix, `--drift`), false alarms stay at 2/100 for upgrades and 1/100 for silent
+controls, and 5-point drops are caught 81/100 and 65/100; comparing all runs together instead of band by band
+false-alarmed in 14/20 and 9/20 of those controls. An earlier 68% came from trials that ended 14 days after the drop, before the
 28-day window could split it cleanly, not from the detector. The earlier rule (a fixed p < 0.05 checked daily, 5-point minimum) looked
 alarm-free over 20 trials, but over 20,000 simulated ones it raised a false alarm on 7% of unchanged
 upgrades. Results in `reports/`.
