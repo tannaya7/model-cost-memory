@@ -9,6 +9,7 @@ import { useJobs } from "../features/jobs/hooks/useJobs";
 import { useSpendInsights } from "../features/insights/hooks/useSpendInsights";
 import { JobOverviewCard } from "../features/jobs/components/JobOverviewCard";
 import { LimitBanner } from "../features/limits/components/LimitBanner";
+import { RelatedNews } from "../features/news/components/RelatedNews";
 
 export default function HomePage() {
   const jobsQuery = useJobs();
@@ -105,6 +106,12 @@ export default function HomePage() {
               index={idx}
             />
           ))}
+        </div>
+      )}
+
+      {jobsQuery.data && jobsQuery.data.length > 0 && (
+        <div className="mt-6">
+          <RelatedNews title="In the news about your models" filters={{ mine: true }} />
         </div>
       )}
     </>

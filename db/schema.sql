@@ -255,3 +255,15 @@ CREATE TABLE scheduler_heartbeats (                 -- when each scheduled job l
     last_error    TEXT,
     last_error_at TIMESTAMPTZ
 );
+
+CREATE TABLE news_items (                           -- AI headlines from public feeds, shared by all projects (0016)
+    item_id      TEXT PRIMARY KEY,                  -- hash of the link
+    source       TEXT NOT NULL,
+    kind         TEXT NOT NULL,                     -- lab, press or community
+    title        TEXT NOT NULL,
+    link         TEXT NOT NULL,                     -- http(s) only
+    summary      TEXT NOT NULL DEFAULT '',          -- plain text, never HTML
+    published_at TIMESTAMPTZ NOT NULL,
+    fetched_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_news_published ON news_items (published_at DESC);

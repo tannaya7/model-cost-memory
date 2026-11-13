@@ -28,7 +28,8 @@ ROOT = Path(__file__).resolve().parents[1]
 # prints a harmless "Logging error" at the very end of every run. Its own logs are not needed in test output.
 logging.getLogger("pgserver").propagate = False
 TABLES = ["alerts", "outbox", "recommendations", "runs", "retests", "provider_keys", "model_catalog", "model_prices",
-          "jobs", "projects", "users", "flow_events", "recommendation_summaries", "scheduler_heartbeats"]
+          "jobs", "projects", "users", "flow_events", "recommendation_summaries", "scheduler_heartbeats",
+          "news_items"]
 
 
 @pytest.fixture(scope="session")

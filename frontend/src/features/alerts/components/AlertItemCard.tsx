@@ -5,6 +5,7 @@ import { resolveAlert } from "../api/alertsApi";
 import { deprecated, formatPValue, silentDrop, versionRegression } from "../details";
 import { Badge } from "../../../shared/components/Badge";
 import { Card } from "../../../shared/components/Card";
+import { RelatedNews } from "../../news/components/RelatedNews";
 import {
   formatShutdownCountdown,
   formatShutdownDate,
@@ -36,6 +37,14 @@ function formatLocalDate(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+const DAY = 86_400_000;
+
+/** Stories from two weeks before an alert to three days after it: an announcement usually comes first. */
+export function newsWindow(createdAt: string): { since: string; until: string } {
+  const at = new Date(createdAt).getTime();
+  return { since: new Date(at - 14 * DAY).toISOString(), until: new Date(at + 3 * DAY).toISOString() };
 }
 
 export type AlertListItem =
@@ -86,6 +95,9 @@ export function AlertItemCard({ item }: { item: AlertListItem }) {
             View in model catalog →
           </Link>
         </div>
+
+        {/* The provider's own announcement usually says what to move to */}
+        <RelatedNews title="In the news about this model" filters={{ model: model.model }} />
       </Card>
     );
   }
@@ -122,6 +134,7 @@ function AlertCard({ alert }: { alert: Alert }) {
   const regression = versionRegression(alert);
   const silent = silentDrop(alert);
   const retired = deprecated(alert);
+  const alertModel = regression?.model ?? silent?.model ?? retired?.model;
 
   return (
     <Card className={`space-y-4 ${isResolved ? "opacity-70" : ""}`}>
@@ -172,6 +185,14 @@ function AlertCard({ alert }: { alert: Alert }) {
             note={`Earlier ${silent.n_before.toLocaleString()} runs against the latest ${silent.n_after.toLocaleString()} (${formatPValue(silent.p_value)}). The provider may have changed the model without a new name.`}
           />
         </>
+      )}
+
+      {/* What the model makers and the press said about this model around when it happened */}
+      {alertModel && (
+        <RelatedNews
+          title="In the news around this alert"
+          filters={{ model: alertModel, ...newsWindow(alert.created_at) }}
+        />
       )}
 
       {/* Footer: summary, delivery, actions */}

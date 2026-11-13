@@ -9,6 +9,7 @@ import { useRecommendation } from "../features/recommendations/hooks/useRecommen
 import { RecommendationSection } from "../features/recommendations/components/engineer/RecommendationSection";
 import {
   AlertsSection,
+  NewsSection,
   BreakdownSection,
   CatalogSection,
   CompareSection,
@@ -84,6 +85,7 @@ export default function JobDetailPage() {
     { id: "recommendation", label: "Which model" },
     { id: "compare", label: "Compare" },
     { id: "alerts", label: "Alerts" },
+    { id: "news", label: "In the news" },
     { id: "history", label: "History" },
     { id: "breakdowns", label: "Breakdowns" },
     { id: "spend", label: "Spend" },
@@ -195,6 +197,7 @@ export default function JobDetailPage() {
         {jobName && (
           <>
             <AlertsSection jobName={jobName} />
+            <NewsSection jobName={jobName} />
             <HistorySection jobName={jobName} />
             <BreakdownSection jobName={jobName} />
             <SpendSection jobName={jobName} />

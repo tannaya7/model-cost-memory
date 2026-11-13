@@ -136,6 +136,7 @@ which is why a DOWNGRADE now needs that comparison.
 | A database left on a default password | `docker-compose.yml` refuses to start without `POSTGRES_PASSWORD`; the database port is bound to localhost |
 | A dependency changing or turning vulnerable between builds | every Python version is pinned in `requirements-lock.txt` (installed by CI and the image), npm in `package-lock.json`; CI runs `pip-audit` and `npm audit`, and Dependabot proposes updates weekly |
 | A stopped scheduler or failing job going unnoticed | every scheduled job leaves a heartbeat (`heartbeat.py`); `GET /healthz/scheduler` answers 503 when one is overdue, for an uptime monitor, and `OPERATOR_WEBHOOK_URL` hears about each failure |
+| A news feed sending hostile XML, huge bodies or script links | feeds are a fixed list in `news/feeds.py`, never user input; parsed with `defusedxml` (no entity expansion), bodies over 3 MB refused, summaries reduced to plain text, only http(s) links kept; refreshes at most once every 10 minutes |
 | Losing the server and its backups together | `deploy/backup.sh` copies each nightly dump off the machine (`BACKUP_REMOTE`, an rclone crypt remote) and pings `BACKUP_PING_URL`, so a backup that stops is noticed |
 
 The limits live in the one API process's memory; behind several API processes each would count on its own.
@@ -143,7 +144,7 @@ The limits live in the one API process's memory; behind several API processes ea
 ## Data model
 
 The authoritative schema is [`db/schema.sql`](../db/schema.sql): `users`, `projects`, `provider_keys`,
-`jobs`, `retests`, `runs`, `recommendations`, `outbox`, `model_catalog`, `model_prices`, `alerts`, `flow_events`, `usage_limits`, `recommendation_summaries`, `scheduler_heartbeats`.
+`jobs`, `retests`, `runs`, `recommendations`, `outbox`, `model_catalog`, `model_prices`, `alerts`, `flow_events`, `usage_limits`, `recommendation_summaries`, `scheduler_heartbeats`, `news_items`.
 
 - `recommendations.consolidated_from` links a conclusion to every run behind it.
 - `recommendations.superseded_by_id` links it to the conclusion that replaced it, with a date and
@@ -185,6 +186,8 @@ The authoritative schema is [`db/schema.sql`](../db/schema.sql): `users`, `proje
 - `runs.content_removed_at` marks a run whose prompt, output, tool calls, answer key and embedding were cleared
   under `projects.content_retention_days`; `runs.prompt` is then null, and re-tests and similar-run search skip it.
 - `scheduler_heartbeats` holds when each scheduled job last succeeded or failed, read by `/healthz/scheduler`.
+- `news_items` holds AI headlines from a fixed list of public feeds (plain-text summaries, http(s) links only),
+  shared by every project and kept 30 days; whether a story names a project's models is worked out when listing.
 - `flow_events` is the live data-flow view's trail (`sdk → api → check → index → consolidate`), written in the same
   transaction as each step and deleted after a day.
 - The schema changes only through Alembic migrations (`migrations/versions/`). `db/schema.sql` is the reference
@@ -230,6 +233,8 @@ The machine-readable contract is [`contract/openapi.json`](../contract/openapi.j
 | `GET` / `POST` | `/v1/projects` | The user's own projects; create one (its key is returned once) | W11 |
 | `GET` / `PATCH` | `/v1/projects/{id}` | Name, alert webhook, monthly re-test cap, re-test switch, days run content is kept | W11, W12 |
 | `DELETE` | `/v1/projects/{id}?confirm={id}` | Delete the project and everything recorded under it | W12 |
+| `GET` | `/v1/news` | Latest AI news from public feeds, with stories naming this project's models marked; `?mine=`, `?source=`, `?model=` (an alert's model), `?job=` (a job's models), `?since=`/`?until=` | W12 |
+| `POST` | `/v1/news/refresh` | Fetch the feeds now, at most once every 10 minutes across everyone | W12 |
 | `POST` | `/v1/projects/{id}/key` | A new project key, shown once; the old one stops working | W11 |
 | `GET` | `/v1/jobs/{job}/insights` | Cost per success per model; pass rate by input size and prompt version | W11 |
 | `GET` | `/v1/flow` | The live data-flow trail, polled | W12 |
@@ -248,6 +253,7 @@ src/agent_memory/
 ├── privacy.py         what is kept about a run: tool names and ids only, unless a project opts in
 ├── retention.py       clearing old run content after each project's retention; deleting a project
 ├── heartbeat.py       scheduled-job heartbeats, the overdue check and the operator's failure message
+├── news/              AI news: the feed list and safe RSS/Atom parsing, hourly refresh, "affects your models"
 ├── api.py             FastAPI routes (data); auth/routes.py adds sign-in and projects
 ├── ingest.py          write path: jobs, runs, outcomes, late labels (run + outbox row in one transaction)
 ├── projects.py        create a project and its key
@@ -256,7 +262,7 @@ src/agent_memory/
 ├── embeddings.py      MiniLM and hashing embedders behind an LRU cache
 ├── corpus.py          invoice-extraction corpus with exact known answers
 ├── recorder.py        RunRecorder SDK
-├── scheduler.py       maintenance jobs: janitor, decay, consolidation, regression sweep, re-tests, alerts, catalog, retention
+├── scheduler.py       maintenance jobs: janitor, decay, consolidation, regression sweep, re-tests, alerts, catalog, retention, news
 ├── checks/            OutcomeChecker interface; answer key, schema, late label (test command and sandbox: later)
 ├── storage/           vector_store (pgvector); lineage (recursive SQL over superseded_by_id)
 ├── pipeline/          sync_worker, janitor, scoring, decay, consolidation, regression, flow events
@@ -268,7 +274,7 @@ src/agent_memory/
 ├── insights/          spend and pass-rate breakdowns
 ├── alerts/            alert records, signed webhook delivery with backoff
 └── prompts/           the one prompt file the system owns
-migrations/            Alembic: the only way the schema changes (0001-0015)
+migrations/            Alembic: the only way the schema changes (0001-0016)
 contract/              OpenAPI file and sample responses the web app is built against
 corpus/                the generated invoice corpus
 deploy/                Caddy, backup, restore and deploy files for the server

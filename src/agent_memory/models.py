@@ -389,3 +389,19 @@ class SchedulerHeartbeat(Base):
     last_ok_at: Mapped[datetime | None] = mapped_column(Timestamp)
     last_error: Mapped[str | None] = mapped_column(Text)
     last_error_at: Mapped[datetime | None] = mapped_column(Timestamp)
+
+
+class NewsItem(Base):
+    """One headline from a public AI news feed (news/feeds.py; 0016). Shared by every project."""
+
+    __tablename__ = "news_items"
+    __table_args__ = (Index("idx_news_published", text("published_at DESC")),)
+
+    item_id: Mapped[str] = mapped_column(Text, primary_key=True)  # hash of the link
+    source: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(Text)  # lab, press or community
+    title: Mapped[str] = mapped_column(Text)
+    link: Mapped[str] = mapped_column(Text)
+    summary: Mapped[str] = mapped_column(Text, server_default=text("''"))  # plain text, never HTML
+    published_at: Mapped[datetime] = mapped_column(Timestamp)
+    fetched_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)

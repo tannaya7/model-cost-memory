@@ -62,6 +62,8 @@ cuda-pathfinder==1.8.6 ; python_full_version < '3.15' and sys_platform == 'linux
     # via cuda-bindings
 cuda-toolkit==13.2.2 ; sys_platform == 'linux'
     # via torch
+defusedxml==0.7.1
+    # via model-cost-memory (pyproject.toml)
 docker==7.2.0
     # via model-cost-memory (pyproject.toml)
 fastapi==0.162.5

@@ -44,6 +44,10 @@ from .schemas import (
     FlowEventOut,
     ForecastOut,
     Health,
+    NewsItemOut,
+    NewsOut,
+    NewsRefreshOut,
+    NewsSourceOut,
     SchedulerHealth,
     HistoryEntryOut,
     HistoryOut,
@@ -79,6 +83,8 @@ from .auth import routes as auth_routes
 from .auth.access import current_project
 from .config import check_startup, get_settings
 from .heartbeat import overdue
+from .news import service as news_service
+from .news.feeds import FEEDS as NEWS_FEEDS
 from .ratelimit import DAILY_RUNS, STREAMS, RateLimitMiddleware
 from .security import SecretKeyMissing, session_secret
 from .pipeline import flow
@@ -791,6 +797,57 @@ async def _own_limit(session: AsyncSession, project: Project, limit_id: uuid.UUI
     if limit is None or limit.project_id != project.project_id:
         raise HTTPException(404, "No such limit in this project")
     return limit
+
+
+def _news_times(updated_at):
+    return updated_at, (updated_at + news_service.MIN_REFRESH_GAP) if updated_at else None
+
+
+@app.get("/v1/news", response_model=NewsOut, tags=["news"])
+async def get_news(
+    source: str | None = Query(default=None, max_length=60, description="Only this source"),
+    mine: bool = Query(default=False, description="Only stories naming a model this project uses"),
+    model: str | None = Query(default=None, max_length=200,
+                              description="Only stories naming this model (e.g. an alert's model)"),
+    job: str | None = Query(default=None, max_length=200, description="Only stories naming a model this job uses"),
+    since: datetime | None = Query(default=None, description="Only stories published at or after this time"),
+    until: datetime | None = Query(default=None, description="Only stories published at or before this time"),
+    limit: int = Query(default=60, ge=1, le=200),
+    project: Project = Depends(current_project), session: AsyncSession = Depends(get_session),
+) -> NewsOut:
+    """The latest AI news from public feeds (refreshed hourly), newest first. Stories that name a watched
+    model carry it in `affects`: the project's models from the last 90 days, one job's with `job`, or one
+    `model`. With `job` or `model` only those stories are returned."""
+    job_id = (await _job(session, project, job)).job_id if job else None
+    listed, models = await news_service.list_news(
+        session, project.project_id, source=source, mine=mine, model=model, job_id=job_id, since=since,
+        until=until, limit=limit)
+    updated_at, next_at = _news_times(await news_service.last_refreshed(session))
+    return NewsOut(
+        items=[NewsItemOut(item_id=x.item.item_id, source=x.item.source, kind=x.item.kind, title=x.item.title,
+                           link=x.item.link, summary=x.item.summary, published_at=x.item.published_at,
+                           affects=x.affects) for x in listed],
+        sources=[NewsSourceOut(source=f.source, kind=f.kind) for f in NEWS_FEEDS],
+        your_models=models, updated_at=updated_at, next_refresh_at=next_at,
+    )
+
+
+@app.post("/v1/news/refresh", response_model=NewsRefreshOut, tags=["news"])
+async def refresh_news(
+    project: Project = Depends(current_project), session: AsyncSession = Depends(get_session),
+) -> NewsRefreshOut:
+    """Fetch the feeds now, unless they were fetched in the last 10 minutes (shared by everyone), in
+    which case nothing is fetched and `refreshed` is false."""
+    last = await news_service.last_refreshed(session)
+    if last is not None and datetime.now(UTC) - last < news_service.MIN_REFRESH_GAP:
+        updated_at, next_at = _news_times(last)
+        return NewsRefreshOut(refreshed=False, added=0, failed_sources=[], updated_at=updated_at,
+                              next_refresh_at=next_at)
+    await session.commit()  # end this request's transaction before the fetch, which takes seconds
+    result = await news_service.refresh(async_sessionmaker(session.bind, expire_on_commit=False))
+    updated_at, next_at = _news_times(await news_service.last_refreshed(session))
+    return NewsRefreshOut(refreshed=result.refreshed, added=result.added, failed_sources=result.failed,
+                          updated_at=updated_at, next_refresh_at=next_at)
 
 
 @app.get("/v1/limits", response_model=list[UsageLimitOut], tags=["limits"])

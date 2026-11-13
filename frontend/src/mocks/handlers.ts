@@ -17,6 +17,7 @@ import type {
   RetestLimits,
   User,
   Project,
+  NewsItem,
 } from "../shared/api/types";
 import initialJobs from "./jobs.sample.json";
 import sampleRunsData from "./runs.sample.json";
@@ -696,6 +697,74 @@ export const handlers = [
     }
 
     return HttpResponse.json({ detail: "Job not found" }, { status: 404 });
+  }),
+
+  // GET /v1/news: a few stories, one naming a model the demo project runs
+  http.get("/v1/news", async ({ request }) => {
+    await delay(300);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+    const url = new URL(request.url);
+    const source = url.searchParams.get("source");
+    const mine = url.searchParams.get("mine") === "true";
+    const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+    const all: NewsItem[] = [
+      {
+        item_id: "n1", source: "Acme Labs", kind: "lab", published_at: hoursAgo(2),
+        title: "acme-mini gets a new version and a lower price",
+        link: "https://example.com/acme-mini", affects: ["acme-mini"],
+        summary: "The 2026-11 snapshot cuts input prices by a third and changes default output length.",
+      },
+      {
+        item_id: "n2", source: "Simon Willison", kind: "community", published_at: hoursAgo(5),
+        title: "Notes on structured output across five providers",
+        link: "https://example.com/structured", affects: [],
+        summary: "Which models keep to a JSON schema under load, and which drift after a few thousand calls.",
+      },
+      {
+        item_id: "n3", source: "The Verge", kind: "press", published_at: hoursAgo(26),
+        title: "A new open-weight model tops the coding benchmarks",
+        link: "https://example.com/open-weights", affects: [],
+        summary: "Released under a permissive licence, with a small version that runs on a laptop.",
+      },
+    ];
+    const model = url.searchParams.get("model");
+    const job = url.searchParams.get("job");
+    const since = url.searchParams.get("since");
+    const until = url.searchParams.get("until");
+    const about = (i: NewsItem) => (model ? i.title.includes(model) : i.affects.length > 0);
+    const items = all.filter(
+      (i) =>
+        (!source || i.source === source) &&
+        (!(mine || model || job) || about(i)) &&
+        (!since || i.published_at >= since) &&
+        (!until || i.published_at <= until),
+    );
+    return HttpResponse.json({
+      items,
+      sources: [
+        { source: "Acme Labs", kind: "lab" },
+        { source: "Simon Willison", kind: "community" },
+        { source: "The Verge", kind: "press" },
+      ],
+      your_models: ["acme-large", "acme-mini"],
+      updated_at: hoursAgo(0.3),
+      next_refresh_at: hoursAgo(0.3 - 10 / 60),
+    });
+  }),
+
+  // POST /v1/news/refresh
+  http.post("/v1/news/refresh", async ({ request }) => {
+    await delay(900);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+    const now = new Date();
+    return HttpResponse.json({
+      refreshed: true, added: 2, failed_sources: [], updated_at: now.toISOString(),
+      next_refresh_at: new Date(now.getTime() + 10 * 60_000).toISOString(),
+    });
   }),
 
   // GET /v1/limits: one plan limit about to run out, with a proven cheaper option

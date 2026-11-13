@@ -6,6 +6,7 @@ import { useJobHistory } from "../../hooks/useJobHistory";
 import { useJobRegressions } from "../../hooks/useJobRegressions";
 import { range, ruleSentence } from "../../evidence";
 import { JobHistoryTimeline } from "../JobHistoryTimeline";
+import { RelatedNews } from "../../../news/components/RelatedNews";
 import { DataTable, Hint, Section, Tag, minute, pct, usd } from "./Section";
 
 const CATALOG_TONE = { ACTIVE: "ok", DEPRECATED: "warn", RETIRED: "bad", UNKNOWN: "neutral" } as const;
@@ -241,6 +242,19 @@ export function RunsSection({ jobName }: { jobName: string }) {
   return (
     <Section id="runs" title="Latest recorded runs (episodic memory)" endpoint={`GET /v1/runs?job=${jobName}`} raw={runs}>
       <DataTable head={head} rows={rows} empty="No runs yet." />
+    </Section>
+  );
+}
+
+export function NewsSection({ jobName }: { jobName: string }) {
+  return (
+    <Section id="news" title="What changed outside? In the news" endpoint={`GET /v1/news?job=${jobName}`}>
+      <RelatedNews
+        title="Stories naming this job's models, last 30 days"
+        filters={{ job: jobName }}
+        limit={5}
+        emptyText="No story in the last 30 days names a model this job runs."
+      />
     </Section>
   );
 }

@@ -1165,6 +1165,208 @@
         "title": "ModelVersionSeen",
         "type": "object"
       },
+      "NewsItemOut": {
+        "properties": {
+          "affects": {
+            "description": "This project's models the story names; empty if none",
+            "items": {
+              "type": "string"
+            },
+            "title": "Affects",
+            "type": "array"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "kind": {
+            "description": "lab: a model maker's own announcement; press: AI reporting; community: blogs and forums",
+            "enum": [
+              "lab",
+              "press",
+              "community"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "link": {
+            "description": "The story itself (http or https)",
+            "title": "Link",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "source": {
+            "description": "Who published it, e.g. 'OpenAI' or 'Hacker News'",
+            "title": "Source",
+            "type": "string"
+          },
+          "summary": {
+            "description": "Plain text, at most about 400 characters; never HTML",
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "source",
+          "kind",
+          "title",
+          "link",
+          "summary",
+          "published_at",
+          "affects"
+        ],
+        "title": "NewsItemOut",
+        "type": "object"
+      },
+      "NewsOut": {
+        "description": "The latest AI news, newest first, with the stories that name this project's models marked.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NewsItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_refresh_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The earliest a refresh fetches again",
+            "title": "Next Refresh At"
+          },
+          "sources": {
+            "description": "Every feed the news comes from",
+            "items": {
+              "$ref": "#/components/schemas/NewsSourceOut"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the feeds were last fetched; null if never",
+            "title": "Updated At"
+          },
+          "your_models": {
+            "description": "The models the stories were matched against: the project's from the last 90 days, the job's with `job`, or the one `model` asked about",
+            "items": {
+              "type": "string"
+            },
+            "title": "Your Models",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "sources",
+          "your_models",
+          "updated_at",
+          "next_refresh_at"
+        ],
+        "title": "NewsOut",
+        "type": "object"
+      },
+      "NewsRefreshOut": {
+        "properties": {
+          "added": {
+            "description": "New stories stored by this refresh",
+            "title": "Added",
+            "type": "integer"
+          },
+          "failed_sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed Sources",
+            "type": "array"
+          },
+          "next_refresh_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Refresh At"
+          },
+          "refreshed": {
+            "description": "False when the last fetch was too recent, or every feed failed",
+            "title": "Refreshed",
+            "type": "boolean"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "refreshed",
+          "added",
+          "failed_sources",
+          "updated_at",
+          "next_refresh_at"
+        ],
+        "title": "NewsRefreshOut",
+        "type": "object"
+      },
+      "NewsSourceOut": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "lab",
+              "press",
+              "community"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "kind"
+        ],
+        "title": "NewsSourceOut",
+        "type": "object"
+      },
       "ProjectCreate": {
         "properties": {
           "name": {
@@ -5090,6 +5292,289 @@
         "summary": "List Models",
         "tags": [
           "models"
+        ]
+      }
+    },
+    "/v1/news": {
+      "get": {
+        "description": "The latest AI news from public feeds (refreshed hourly), newest first. Stories that name a watched\nmodel carry it in `affects`: the project's models from the last 90 days, one job's with `job`, or one\n`model`. With `job` or `model` only those stories are returned.",
+        "operationId": "get_news_v1_news_get",
+        "parameters": [
+          {
+            "description": "Only this source",
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 60,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this source",
+              "title": "Source"
+            }
+          },
+          {
+            "description": "Only stories naming a model this project uses",
+            "in": "query",
+            "name": "mine",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only stories naming a model this project uses",
+              "title": "Mine",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Only stories naming this model (e.g. an alert's model)",
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only stories naming this model (e.g. an alert's model)",
+              "title": "Model"
+            }
+          },
+          {
+            "description": "Only stories naming a model this job uses",
+            "in": "query",
+            "name": "job",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only stories naming a model this job uses",
+              "title": "Job"
+            }
+          },
+          {
+            "description": "Only stories published at or after this time",
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only stories published at or after this time",
+              "title": "Since"
+            }
+          },
+          {
+            "description": "Only stories published at or before this time",
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only stories published at or before this time",
+              "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 60,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get News",
+        "tags": [
+          "news"
+        ]
+      }
+    },
+    "/v1/news/refresh": {
+      "post": {
+        "description": "Fetch the feeds now, unless they were fetched in the last 10 minutes (shared by everyone), in\nwhich case nothing is fetched and `refreshed` is false.",
+        "operationId": "refresh_news_v1_news_refresh_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsRefreshOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh News",
+        "tags": [
+          "news"
         ]
       }
     },

@@ -502,6 +502,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/news": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get News
+         * @description The latest AI news from public feeds (refreshed hourly), newest first. Stories that name a watched
+         *     model carry it in `affects`: the project's models from the last 90 days, one job's with `job`, or one
+         *     `model`. With `job` or `model` only those stories are returned.
+         */
+        get: operations["get_news_v1_news_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/news/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh News
+         * @description Fetch the feeds now, unless they were fetched in the last 10 minutes (shared by everyone), in
+         *     which case nothing is fetched and `refreshed` is false.
+         */
+        post: operations["refresh_news_v1_news_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects": {
         parameters: {
             query?: never;
@@ -1233,6 +1276,101 @@ export interface components {
             model_version: string;
             /** Runs */
             runs: number;
+        };
+        /** NewsItemOut */
+        NewsItemOut: {
+            /**
+             * Affects
+             * @description This project's models the story names; empty if none
+             */
+            affects: string[];
+            /** Item Id */
+            item_id: string;
+            /**
+             * Kind
+             * @description lab: a model maker's own announcement; press: AI reporting; community: blogs and forums
+             * @enum {string}
+             */
+            kind: "lab" | "press" | "community";
+            /**
+             * Link
+             * @description The story itself (http or https)
+             */
+            link: string;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /**
+             * Source
+             * @description Who published it, e.g. 'OpenAI' or 'Hacker News'
+             */
+            source: string;
+            /**
+             * Summary
+             * @description Plain text, at most about 400 characters; never HTML
+             */
+            summary: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * NewsOut
+         * @description The latest AI news, newest first, with the stories that name this project's models marked.
+         */
+        NewsOut: {
+            /** Items */
+            items: components["schemas"]["NewsItemOut"][];
+            /**
+             * Next Refresh At
+             * @description The earliest a refresh fetches again
+             */
+            next_refresh_at: string | null;
+            /**
+             * Sources
+             * @description Every feed the news comes from
+             */
+            sources: components["schemas"]["NewsSourceOut"][];
+            /**
+             * Updated At
+             * @description When the feeds were last fetched; null if never
+             */
+            updated_at: string | null;
+            /**
+             * Your Models
+             * @description The models the stories were matched against: the project's from the last 90 days, the job's with `job`, or the one `model` asked about
+             */
+            your_models: string[];
+        };
+        /** NewsRefreshOut */
+        NewsRefreshOut: {
+            /**
+             * Added
+             * @description New stories stored by this refresh
+             */
+            added: number;
+            /** Failed Sources */
+            failed_sources: string[];
+            /** Next Refresh At */
+            next_refresh_at: string | null;
+            /**
+             * Refreshed
+             * @description False when the last fetch was too recent, or every feed failed
+             */
+            refreshed: boolean;
+            /** Updated At */
+            updated_at: string | null;
+        };
+        /** NewsSourceOut */
+        NewsSourceOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "lab" | "press" | "community";
+            /** Source */
+            source: string;
         };
         /** ProjectCreate */
         ProjectCreate: {
@@ -2887,6 +3025,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModelPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_news_v1_news_get: {
+        parameters: {
+            query?: {
+                /** @description Only this source */
+                source?: string | null;
+                /** @description Only stories naming a model this project uses */
+                mine?: boolean;
+                /** @description Only stories naming this model (e.g. an alert's model) */
+                model?: string | null;
+                /** @description Only stories naming a model this job uses */
+                job?: string | null;
+                /** @description Only stories published at or after this time */
+                since?: string | null;
+                /** @description Only stories published at or before this time */
+                until?: string | null;
+                limit?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_news_v1_news_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsRefreshOut"];
                 };
             };
             /** @description Validation Error */
