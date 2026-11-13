@@ -1,14 +1,21 @@
 @import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
 @import "./shared/theme/theme.css";
 
 /* Expose the theme variables to Tailwind utilities (bg-surface, text-dim, ...). */
 @theme inline {
   --color-bg: var(--color-bg);
   --color-surface: var(--color-surface);
+  --color-surface-2: var(--color-surface-2);
+  --color-surface-3: var(--color-surface-3);
   --color-ink: var(--color-ink);
   --color-dim: var(--color-dim);
+  --color-muted: var(--color-muted);
   --color-rule: var(--color-rule);
+  --color-rule-strong: var(--color-rule-strong);
   --color-accent: var(--color-accent);
+  --color-accent-2: var(--color-accent-2);
   --color-accent-soft: var(--color-accent-soft);
   --color-on-accent: var(--color-on-accent);
   --color-overlay: var(--color-overlay);
@@ -24,9 +31,59 @@
   --radius-card: var(--radius);
 }
 
+html {
+  background: var(--color-bg);
+}
+
 body {
   margin: 0;
-  background: var(--color-bg);
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(139, 125, 255, 0.10), transparent 60%),
+    radial-gradient(900px 500px at -10% 10%, rgba(63, 208, 242, 0.06), transparent 60%),
+    var(--color-bg);
+  background-attachment: fixed;
   color: var(--color-ink);
   font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(139, 125, 255, 0.35);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* The brand gradient, for the few words and figures that carry the page's point. */
+.text-gradient {
+  background: linear-gradient(100deg, #b4aaff 0%, var(--color-accent) 35%, var(--color-accent-2) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* A panel: one raised surface with a hairline and a faint top light. */
+.panel {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 40%), var(--color-surface);
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

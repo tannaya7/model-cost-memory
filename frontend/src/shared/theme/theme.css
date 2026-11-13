@@ -1,54 +1,54 @@
-/* The single place for every colour, font and spacing value.
-   Change the look of the whole app by editing only this file. */
+/* The single place for every colour, font and radius. Dark by design: an instrument panel for model
+   cost and quality. Older components use the first block of names (bg, surface, ink, dim, rule, accent,
+   ok/warn/bad), so they follow this look too. */
 :root {
-  --color-bg: #f6f7fb;
-  --color-surface: #ffffff;
-  --color-ink: #11162b;
-  --color-dim: #5b6488;
-  --color-rule: #dfe3f0;
-  --color-accent: #3552c9;
-  --color-accent-soft: #e8ecfc;
-  --color-on-accent: #ffffff;
-  --color-overlay: #11162b;
-  --color-ok: #14733f;
-  --color-ok-soft: #e1f5ea;
-  --color-warn: #9a4a00;
-  --color-warn-soft: #fff1e2;
-  --color-bad: #b3261e;
-  --color-bad-soft: #fdeceb;
-  --color-skeleton: #e4e7f1;
+  color-scheme: dark;
 
-  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  /* planes, from the page to the most raised surface */
+  --color-bg: #06070d;
+  --color-surface: #0e1122;
+  --color-surface-2: #141832;
+  --color-surface-3: #1b2042;
+  --color-rule: rgba(255, 255, 255, 0.075);
+  --color-rule-strong: rgba(255, 255, 255, 0.14);
 
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
+  /* ink */
+  --color-ink: #eef0fa;
+  --color-dim: #a3a9c7;
+  --color-muted: #6c7294;
 
-  --radius: 0.75rem;
-  --sidebar-width: 15rem;
-}
+  /* accent: one violet, with a cyan partner used only in the brand gradient */
+  --color-accent: #8b7dff;
+  --color-accent-2: #3fd0f2;
+  --color-accent-soft: rgba(139, 125, 255, 0.14);
+  --color-on-accent: #0b0b18;
+  --color-overlay: #000000;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg: #0c1020;
-    --color-surface: #141a33;
-    --color-ink: #edf0fb;
-    --color-dim: #9ba4c9;
-    --color-rule: #27315a;
-    --color-accent: #8ea4ff;
-    --color-accent-soft: #1c2550;
-    --color-on-accent: #0c1020;
-    --color-overlay: #000000;
-    --color-ok: #6fdc9c;
-    --color-ok-soft: #12301f;
-    --color-warn: #ffc47a;
-    --color-warn-soft: #2a1d0c;
-    --color-bad: #ff9b94;
-    --color-bad-soft: #3a1513;
-    --color-skeleton: #232b4d;
-  }
+  /* status: fixed meanings, always shown with an icon and a word */
+  --color-ok: #3ddc84;
+  --color-ok-soft: rgba(12, 163, 12, 0.16);
+  --color-warn: #fab219;
+  --color-warn-soft: rgba(250, 178, 25, 0.14);
+  --color-bad: #ff6b6b;
+  --color-bad-soft: rgba(208, 59, 59, 0.18);
+  --color-skeleton: #1a1f3d;
+
+  /* chart series, validated on --color-surface (dataviz validator: all checks pass, dark) */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --chart-grid: #1d2238;
+  --chart-axis: #2c3354;
+
+  --font-sans: "Geist Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, Consolas, monospace;
+
+  --radius: 1rem;
+  --radius-sm: 0.625rem;
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 24px 48px -24px rgba(0, 0, 0, 0.6);
 }

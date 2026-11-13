@@ -10,7 +10,7 @@ each with its run count and 95% interval, so a band with five runs is not read a
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,6 +53,39 @@ async def spend_by_job(
         for name, runs, spend, unpriced in rows
     ]
     return sorted(spends, key=lambda s: (-s.spend_usd, s.job))
+
+
+@dataclass
+class DayPoint:
+    day: date
+    job: str
+    model: str
+    runs: int  # production runs that day
+    passed: int
+    failed: int  # UNKNOWN runs are in runs but in neither passed nor failed
+    spend_usd: float  # priced runs only
+
+
+async def daily(session: AsyncSession, project_id: str, *, days: int = 60, job_id=None,
+                now: datetime | None = None) -> list[DayPoint]:
+    """Production runs, outcomes and spend per UTC day, job and model, oldest first: what the web app
+    draws as quality and spend over time."""
+    since = (now or datetime.now(UTC)) - timedelta(days=days)
+    day = func.date_trunc("day", func.timezone("UTC", Run.created_at)).label("day")
+    query = (
+        select(day, Job.name, Run.model, func.count(Run.run_id),
+               func.count(Run.run_id).filter(Run.outcome == "PASS"),
+               func.count(Run.run_id).filter(Run.outcome == "FAIL"),
+               func.coalesce(func.sum(Run.cost_usd), 0))
+        .join(Job, Job.job_id == Run.job_id)
+        .where(Run.project_id == project_id, Run.run_kind == "PRODUCTION", Run.created_at >= since)
+        .group_by(day, Job.name, Run.model)
+        .order_by(day, Job.name, Run.model)
+    )
+    if job_id is not None:
+        query = query.where(Run.job_id == job_id)
+    return [DayPoint(day=d.date(), job=j, model=m, runs=n, passed=p, failed=f, spend_usd=float(s))
+            for d, j, m, n, p, f, s in (await session.execute(query)).all()]
 
 
 @dataclass

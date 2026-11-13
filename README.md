@@ -28,8 +28,12 @@ recommended and why it changed.
 - **Usage limits**: a plan's 5-hour or weekly limit, a one-model limit, an API budget or daily quota. From the
   recorded runs it forecasts whether a limit runs out before it resets and, if so, names per job the cheaper
   option proven to still do it, at a model and reasoning effort (`sonnet-5@low` instead of `opus-5-5@medium`).
-- A React web app: Google sign-in, projects and keys, recommendations, evidence, history, alerts, re-tests,
-  spend, breakdowns and a live view of runs crossing the pipeline.
+- A web app built around three questions: which model should each job use, did anything break, and what does
+  it cost. Four places instead of a long menu: an **Overview** that leads with the monthly saving, spend over
+  time and what needs attention; **Jobs**, where each job's verdict is stated in words and proven on a
+  cost-versus-quality map, with quality and spend over time, evidence, runs, history and re-tests; **Models**,
+  with prices and retirements; and **Activity**, with alerts, the live pipeline and AI news. Every chart has a
+  table view, and Ctrl/⌘ K jumps anywhere.
 - **News about your models**: headlines from the model makers, the press and the community, refreshed hourly.
   Each alert shows what was said about its model around when it happened (a silent drop often has an
   announcement behind it), each job page and the overview show the stories naming the models in use, and a

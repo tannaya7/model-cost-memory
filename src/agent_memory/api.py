@@ -29,6 +29,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from . import __version__, ingest
 from .db import dispose_engine, get_session
+from .insights.service import daily as insights_daily
 from .insights.service import job_insights, spend_by_job
 from .logging_config import configure_logging, set_context
 from .limits import forecast as limit_forecast
@@ -39,6 +40,7 @@ from .recommend.summary import summarize
 from .retest import keys as provider_keys
 from .retest.runner import RetestRefused, enqueue, spent_this_month, start_on_first_key
 from .schemas import (
+    DayPointOut,
     AlertOut,
     BreakdownOut,
     FlowEventOut,
@@ -493,6 +495,19 @@ async def get_spend(
 ) -> list[SpendOut]:
     """Production spend per job over the last `days` days, most expensive first."""
     return [SpendOut(**vars(s)) for s in await spend_by_job(session, project.project_id, days=days)]
+
+
+@app.get("/v1/insights/daily", response_model=list[DayPointOut], tags=["insights"])
+async def get_daily(
+    days: int = Query(default=60, ge=1, le=365, description="How many days back"),
+    job: str | None = Query(default=None, max_length=200, description="Only this job"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> list[DayPointOut]:
+    """Production runs, outcomes and spend per UTC day, job and model, oldest first: quality and spend
+    over time. Days without runs are absent."""
+    job_id = (await _job(session, project, job)).job_id if job else None
+    return [DayPointOut(**vars(p)) for p in await insights_daily(session, project.project_id, days=days, job_id=job_id)]
 
 
 def _alert_out(alert: Alert, job_name: str) -> AlertOut:

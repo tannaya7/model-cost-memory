@@ -213,6 +213,7 @@ The machine-readable contract is [`contract/openapi.json`](../contract/openapi.j
 | `GET` | `/v1/models` | Model catalog: price, status and shutdown dates | W6 |
 | `GET` | `/v1/jobs/{job}/recommendation` | Cheapest model that passes, with evidence, forecast and optional summary | W7, W8 |
 | `GET` | `/v1/insights/spend` | Spend by job | W7 |
+| `GET` | `/v1/insights/daily` | Runs, outcomes and spend per day, job and model (`?days=`, `?job=`): the web app's charts over time | W12 |
 | `GET` | `/v1/jobs/{job}/history` | Every verdict, newest first: what changed, when and why (recursive SQL) | W8 |
 | `GET` | `/v1/jobs/{job}/regressions` | The job's alerts (open by default) | W9 |
 | `GET` | `/v1/alerts` | Every job's alerts in the project | W9 |
@@ -278,7 +279,8 @@ migrations/            Alembic: the only way the schema changes (0001-0016)
 contract/              OpenAPI file and sample responses the web app is built against
 corpus/                the generated invoice corpus
 deploy/                Caddy, backup, restore and deploy files for the server
-frontend/              React web app: feature folders, shared data layer and components
+frontend/              React web app: screens/ (Overview, Jobs, a job's workspace, Models, Activity, Settings), ui/ (design
+                       system, charts), features/ (data layer and forms per feature), app/ (frame and routing)
 reports/               measured results: regression detection, silent drops, the staleness experiment
 scripts/               create_project, sync_catalog, build/run_corpus, simulate, staleness_experiment, seed_demo, ...
 db/schema.sql · tests/ · docker-compose.yml · Dockerfile · pyproject.toml

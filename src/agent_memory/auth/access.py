@@ -33,7 +33,7 @@ READ_METHODS = ("GET", "HEAD", "OPTIONS")
 DEMO_READABLE = frozenset({
     "/v1/jobs", "/v1/jobs/{job}/recommendation", "/v1/jobs/{job}/history", "/v1/jobs/{job}/regressions",
     "/v1/jobs/{job}/insights", "/v1/runs", "/v1/runs/{run_id}", "/v1/insights/spend", "/v1/alerts",
-    "/v1/models", "/v1/flow", "/v1/flow/stream", "/v1/limits", "/v1/news",
+    "/v1/models", "/v1/flow", "/v1/flow/stream", "/v1/limits", "/v1/news", "/v1/insights/daily",
 })
 
 
