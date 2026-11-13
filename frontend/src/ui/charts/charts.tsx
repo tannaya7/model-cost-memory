@@ -68,7 +68,7 @@ export function SpendArea({
           <XAxis dataKey="day" tickFormatter={tickDay} tick={CHART.tickFont} axisLine={{ stroke: CHART.axis }} tickLine={false} minTickGap={28} />
           <YAxis tickFormatter={(v: number) => usd(v, { compact: true })} tick={CHART.tickFont} axisLine={false} tickLine={false} width={56} />
           <Tooltip
-            cursor={{ stroke: "rgba(255,255,255,0.25)", strokeWidth: 1 }}
+            cursor={{ stroke: "var(--chart-cursor)", strokeWidth: 1 }}
             content={({ active, payload, label }) =>
               active && payload?.length ? (
                 <TooltipCard
@@ -145,7 +145,7 @@ export function QualityLines({
             width={48}
           />
           {floor !== undefined && (
-            <ReferenceLine y={floor} stroke="rgba(255,255,255,0.22)" strokeWidth={1} label={{ value: "good-enough line", position: "insideBottomLeft", fill: "#7d83a6", fontSize: 10 }} />
+            <ReferenceLine y={floor} stroke="var(--chart-cursor)" strokeWidth={1} label={{ value: "good-enough line", position: "insideBottomLeft", fill: "var(--chart-tick)", fontSize: 10 }} />
           )}
           {markers.map((m, i) => (
             <ReferenceLine
@@ -154,11 +154,11 @@ export function QualityLines({
               stroke={m.tone === "bad" ? "var(--color-bad)" : "var(--color-accent)"}
               strokeWidth={1.5}
               strokeOpacity={0.8}
-              label={{ value: m.label, position: "top", fill: m.tone === "bad" ? "#ff8f8f" : "#b4aaff", fontSize: 10 }}
+              label={{ value: m.label, position: "top", fill: m.tone === "bad" ? "var(--color-bad)" : "var(--color-accent-ink)", fontSize: 10 }}
             />
           ))}
           <Tooltip
-            cursor={{ stroke: "rgba(255,255,255,0.25)", strokeWidth: 1 }}
+            cursor={{ stroke: "var(--chart-cursor)", strokeWidth: 1 }}
             content={({ active, payload, label }) =>
               active && payload?.length ? (
                 <TooltipCard
@@ -245,7 +245,7 @@ export function CostQualityMap({
   const Dot = (props: { cx?: number; cy?: number; payload?: MapPoint }) => {
     const { cx = 0, cy = 0, payload } = props;
     if (!payload) return null;
-    const color = colors.get(payload.model) ?? "#888";
+    const color = colors.get(payload.model) ?? "var(--series-other)";
     const highlighted = payload.role === "recommended" || payload.role === "both";
     return (
       <g>
@@ -255,11 +255,11 @@ export function CostQualityMap({
           </circle>
         )}
         <circle cx={cx} cy={cy} r={7} fill={color} stroke="var(--color-surface)" strokeWidth={2} />
-        <text x={cx + 13} y={cy - 9} fill="#eef0fa" fontSize={11} fontFamily="var(--font-mono)">
+        <text x={cx + 13} y={cy - 9} fill="var(--color-ink)" fontSize={11} fontFamily="var(--font-mono)">
           {payload.model}
         </text>
         {payload.role !== "other" && (
-          <text x={cx + 13} y={cy + 5} fill={highlighted ? "#b4aaff" : "#a3a9c7"} fontSize={10} fontWeight={600}>
+          <text x={cx + 13} y={cy + 5} fill={highlighted ? "var(--color-accent-ink)" : "var(--color-dim)"} fontSize={10} fontWeight={600}>
             {payload.role === "both" ? "in use · recommended" : payload.role === "recommended" ? "recommended" : "in use now"}
           </text>
         )}
@@ -276,7 +276,7 @@ export function CostQualityMap({
             <ReferenceArea y1={floor} y2={1} x1={xDomain[0]} x2={xDomain[1]} fill="var(--color-ok)" fillOpacity={0.06} stroke="none" />
           )}
           {floor !== null && floor !== undefined && (
-            <ReferenceLine y={floor} stroke="var(--color-ok)" strokeOpacity={0.45} label={{ value: "good enough above this line", position: "insideTopRight", fill: "#6fdc9c", fontSize: 10 }} />
+            <ReferenceLine y={floor} stroke="var(--color-ok)" strokeOpacity={0.45} label={{ value: "good enough above this line", position: "insideTopRight", fill: "var(--color-ok)", fontSize: 10 }} />
           )}
           <XAxis
             type="number"
@@ -288,7 +288,7 @@ export function CostQualityMap({
             tick={CHART.tickFont}
             axisLine={{ stroke: CHART.axis }}
             tickLine={false}
-            label={{ value: "cost per successful run →  (cheaper to the left)", position: "insideBottom", offset: -12, fill: "#7d83a6", fontSize: 11 }}
+            label={{ value: "cost per successful run →  (cheaper to the left)", position: "insideBottom", offset: -12, fill: "var(--chart-tick)", fontSize: 11 }}
           />
           <YAxis
             type="number"
@@ -321,7 +321,7 @@ export function CostQualityMap({
             }}
           />
           <Scatter data={points} shape={<Dot />} isAnimationActive={animate} animationDuration={700}>
-            <ErrorBar dataKey="err" direction="y" width={6} strokeWidth={1.5} stroke="rgba(238,240,250,0.45)" />
+            <ErrorBar dataKey="err" direction="y" width={6} strokeWidth={1.5} stroke="var(--color-muted)" />
           </Scatter>
         </ScatterChart>
       </ResponsiveContainer>
@@ -376,7 +376,7 @@ export function GroupBars({
           <XAxis dataKey="group" tick={{ ...CHART.tickFont, fontFamily: "var(--font-sans)" }} axisLine={{ stroke: CHART.axis }} tickLine={false} />
           <YAxis domain={[lower, 1]} tickFormatter={(v: number) => pct(v, 0)} tick={CHART.tickFont} axisLine={false} tickLine={false} width={48} />
           <Tooltip
-            cursor={{ fill: "rgba(255,255,255,0.04)" }}
+            cursor={{ fill: "var(--chart-hover)" }}
             content={({ active, payload, label }) =>
               active && payload?.length ? (
                 <TooltipCard
@@ -419,7 +419,7 @@ export function Ring({ share, size = 64, tone }: { share: number; size?: number;
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
         style={{ transition: "stroke-dashoffset 900ms cubic-bezier(.22,1,.36,1)" }}
       />
-      <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" fill="#eef0fa" fontSize={size / 4.6} fontWeight={700}>
+      <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" fill="var(--color-ink)" fontSize={size / 4.6} fontWeight={700}>
         {Math.round(clamped * 100)}%
       </text>
     </svg>

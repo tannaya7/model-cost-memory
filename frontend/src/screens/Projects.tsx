@@ -10,6 +10,7 @@ import type { Job, Project } from "../shared/api/types";
 import { count, shortDate } from "../ui/format";
 import { IconArrowRight, IconBell, IconLogo, IconPlus, IconShield } from "../ui/icons";
 import { Button, ButtonLink, ErrorState, Pill, Skeleton } from "../ui/primitives";
+import { ThemeToggle } from "../ui/ThemeToggle";
 
 function TopBar() {
   const { data: user } = useMe();
@@ -21,6 +22,7 @@ function TopBar() {
         <Link to="/projects" className="flex items-center gap-2.5"><IconLogo size={28} /><span className="font-semibold tracking-tight">Model &amp; Cost Memory</span></Link>
         <div className="flex items-center gap-3">
           {user && <span className="hidden text-sm text-dim sm:inline">{user.email}</span>}
+          <ThemeToggle />
           <Button
             size="sm"
             variant="ghost"

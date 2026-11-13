@@ -99,7 +99,7 @@ export function RequireUser() {
   const location = useLocation();
   if (me.isPending) return <Waiting />;
   if (me.data) return <Outlet />;
-  if (hasApiKey()) return <Navigate to="/p/key" replace />;
+  // Projects need a signed-in person; a saved project key is only used where someone chose /key.
   return <Navigate to={`/signin?next=${encodeURIComponent(location.pathname)}`} replace />;
 }
 
@@ -107,7 +107,7 @@ export function RequireUser() {
 export function LegacyRedirect({ to }: { to?: string }) {
   const location = useLocation();
   const active = getActiveProject();
-  const base = active ? `/p/${encodeURIComponent(active)}` : hasApiKey() ? "/p/key" : null;
+  const base = active ? `/p/${encodeURIComponent(active)}` : null;
   if (!base) return <Navigate to="/projects" replace />;
   return <Navigate to={`${base}${to ?? location.pathname + location.search + location.hash}`} replace />;
 }

@@ -4,6 +4,7 @@ import { ProjectKeySettings } from "../features/settings/components/ProjectKeySe
 import { hasApiKey } from "../shared/api/apiFetch";
 import { IconArrowRight, IconLogo } from "../ui/icons";
 import { Button, Panel } from "../ui/primitives";
+import { ThemeToggle } from "../ui/ThemeToggle";
 
 export default function UseKey() {
   const navigate = useNavigate();
@@ -12,7 +13,10 @@ export default function UseKey() {
       <header className="border-b border-rule">
         <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-4">
           <Link to="/" className="flex items-center gap-2.5"><IconLogo size={26} /><span className="font-semibold tracking-tight">Model &amp; Cost Memory</span></Link>
-          <Link to="/signin" className="text-sm text-dim hover:text-ink">Sign in instead</Link>
+          <div className="flex items-center gap-4">
+            <Link to="/signin" className="text-sm text-dim hover:text-ink">Sign in instead</Link>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
       <main className="mx-auto flex max-w-2xl flex-col gap-5 px-4 py-12">

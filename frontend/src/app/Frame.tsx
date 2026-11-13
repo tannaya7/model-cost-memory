@@ -21,6 +21,7 @@ import {
   IconSearch,
   IconSettings,
 } from "../ui/icons";
+import { ThemeToggle } from "../ui/ThemeToggle";
 import { cx, Skeleton } from "../ui/primitives";
 
 const NAV = [
@@ -134,7 +135,7 @@ function AccountMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-label="Account and settings"
         aria-expanded={open}
-        className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-[#b4aaff] to-accent-2 text-sm font-bold text-on-accent"
+        className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-[var(--grad-from)] to-accent-2 text-sm font-bold text-white"
       >
         {initials}
       </button>
@@ -366,7 +367,7 @@ export function Frame() {
                       {isActive && (
                         <motion.span
                           layoutId="nav-active"
-                          className="absolute inset-0 rounded-[10px] bg-surface-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                          className="absolute inset-0 rounded-[10px] bg-[var(--tab-active)] shadow-[0_1px_3px_rgba(24,20,70,0.12)] ring-1 ring-rule"
                           transition={{ type: "spring", stiffness: 500, damping: 40 }}
                         />
                       )}
@@ -410,6 +411,7 @@ export function Frame() {
               <Link to={p("/settings")} aria-label="Project settings" className="hidden h-9 w-9 place-items-center rounded-[10px] text-muted hover:bg-surface-2 hover:text-ink sm:grid">
                 <IconSettings size={18} />
               </Link>
+              <ThemeToggle className="mx-1" />
               <AccountMenu />
             </div>
           </div>

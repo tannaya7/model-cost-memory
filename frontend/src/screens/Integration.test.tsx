@@ -86,10 +86,12 @@ describe("an ended session", () => {
     expect(loc.assign).toHaveBeenCalledWith(`/signin?next=${encodeURIComponent("/p/acme/jobs?tab=runs")}`);
   });
 
-  it("asks for the key again when a saved project key stops working", () => {
+  it("forgets a saved project key that stopped working, and asks for it again", () => {
+    localStorage.setItem("mcm_api_key", "mcm_live_revoked");
     const loc = where("/p/key/models");
     onSignedOut(expired, loc);
     expect(loc.assign).toHaveBeenCalledWith("/key");
+    expect(localStorage.getItem("mcm_api_key")).toBeNull();
   });
 
   it("leaves the public pages and other errors alone", () => {

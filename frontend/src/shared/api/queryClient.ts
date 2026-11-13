@@ -1,5 +1,5 @@
 import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
-import { ApiError } from "./apiFetch";
+import { ApiError, setApiKey } from "./apiFetch";
 
 /** A 401 inside the app means the session ended (or a saved key stopped working): send the person to
  * sign in, and back to this page afterwards. Pages that handle signed-out visitors themselves (the
@@ -8,6 +8,7 @@ export function onSignedOut(err: unknown, where: Location = window.location) {
   if (!(err instanceof ApiError) || err.status !== 401) return;
   const path = where.pathname;
   if (path.startsWith("/p/key")) {
+    setApiKey(""); // the saved key no longer works: forget it, so it cannot redirect anyone again
     where.assign("/key");
   } else if ((path.startsWith("/p/") && !path.startsWith("/p/demo")) || path.startsWith("/projects")) {
     where.assign(`/signin?next=${encodeURIComponent(path + where.search)}`);

@@ -6,6 +6,7 @@ import { useCreateProject, useProjects } from "../features/projects/hooks/usePro
 import { ApiError } from "../shared/api/apiFetch";
 import { IconArrowRight, IconCheck, IconLogo } from "../ui/icons";
 import { Button, cx, Panel } from "../ui/primitives";
+import { ThemeToggle } from "../ui/ThemeToggle";
 
 const STEPS = ["Name it", "Save the key", "Record runs"];
 
@@ -90,7 +91,10 @@ with RunRecorder(job="invoice-extract", provider=provider_for(client.base_url)) 
       <header className="border-b border-rule">
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-4">
           <Link to="/projects" className="flex items-center gap-2.5"><IconLogo size={26} /><span className="font-semibold tracking-tight">Model &amp; Cost Memory</span></Link>
-          {!first && <Link to="/projects" className="text-sm text-dim hover:text-ink">Cancel</Link>}
+          <div className="flex items-center gap-4">
+            {!first && <Link to="/projects" className="text-sm text-dim hover:text-ink">Cancel</Link>}
+            <ThemeToggle />
+          </div>
         </div>
       </header>
       <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-10">
