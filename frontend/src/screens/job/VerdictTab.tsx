@@ -102,7 +102,7 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
                 </div>
                 <div className="h-2.5 overflow-hidden rounded-full bg-surface-3">
                   <motion.div
-                    className="h-full rounded-full bg-gradient-to-r from-[#9d91ff] to-accent-2"
+                    className="h-full rounded-full bg-gradient-to-r from-accent to-accent-2"
                     initial={{ width: 0 }}
                     animate={{ width: `${Math.round(rec.progress * 100)}%` }}
                     transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}

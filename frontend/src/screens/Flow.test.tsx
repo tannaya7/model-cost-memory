@@ -49,10 +49,19 @@ describe("landing page", () => {
     expect(screen.getByRole("heading", { name: /From every AI call to a decision/ })).toBeInTheDocument();
   });
 
-  it("sends a signed-in person to their projects", async () => {
+  it("stays the front door for a signed-in person, with a way to their projects", async () => {
     stubApi({ "/v1/me": user, "/auth/config": { google: true, dev_login: false, demo_project_id: null } });
     at("/", <Route path="/" element={<Landing />} />);
-    expect(await screen.findByTestId("where")).toHaveTextContent("/projects");
+    expect(await screen.findByRole("link", { name: "Open your projects" })).toHaveAttribute("href", "/projects");
+    expect(screen.getByRole("heading", { level: 1, name: /Stop paying for a bigger model/ })).toBeInTheDocument();
+  });
+
+  it("is not redirected away by a project key left in the browser", async () => {
+    localStorage.setItem("mcm_api_key", "mcm_live_old_key_from_last_month");
+    stubApi({ "/v1/me": signedOut, "/auth/config": { google: true, dev_login: false, demo_project_id: null } });
+    at("/", <Route path="/" element={<Landing />} />);
+    expect(await screen.findByRole("heading", { level: 1, name: /Stop paying for a bigger model/ })).toBeInTheDocument();
+    expect(screen.queryByTestId("where")).not.toBeInTheDocument();
   });
 });
 

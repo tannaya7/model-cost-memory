@@ -4,8 +4,10 @@ import { motion } from "framer-motion";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { devLogin } from "../features/auth/api/authApi";
 import { useAuthConfig, useMe } from "../features/auth/hooks/useAuth";
+import { setActiveProject, setApiKey } from "../shared/api/apiFetch";
 import { queryClient } from "../shared/api/queryClient";
 import { IconAlert, IconDollar, IconLogo, IconShield } from "../ui/icons";
+import { ThemeToggle } from "../ui/ThemeToggle";
 import { Button } from "../ui/primitives";
 
 function safeNext(next: string | null): string {
@@ -31,13 +33,13 @@ function Picture() {
           {p.win && (
             <motion.circle cx={p.x} cy={p.y} r="5" fill="none" stroke="var(--color-accent)" strokeWidth="0.8" animate={{ r: [4.5, 7, 4.5], opacity: [1, 0.4, 1] }} transition={{ duration: 2.2, repeat: Infinity }} />
           )}
-          <circle cx={p.x} cy={p.y} r="2.4" fill={p.win ? "var(--color-accent)" : "#5d6380"} />
-          <text x={p.x + 4} y={p.y - 3} fontSize="5.5" fill={p.win ? "#d8d3ff" : "#7d83a6"} fontFamily="var(--font-mono)">{p.label}</text>
+          <circle cx={p.x} cy={p.y} r="2.4" fill={p.win ? "var(--color-accent)" : "var(--series-other)"} />
+          <text x={p.x + 4} y={p.y - 3} fontSize="5.5" fill={p.win ? "var(--color-accent-ink)" : "var(--color-muted)"} fontFamily="var(--font-mono)">{p.label}</text>
         </motion.g>
       ))}
-      <text x="1" y="88" fontSize="4.6" fill="#7d83a6">cheaper ←</text>
-      <text x="74" y="88" fontSize="4.6" fill="#7d83a6">→ costlier</text>
-      <text x="1" y="6" fontSize="4.6" fill="#6fdc9c">good enough</text>
+      <text x="1" y="88" fontSize="4.6" fill="var(--color-muted)">cheaper ←</text>
+      <text x="74" y="88" fontSize="4.6" fill="var(--color-muted)">→ costlier</text>
+      <text x="1" y="6" fontSize="4.6" fill="var(--color-ok)">good enough</text>
     </svg>
   );
 }
@@ -57,7 +59,15 @@ export default function SignIn() {
   const next = safeNext(searchParams.get("next"));
   const isMock = import.meta.env.DEV && import.meta.env.VITE_USE_MOCK === "true";
 
+  // Signing in means "use my account": a project key or project left in this browser would otherwise be
+  // sent with every request, and the API lets a key take precedence over the signed-in session.
+  const forgetSavedAccess = () => {
+    setApiKey("");
+    setActiveProject("");
+  };
+
   const finish = () => {
+    forgetSavedAccess();
     queryClient.clear();
     navigate(next === "/" ? "/projects" : next, { replace: true });
   };
@@ -72,6 +82,7 @@ export default function SignIn() {
       }
       finish();
     } else {
+      forgetSavedAccess();
       window.location.assign(`/auth/google/login?next=${encodeURIComponent(next)}`);
     }
   };
@@ -96,9 +107,12 @@ export default function SignIn() {
     <div className="grid min-h-screen lg:grid-cols-[1.15fr_1fr]">
       <section className="relative hidden overflow-hidden border-r border-rule p-12 lg:flex lg:flex-col lg:justify-between">
         <div aria-hidden className="pointer-events-none absolute -left-40 top-1/3 h-[480px] w-[480px] rounded-full bg-accent/15 blur-3xl" />
-        <div className="relative flex items-center gap-3">
-          <IconLogo size={34} />
-          <span className="text-lg font-semibold tracking-tight">Model &amp; Cost Memory</span>
+        <div className="relative flex items-center justify-between gap-3">
+          <Link to="/" className="flex items-center gap-3">
+            <IconLogo size={34} />
+            <span className="text-lg font-semibold tracking-tight">Model &amp; Cost Memory</span>
+          </Link>
+          <Link to="/" className="text-sm text-dim hover:text-ink">← Back to the home page</Link>
         </div>
         <div className="relative">
           <motion.h1 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="max-w-xl text-5xl font-semibold leading-[1.05] tracking-tight">
@@ -119,11 +133,12 @@ export default function SignIn() {
         </ul>
       </section>
 
-      <section className="flex items-center justify-center p-6">
+      <section className="relative flex items-center justify-center p-6">
+        <ThemeToggle className="absolute right-5 top-5" />
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="panel w-full max-w-sm p-8">
-          <div className="mb-6 flex items-center gap-2.5 lg:hidden">
-            <IconLogo size={28} />
-            <span className="font-semibold tracking-tight">Model &amp; Cost Memory</span>
+          <div className="mb-6 flex items-center justify-between gap-2.5 lg:hidden">
+            <Link to="/" className="flex items-center gap-2.5"><IconLogo size={28} /><span className="font-semibold tracking-tight">Model &amp; Cost Memory</span></Link>
+            <Link to="/" className="text-xs text-dim hover:text-ink">← Home</Link>
           </div>
           <h2 className="text-2xl font-semibold tracking-tight">Sign in</h2>
           <p className="mt-1 text-sm text-dim">See which models your AI features should use, and what that saves.</p>

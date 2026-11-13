@@ -61,7 +61,7 @@ type Variant = "primary" | "secondary" | "ghost" | "danger";
 
 const variants: Record<Variant, string> = {
   primary:
-    "bg-gradient-to-r from-[#9d91ff] to-accent text-on-accent shadow-[0_8px_24px_-8px_rgba(139,125,255,0.7)] hover:brightness-110",
+    "bg-gradient-to-r from-[var(--grad-from)] to-[var(--grad-to)] text-white shadow-[0_10px_28px_-10px_rgba(124,58,237,0.7)] hover:brightness-110",
   secondary: "border border-rule-strong bg-surface-2 text-ink hover:bg-surface-3",
   ghost: "text-dim hover:bg-surface-2 hover:text-ink",
   danger: "bg-bad/90 text-white hover:bg-bad",
@@ -181,7 +181,7 @@ export function Segmented<T extends string>({
             {active && (
               <motion.span
                 layoutId={`seg-${label}`}
-                className="absolute inset-0 rounded-[9px] bg-surface-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                className="absolute inset-0 rounded-[9px] bg-[var(--tab-active)] shadow-[0_1px_3px_rgba(24,20,70,0.12)] ring-1 ring-rule"
                 transition={{ type: "spring", stiffness: 500, damping: 38 }}
               />
             )}

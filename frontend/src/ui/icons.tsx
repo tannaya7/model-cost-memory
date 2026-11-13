@@ -178,12 +178,23 @@ export const IconLogo = ({ size = 22 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
     <defs>
       <linearGradient id="mcm-logo" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stopColor="#b4aaff" />
-        <stop offset="0.5" stopColor="#8b7dff" />
-        <stop offset="1" stopColor="#3fd0f2" />
+        <stop offset="0" stopColor="#a78bfa" />
+        <stop offset="0.55" stopColor="#7c3aed" />
+        <stop offset="1" stopColor="#d946ef" />
       </linearGradient>
     </defs>
     <rect x="1" y="1" width="22" height="22" rx="7" fill="url(#mcm-logo)" />
-    <path d="M6.5 15.5 10 9l3 4.5 4.5-7" fill="none" stroke="#0b0b18" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M6.5 15.5 10 9l3 4.5 4.5-7" fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
+);
+export const IconSun = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="10" cy="10" r="3.5" />
+    <path d="M10 1.8v1.8M10 16.4v1.8M1.8 10h1.8M16.4 10h1.8M4.2 4.2l1.3 1.3M14.5 14.5l1.3 1.3M4.2 15.8l1.3-1.3M14.5 5.5l1.3-1.3" />
+  </Icon>
+);
+export const IconMoon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M16.5 12.2A7 7 0 0 1 7.8 3.5a7 7 0 1 0 8.7 8.7Z" />
+  </Icon>
 );
