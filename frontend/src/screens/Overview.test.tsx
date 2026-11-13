@@ -5,6 +5,7 @@ import { stubApi } from "../test/api";
 import type { Job, Recommendation } from "../shared/api/types";
 import jobsSample from "../mocks/jobs.sample.json";
 import recSample from "../mocks/recommendation.sample.json";
+import { WithProject } from "../app/project";
 import Overview from "./Overview";
 
 afterEach(() => {
@@ -45,8 +46,8 @@ describe("Overview", () => {
 
   it("lists each job with its verdict, linking to the job", async () => {
     api({ "invoice-extract": downgrade, "ticket-classify": hold("ticket-classify"), "receipt-scan": hold("receipt-scan") });
-    renderWithProviders(<Overview />);
-    const card = (await screen.findAllByRole("link", { name: /invoice-extract/ })).find((a) => a.getAttribute("href") === "/jobs/invoice-extract");
+    renderWithProviders(<WithProject id="acme"><Overview /></WithProject>);
+    const card = (await screen.findAllByRole("link", { name: /invoice-extract/ })).find((a) => a.getAttribute("href") === "/p/acme/jobs/invoice-extract");
     expect(card).toBeDefined();
     expect(within(card!).getByText("Cheaper model found")).toBeInTheDocument();
     expect(within(card!).getByText("$102/mo")).toBeInTheDocument();

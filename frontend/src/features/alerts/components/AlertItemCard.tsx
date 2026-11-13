@@ -1,3 +1,4 @@
+import { useP } from "../../../app/project";
 import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Alert, Model } from "../../../shared/api/types";
@@ -52,6 +53,7 @@ export type AlertListItem =
   | { kind: "deprecation"; model: Model; timestamp: string };
 
 export function AlertItemCard({ item }: { item: AlertListItem }) {
+  const p = useP();
   if (item.kind === "deprecation") {
     const { model } = item;
     const { text, isUrgent } = model.shutdown_date
@@ -89,7 +91,7 @@ export function AlertItemCard({ item }: { item: AlertListItem }) {
             )}
           </div>
           <Link
-            to="/models?status=DEPRECATED"
+            to={p("/models")}
             className="text-xs font-semibold text-accent hover:underline"
           >
             View in model catalog →
@@ -122,6 +124,7 @@ function Rates({ before, after, note }: { before: number; after: number; note: s
 }
 
 function AlertCard({ alert }: { alert: Alert }) {
+  const p = useP();
   const queryClient = useQueryClient();
   const resolve = useMutation({
     mutationFn: () => resolveAlert(alert.alert_id),
@@ -148,7 +151,7 @@ function AlertCard({ alert }: { alert: Alert }) {
             <Badge tone="ok">Resolved {formatLocalDate(alert.resolved_at!)}</Badge>
           )}
           <Link
-            to={`/jobs/${encodeURIComponent(alert.job)}`}
+            to={p(`/jobs/${encodeURIComponent(alert.job)}?tab=quality`)}
             className="text-base font-bold text-accent hover:underline"
           >
             {alert.job}
@@ -211,7 +214,7 @@ function AlertCard({ alert }: { alert: Alert }) {
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <Link
-            to={`/runs?job=${encodeURIComponent(alert.job)}&outcome=FAIL`}
+            to={p(`/jobs/${encodeURIComponent(alert.job)}?tab=runs&outcome=FAIL`)}
             className="text-xs font-semibold text-accent hover:underline"
           >
             See the failing runs →

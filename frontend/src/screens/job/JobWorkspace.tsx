@@ -1,5 +1,6 @@
 /** One job: its verdict first, then the views that explain it. The tab lives in the address
  * (?tab=quality), so every view can be linked to. */
+import { useP } from "../../app/project";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useJobs } from "../../features/jobs/hooks/useJobs";
 import { useRecommendation } from "../../features/recommendations/hooks/useRecommendation";
@@ -22,6 +23,7 @@ const TABS = [
 type Tab = (typeof TABS)[number]["value"];
 
 export default function JobWorkspace() {
+  const p = useP();
   const { jobName = "" } = useParams<{ jobName: string }>();
   const [params, setParams] = useSearchParams();
   const tab = (TABS.some((t) => t.value === params.get("tab")) ? params.get("tab") : "verdict") as Tab;
@@ -34,7 +36,7 @@ export default function JobWorkspace() {
       <EmptyState
         title={`There is no job called “${jobName}”`}
         hint="It may have been renamed, or it belongs to another project."
-        action={<ButtonLink to="/jobs">All jobs</ButtonLink>}
+        action={<ButtonLink to={p("/jobs")}>All jobs</ButtonLink>}
       />
     );
   }
@@ -43,7 +45,7 @@ export default function JobWorkspace() {
     <div className="flex flex-col gap-5">
       <header className="flex flex-col gap-4">
         <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-muted">
-          <Link to="/jobs" className="hover:text-ink">Jobs</Link>
+          <Link to={p("/jobs")} className="hover:text-ink">Jobs</Link>
           <IconArrowRight size={13} />
           <span className="truncate font-mono text-dim">{jobName}</span>
         </nav>
@@ -82,7 +84,7 @@ export default function JobWorkspace() {
       {tab === "quality" && <QualityTab job={jobName} rec={rec.data ?? null} />}
       {tab === "spend" && <SpendTab job={jobName} />}
       {tab === "evidence" && <EvidenceTab job={jobName} rec={rec.data ?? null} />}
-      {tab === "runs" && <RunsTab job={jobName} />}
+      {tab === "runs" && <RunsTab job={jobName} rec={rec.data ?? null} />}
       {tab === "history" && <HistoryTab job={jobName} />}
       {tab === "retests" && <RetestsTab job={jobName} rec={rec.data ?? null} />}
     </div>

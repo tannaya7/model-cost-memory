@@ -1,5 +1,6 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useP } from "../../../app/project";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "../../../shared/components/Card";
 import { Badge } from "../../../shared/components/Badge";
@@ -33,6 +34,8 @@ export function RetestStartPanel() {
   const [selectedJob, setSelectedJob] = useState<string>(initialJobParam);
   const [selectedModel, setSelectedModel] = useState<string>(suggestedModel);
   const [budgetUsd, setBudgetUsd] = useState<string>("2.00");
+  const [sampleSize, setSampleSize] = useState<string>("50");
+  const p = useP();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [askForKey, setAskForKey] = useState(false);
 
@@ -99,7 +102,11 @@ export function RetestStartPanel() {
     !isNaN(budgetNum) && budgetNum > 0 && budgetNum <= (capRemaining || 10);
   const isCapExhausted = limits !== undefined && capRemaining <= 0;
 
+  const sampleNum = Number(sampleSize);
+  const isSampleValid = Number.isInteger(sampleNum) && sampleNum >= 1 && sampleNum <= 500;
+
   const canSubmit =
+    isSampleValid &&
     Boolean(selectedJob) &&
     Boolean(selectedModel) &&
     !isJobRetestDisabled &&
@@ -118,11 +125,12 @@ export function RetestStartPanel() {
         input: {
           candidate_model: selectedModel,
           budget_usd: Number(budgetNum.toFixed(2)),
+          sample_size: sampleNum,
         },
       });
 
       navigate(
-        `/retest/${encodeURIComponent(result.retest_id)}?job=${encodeURIComponent(result.job)}`,
+        p(`/retest/${encodeURIComponent(result.retest_id)}?job=${encodeURIComponent(result.job)}`),
       );
     } catch (err) {
       if (errorCode(err) === "provider_key_required") {
@@ -376,6 +384,32 @@ export function RetestStartPanel() {
             <p className="mt-1 text-xs text-dim">
               The re-test will immediately stop if the budget is reached before
               all planned runs complete.
+            </p>
+          </div>
+
+          {/* How many past prompts to replay */}
+          <div>
+            <label htmlFor="retest-sample" className="mb-1 block text-sm font-medium text-ink">
+              Past prompts to replay
+            </label>
+            <input
+              id="retest-sample"
+              type="number"
+              step="1"
+              min="1"
+              max="500"
+              value={sampleSize}
+              onChange={(e) => {
+                setSampleSize(e.target.value);
+                setSubmitError(null);
+              }}
+              disabled={isLoading || isCapExhausted}
+              className="w-full max-w-40 rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50"
+            />
+            {!isSampleValid && <p className="mt-1 text-xs text-bad">Between 1 and 500 prompts.</p>}
+            <p className="mt-1 text-xs text-dim">
+              Chosen at random from this job's recorded prompts, one replay each. More prompts give a firmer answer and cost more; the
+              budget above still caps the spend.
             </p>
           </div>
 

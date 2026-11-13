@@ -10,8 +10,11 @@ import { usePatchProject, useProject, useRegenerateProjectKey } from "../feature
 import { ProviderKeyForm } from "../features/retest/components/ProviderKeyForm";
 import { useDeleteProviderKey, useRetestLimits } from "../features/retest/hooks/useRetest";
 import { ProjectKeySettings } from "../features/settings/components/ProjectKeySettings";
-import { ApiError, getActiveProject } from "../shared/api/apiFetch";
+import { ApiError } from "../shared/api/apiFetch";
+import { useProject as useProjectScope } from "../app/project";
+import { useNavigate } from "react-router-dom";
 import type { Project } from "../shared/api/types";
+import { useHealth } from "../features/health/api";
 import { usd } from "../ui/format";
 import { IconCheck } from "../ui/icons";
 import { Button, cx, EmptyState, Panel, PanelHeader, Pill, Skeleton } from "../ui/primitives";
@@ -23,6 +26,7 @@ const SECTIONS = [
   { id: "retests", label: "Re-tests" },
   { id: "keys", label: "API keys" },
   { id: "limits", label: "Usage limits" },
+  { id: "status", label: "System status" },
   { id: "danger", label: "Delete" },
 ];
 
@@ -253,9 +257,54 @@ function LimitsSection() {
   );
 }
 
+/** GET /healthz and /healthz/scheduler: is the server up, and are its background jobs keeping up? */
+function StatusSection() {
+  const health = useHealth();
+  const h = health.data;
+  const late = Object.entries(h?.overdue ?? {});
+  return (
+    <Panel id="status" className="scroll-mt-24 p-5 md:p-6">
+      <PanelHeader title="System status" hint="Checked every minute. The same two checks an uptime monitor should watch." />
+      {health.isPending ? (
+        <Skeleton className="mt-4 h-16" />
+      ) : (
+        <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+          <li className="flex items-center justify-between gap-3 rounded-[12px] border border-rule bg-surface-2/50 p-4">
+            <span>
+              <span className="block text-sm font-semibold text-ink">API and database</span>
+              <span className="font-mono text-[11px] text-muted">GET /healthz</span>
+            </span>
+            <Pill tone={h?.api === "ok" ? "good" : "bad"}>{h?.api === "ok" ? "Working" : "Not answering"}</Pill>
+          </li>
+          <li className="flex items-center justify-between gap-3 rounded-[12px] border border-rule bg-surface-2/50 p-4">
+            <span>
+              <span className="block text-sm font-semibold text-ink">Background jobs</span>
+              <span className="font-mono text-[11px] text-muted">GET /healthz/scheduler</span>
+            </span>
+            <Pill tone={h?.scheduler === "ok" ? "good" : h?.scheduler === "overdue" ? "bad" : "neutral"}>
+              {h?.scheduler === "ok" ? "Keeping up" : h?.scheduler === "overdue" ? `${late.length} overdue` : "Unknown"}
+            </Pill>
+          </li>
+        </ul>
+      )}
+      {late.length > 0 && (
+        <ul className="mt-3 flex flex-col gap-1 text-xs text-dim">
+          {late.map(([job, minutes]) => (
+            <li key={job}>
+              <span className="font-mono text-ink">{job}</span>: {minutes === null ? "has not succeeded since the scheduler started" : `last succeeded ${Math.round(minutes)} min ago`}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
 export default function Settings() {
   const { hash } = useLocation();
-  const projectId = getActiveProject();
+  const scope = useProjectScope();
+  const navigate = useNavigate();
+  const projectId = scope.mode === "owned" ? scope.id : "";
   const projectQuery = useProject(projectId || undefined);
   const project = projectQuery.data ?? null;
   const [active, setActive] = useState("project");
@@ -313,17 +362,22 @@ export default function Settings() {
             </>
           ) : (
             <Panel className="p-5">
-              <p className="flex items-center gap-2 text-sm text-dim">
-                <Pill tone="info">Using a project key</Pill> Sign in and pick a project to change its name, alerts and data retention.
+              <p className="flex flex-wrap items-center gap-2 text-sm text-dim">
+                {scope.mode === "demo" ? (
+                  <><Pill tone="info">Public demo</Pill> This is a read-only demo. Sign in to make your own project.</>
+                ) : (
+                  <><Pill tone="info">Using a project key</Pill> Sign in as the project's owner to change its name, alerts and data retention, or to delete it.</>
+                )}
               </p>
             </Panel>
           )}
           <RetestsSection key={project?.project_id ?? "none"} project={project} />
           <KeysSection project={project} />
           <LimitsSection />
+          <StatusSection />
           {project && (
             <div id="danger" className="scroll-mt-24">
-              <DeleteProjectCard projectId={project.project_id} projectName={project.name} onDeleted={() => (window.location.href = "/projects")} />
+              <DeleteProjectCard projectId={project.project_id} projectName={project.name} onDeleted={() => navigate("/projects", { replace: true })} />
             </div>
           )}
         </div>

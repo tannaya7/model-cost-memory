@@ -1,4 +1,5 @@
 /** The decision for one job, in words first, then the picture that proves it. */
+import { useP } from "../../app/project";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import type { ModelEvidence, Recommendation } from "../../shared/api/types";
@@ -70,6 +71,7 @@ function ModelCard({ label, m, highlight }: { label: string; m: ModelEvidence | 
 }
 
 export function VerdictTab({ rec }: { rec: Recommendation }) {
+  const p = useP();
   const { title, body } = headline(rec);
   const cur = rec.models.find((m) => m.model === rec.current?.model);
   const to = rec.models.find((m) => m.model === rec.recommended?.model);
@@ -111,7 +113,7 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
             {(rec.retest_candidates.length > 0 || rec.next_step) && (
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 {rec.retest_candidates.map((model) => (
-                  <ButtonLink key={model} to={`/retest?job=${encodeURIComponent(rec.job)}&model=${encodeURIComponent(model)}`} variant="primary" size="sm">
+                  <ButtonLink key={model} to={p(`/retest?job=${encodeURIComponent(rec.job)}&model=${encodeURIComponent(model)}`)} variant="primary" size="sm">
                     <IconFlask size={14} /> Re-test {model}
                   </ButtonLink>
                 ))}

@@ -1,3 +1,4 @@
+import { useP } from "../../../app/project";
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import type { UsageLimit } from "../../../shared/api/types";
@@ -15,6 +16,7 @@ const BAR: Record<UsageLimit["state"], string> = {
 
 /** One limit: how much is used, whether it lasts until the reset, and what to change per job if not. */
 export function LimitCard({ limit }: { limit: UsageLimit }) {
+  const p = useP();
   const report = useReportLimitUsed();
   const remove = useDeleteLimit();
   const [percent, setPercent] = useState("");
@@ -77,7 +79,7 @@ export function LimitCard({ limit }: { limit: UsageLimit }) {
               <li key={s.job} className="flex flex-col gap-1 p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-0.5">
                   <p className="text-sm text-ink">
-                    <Link to={`/jobs/${encodeURIComponent(s.job)}`} className="font-semibold hover:text-accent">
+                    <Link to={p(`/jobs/${encodeURIComponent(s.job)}`)} className="font-semibold hover:text-accent">
                       {s.job}
                     </Link>{" "}
                     <span className="text-dim">({Math.round(s.share_of_use * 100)}% of recent use)</span>
@@ -95,7 +97,7 @@ export function LimitCard({ limit }: { limit: UsageLimit }) {
                 </div>
                 {!s.suggested && s.note.includes("re-test") && (
                   <Link
-                    to={`/jobs/${encodeURIComponent(s.job)}`}
+                    to={p(`/jobs/${encodeURIComponent(s.job)}`)}
                     className="shrink-0 rounded-md border border-accent/40 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent-soft"
                   >
                     See re-test →

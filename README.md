@@ -29,7 +29,9 @@ recommended and why it changed.
   recorded runs it forecasts whether a limit runs out before it resets and, if so, names per job the cheaper
   option proven to still do it, at a model and reasoning effort (`sonnet-5@low` instead of `opus-5-5@medium`).
 - A web app built around three questions: which model should each job use, did anything break, and what does
-  it cost. Four places instead of a long menu: an **Overview** that leads with the monthly saving, spend over
+  it cost. A visitor lands on a page that explains the product, signs in with Google, sees all their projects
+  (or creates the first: name it, take its key once, wrap the model call), and opens a project's dashboard at
+  `/p/<project>`. Inside a project, four places instead of a long menu: an **Overview** that leads with the monthly saving, spend over
   time and what needs attention; **Jobs**, where each job's verdict is stated in words and proven on a
   cost-versus-quality map, with quality and spend over time, evidence, runs, history and re-tests; **Models**,
   with prices and retirements; and **Activity**, with alerts, the live pipeline and AI news. Every chart has a

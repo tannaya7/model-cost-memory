@@ -327,6 +327,7 @@ export const handlers = [
     const job = url.searchParams.get("job");
     const model = url.searchParams.get("model");
     const outcome = url.searchParams.get("outcome");
+    const recommendation = url.searchParams.get("recommendation");
     const limitParam = url.searchParams.get("limit");
     const cursorParam = url.searchParams.get("cursor");
 
@@ -340,6 +341,10 @@ export const handlers = [
     }
     if (outcome && outcome !== "All") {
       filtered = filtered.filter((r) => r.outcome === outcome);
+    }
+    if (recommendation) {
+      // The runs one verdict rests on: in the sample data, a stable half of the job's runs.
+      filtered = filtered.filter((r) => parseInt(r.run_id.slice(-2), 16) % 2 === 0);
     }
 
     const limit = Math.min(200, Math.max(1, limitParam ? parseInt(limitParam, 10) : 50));
@@ -708,6 +713,10 @@ export const handlers = [
 
     return HttpResponse.json({ detail: "Job not found" }, { status: 404 });
   }),
+
+  // GET /healthz and /healthz/scheduler: the API is up and the background jobs keep up.
+  http.get("/healthz", () => HttpResponse.json({ status: "ok" })),
+  http.get("/healthz/scheduler", () => HttpResponse.json({ status: "ok", overdue: {} })),
 
   // GET /v1/insights/daily: 60 days per job and model, deterministic. invoice-extract moves from
   // acme-large to acme-mini three weeks ago; acme-large's new version dips for a week.

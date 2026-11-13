@@ -1,6 +1,7 @@
 /** The job's other views: quality over time, spend, evidence, runs, history and re-tests. */
+import { useP } from "../../app/project";
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { AlertItemCard } from "../../features/alerts/components/AlertItemCard";
 import { useDaily } from "../../features/insights/api/dailyApi";
 import { useJobInsights } from "../../features/insights/hooks/useSpendInsights";
@@ -155,7 +156,8 @@ function bars(items: Breakdown[]) {
 }
 
 export function EvidenceTab({ job, rec }: { job: string; rec: Recommendation | null }) {
-  const insights = useJobInsights(job);
+  const [days, setDays] = useState<"7" | "30" | "90">("30");
+  const insights = useJobInsights(job, Number(days));
   const [by, setBy] = useState<"size" | "prompt">("size");
   if (insights.isPending) return <Skeleton className="h-80" />;
   if (insights.isError) return <ErrorState error={insights.error} onRetry={() => insights.refetch()} />;
@@ -170,7 +172,12 @@ export function EvidenceTab({ job, rec }: { job: string; rec: Recommendation | n
         <ChartFrame
           title="Where each model struggles"
           hint={`Pass rate by ${by === "size" ? "input size: long documents are often where cheaper models fall behind" : "prompt version: did a prompt change help or hurt"}, last ${data.days} days`}
-          actions={<Segmented label="Break down by" value={by} onChange={setBy} options={[{ value: "size", label: "Input size" }, { value: "prompt", label: "Prompt version" }]} />}
+          actions={
+            <>
+              <Segmented label="Period" value={days} onChange={setDays} options={[{ value: "7", label: "7 d" }, { value: "30", label: "30 d" }, { value: "90", label: "90 d" }]} />
+              <Segmented label="Break down by" value={by} onChange={setBy} options={[{ value: "size", label: "Input size" }, { value: "prompt", label: "Prompt version" }]} />
+            </>
+          }
           legend={names.map((n) => ({ name: n, color: colors.get(n)! }))}
           table={{
             columns: ["Group", "Model", "Runs", "Pass rate", "Likely range", "Cost / success"],
@@ -203,25 +210,54 @@ export function EvidenceTab({ job, rec }: { job: string; rec: Recommendation | n
   );
 }
 
-export function RunsTab({ job }: { job: string }) {
-  const [outcome, setOutcome] = useState<"ALL" | "PASS" | "FAIL" | "UNKNOWN">("ALL");
+export function RunsTab({ job, rec }: { job: string; rec: Recommendation | null }) {
+  const [params, setParams] = useSearchParams();
+  const outcome = (["PASS", "FAIL", "UNKNOWN"].includes(params.get("outcome") ?? "") ? params.get("outcome") : "ALL") as "ALL" | "PASS" | "FAIL" | "UNKNOWN";
+  const model = params.get("model") ?? "";
+  const recommendation = params.get("recommendation") ?? "";
   const [open, setOpen] = useState<string | null>(null);
-  const runs = useRuns({ job, outcome });
+  const runs = useRuns({ job, outcome, model: model || undefined, recommendation: recommendation || undefined });
   const items = runs.data?.pages.flatMap((p) => p.items) ?? [];
+  const models = [...new Set(rec?.models.map((m) => m.model) ?? [])].sort();
+  const set = (key: string, value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setParams(next, { replace: true });
+  };
   return (
     <Panel className="p-5 md:p-6">
       <PanelHeader
         title="Every run, newest first"
         hint="Click a run for its prompt, answer and why it passed or failed"
         actions={
-          <Segmented
-            label="Outcome"
-            value={outcome}
-            onChange={setOutcome}
-            options={[{ value: "ALL", label: "All" }, { value: "PASS", label: "Passed" }, { value: "FAIL", label: "Failed" }, { value: "UNKNOWN", label: "Unchecked" }]}
-          />
+          <>
+            {models.length > 1 && (
+              <select
+                value={model}
+                onChange={(e) => set("model", e.target.value)}
+                aria-label="Model"
+                className="rounded-[10px] border border-rule bg-surface px-3 py-1.5 text-xs font-semibold text-ink outline-none focus:border-accent"
+              >
+                <option value="">Every model</option>
+                {models.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            )}
+            <Segmented
+              label="Outcome"
+              value={outcome}
+              onChange={(v) => set("outcome", v === "ALL" ? "" : v)}
+              options={[{ value: "ALL", label: "All" }, { value: "PASS", label: "Passed" }, { value: "FAIL", label: "Failed" }, { value: "UNKNOWN", label: "Unchecked" }]}
+            />
+          </>
         }
       />
+      {recommendation && (
+        <p className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-[12px] border border-accent/30 bg-accent-soft/50 px-4 py-2.5 text-sm text-dim">
+          <span>Showing only the runs one verdict rests on.</span>
+          <button type="button" onClick={() => set("recommendation", "")} className="text-xs font-semibold text-accent hover:underline">Show every run</button>
+        </p>
+      )}
       <div className="mt-4 overflow-x-auto">
         {runs.isPending ? (
           <Skeleton className="h-60" />
@@ -290,6 +326,7 @@ export function HistoryTab({ job }: { job: string }) {
 }
 
 export function RetestsTab({ job, rec }: { job: string; rec: Recommendation | null }) {
+  const p = useP();
   const retests = useJobRetests(job);
   const list = retests.data ?? [];
   return (
@@ -305,9 +342,9 @@ export function RetestsTab({ job, rec }: { job: string; rec: Recommendation | nu
           </div>
           <div className="flex flex-wrap gap-2">
             {(rec?.retest_candidates ?? []).map((m) => (
-              <ButtonLink key={m} to={`/retest?job=${encodeURIComponent(job)}&model=${encodeURIComponent(m)}`} variant="primary" size="sm">Re-test {m}</ButtonLink>
+              <ButtonLink key={m} to={p(`/retest?job=${encodeURIComponent(job)}&model=${encodeURIComponent(m)}`)} variant="primary" size="sm">Re-test {m}</ButtonLink>
             ))}
-            <ButtonLink to={`/retest?job=${encodeURIComponent(job)}`} size="sm">Choose a model</ButtonLink>
+            <ButtonLink to={p(`/retest?job=${encodeURIComponent(job)}`)} size="sm">Choose a model</ButtonLink>
           </div>
         </div>
       </Panel>

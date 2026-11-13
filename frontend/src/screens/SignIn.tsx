@@ -1,9 +1,9 @@
 /** Sign in: what the product does on the left, the way in on the right. */
 import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { devLogin } from "../features/auth/api/authApi";
-import { useAuthConfig } from "../features/auth/hooks/useAuth";
+import { useAuthConfig, useMe } from "../features/auth/hooks/useAuth";
 import { queryClient } from "../shared/api/queryClient";
 import { IconAlert, IconDollar, IconLogo, IconShield } from "../ui/icons";
 import { Button } from "../ui/primitives";
@@ -87,7 +87,9 @@ export default function SignIn() {
     }
   };
 
+  const me = useMe();
   const google = isMock || Boolean(config.data?.google);
+  if (me.data) return <Navigate to={next === "/" ? "/projects" : next} replace />;
   const dev = Boolean(config.data?.dev_login);
 
   return (
@@ -162,9 +164,9 @@ export default function SignIn() {
           </div>
 
           <p className="mt-8 border-t border-rule pt-5 text-xs text-muted">
-            Have a project key? <Link to="/settings#keys" className="font-semibold text-accent hover:underline">Use it instead</Link>
+            Have a project key? <Link to="/key" className="font-semibold text-accent hover:underline">Use it instead</Link>
             {config.data?.demo_project_id && (
-              <> or <Link to="/" className="font-semibold text-accent hover:underline">explore the demo</Link></>
+              <> or <Link to="/p/demo" className="font-semibold text-accent hover:underline">explore the demo</Link></>
             )}
           </p>
         </motion.div>
