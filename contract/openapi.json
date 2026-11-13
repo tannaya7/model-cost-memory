@@ -197,6 +197,53 @@
         "title": "BreakdownOut",
         "type": "object"
       },
+      "DayPointOut": {
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "failed": {
+            "description": "UNKNOWN runs count in runs but in neither passed nor failed",
+            "title": "Failed",
+            "type": "integer"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "runs": {
+            "description": "Production runs that day",
+            "title": "Runs",
+            "type": "integer"
+          },
+          "spend_usd": {
+            "description": "Priced runs only",
+            "title": "Spend Usd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "day",
+          "job",
+          "model",
+          "runs",
+          "passed",
+          "failed",
+          "spend_usd"
+        ],
+        "title": "DayPointOut",
+        "type": "object"
+      },
       "DevLogin": {
         "properties": {
           "email": {
@@ -3785,6 +3832,125 @@
         "summary": "Stream Flow",
         "tags": [
           "flow"
+        ]
+      }
+    },
+    "/v1/insights/daily": {
+      "get": {
+        "description": "Production runs, outcomes and spend per UTC day, job and model, oldest first: quality and spend\nover time. Days without runs are absent.",
+        "operationId": "get_daily_v1_insights_daily_get",
+        "parameters": [
+          {
+            "description": "How many days back",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 60,
+              "description": "How many days back",
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Only this job",
+            "in": "query",
+            "name": "job",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this job",
+              "title": "Job"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DayPointOut"
+                  },
+                  "title": "Response Get Daily V1 Insights Daily Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Daily",
+        "tags": [
+          "insights"
         ]
       }
     },

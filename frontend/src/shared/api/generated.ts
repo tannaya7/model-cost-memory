@@ -212,6 +212,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/insights/daily": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Daily
+         * @description Production runs, outcomes and spend per UTC day, job and model, oldest first: quality and spend
+         *     over time. Days without runs are absent.
+         */
+        get: operations["get_daily_v1_insights_daily_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/insights/spend": {
         parameters: {
             query?: never;
@@ -819,6 +840,35 @@ export interface components {
             passed: number;
             /** Runs */
             runs: number;
+        };
+        /** DayPointOut */
+        DayPointOut: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /**
+             * Failed
+             * @description UNKNOWN runs count in runs but in neither passed nor failed
+             */
+            failed: number;
+            /** Job */
+            job: string;
+            /** Model */
+            model: string;
+            /** Passed */
+            passed: number;
+            /**
+             * Runs
+             * @description Production runs that day
+             */
+            runs: number;
+            /**
+             * Spend Usd
+             * @description Priced runs only
+             */
+            spend_usd: number;
         };
         /** DevLogin */
         DevLogin: {
@@ -2461,6 +2511,44 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_daily_v1_insights_daily_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back */
+                days?: number;
+                /** @description Only this job */
+                job?: string | null;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayPointOut"][];
+                };
             };
             /** @description Validation Error */
             422: {

@@ -35,6 +35,7 @@ export type User = components["schemas"]["UserOut"];
 export type AuthConfig = components["schemas"]["AuthConfig"];
 export type Project = components["schemas"]["ProjectOut"];
 export type News = components["schemas"]["NewsOut"];
+export type DayPoint = components["schemas"]["DayPointOut"];
 export type NewsItem = components["schemas"]["NewsItemOut"];
 export type NewsRefresh = components["schemas"]["NewsRefreshOut"];
 export type ProjectCreateInput = components["schemas"]["ProjectCreate"];

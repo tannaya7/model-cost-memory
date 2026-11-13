@@ -1,53 +1,68 @@
-import { lazy } from "react";
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import { AppShell } from "./app/AppShell";
+import { lazy, useEffect } from "react";
+import { createBrowserRouter, Navigate, RouterProvider, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Frame } from "./app/Frame";
 import { RequireAuth } from "./app/RequireAuth";
+import { setActiveProject } from "./shared/api/apiFetch";
+import { queryClient } from "./shared/api/queryClient";
 
-// Every page is lazy so each ships as its own chunk.
-const SignInPage = lazy(() => import("./pages/SignInPage"));
-const HomePage = lazy(() => import("./pages/HomePage"));
-const SpendPage = lazy(() => import("./pages/SpendPage"));
-const FlowPage = lazy(() => import("./pages/FlowPage"));
-const RunsPage = lazy(() => import("./pages/RunsPage"));
-const JobsPage = lazy(() => import("./pages/JobsPage"));
-const JobDetailPage = lazy(() => import("./pages/JobDetailPage"));
-const ModelsPage = lazy(() => import("./pages/ModelsPage"));
-const AlertsPage = lazy(() => import("./pages/AlertsPage"));
-const HistoryPage = lazy(() => import("./pages/HistoryPage"));
-const RetestPage = lazy(() => import("./pages/RetestPage"));
-const LimitsPage = lazy(() => import("./pages/LimitsPage"));
-const NewsPage = lazy(() => import("./pages/NewsPage"));
-const RetestRunPage = lazy(() => import("./pages/RetestRunPage"));
-const SettingsPage = lazy(() => import("./pages/SettingsPage"));
-const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
-const ProjectSetupPage = lazy(() => import("./pages/ProjectSetupPage"));
-const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
+const SignIn = lazy(() => import("./screens/SignIn"));
+const Overview = lazy(() => import("./screens/Overview"));
+const Jobs = lazy(() => import("./screens/Jobs"));
+const JobWorkspace = lazy(() => import("./screens/job/JobWorkspace"));
+const Models = lazy(() => import("./screens/Models"));
+const Activity = lazy(() => import("./screens/Activity"));
+const Settings = lazy(() => import("./screens/Settings"));
+const Projects = lazy(() => import("./screens/Projects"));
+const RetestStart = lazy(() => import("./screens/Retest").then((m) => ({ default: m.RetestStart })));
+const RetestRun = lazy(() => import("./screens/Retest").then((m) => ({ default: m.RetestRun })));
+const NotFound = lazy(() => import("./screens/Retest").then((m) => ({ default: m.NotFound })));
+
+/** Old addresses (/runs?job=x&outcome=FAIL) land on the job's runs. */
+function RunsRedirect() {
+  const [params] = useSearchParams();
+  const job = params.get("job");
+  return <Navigate to={job ? `/jobs/${encodeURIComponent(job)}?tab=runs` : "/jobs"} replace />;
+}
+
+/** Old project pages open the project, then its settings. */
+function ProjectRedirect() {
+  const { projectId = "" } = useParams();
+  const navigate = useNavigate();
+  useEffect(() => {
+    setActiveProject(projectId);
+    void queryClient.invalidateQueries();
+    navigate("/settings", { replace: true });
+  }, [projectId, navigate]);
+  return null;
+}
 
 const router = createBrowserRouter([
-  { path: "/signin", element: <SignInPage /> },
+  { path: "/signin", element: <SignIn /> },
   {
     element: <RequireAuth />,
     children: [
       {
-        element: <AppShell />,
+        element: <Frame />,
         children: [
-          { path: "/", element: <HomePage /> },
-          { path: "/spend", element: <SpendPage /> },
-          { path: "/flow", element: <FlowPage /> },
-          { path: "/runs", element: <RunsPage /> },
-          { path: "/jobs", element: <JobsPage /> },
-          { path: "/jobs/:jobName", element: <JobDetailPage /> },
-          { path: "/models", element: <ModelsPage /> },
-          { path: "/alerts", element: <AlertsPage /> },
-          { path: "/history", element: <HistoryPage /> },
-          { path: "/retest", element: <RetestPage /> },
-          { path: "/limits", element: <LimitsPage /> },
-          { path: "/news", element: <NewsPage /> },
-          { path: "/retest/:retestId", element: <RetestRunPage /> },
-          { path: "/settings", element: <SettingsPage /> },
-          { path: "/projects", element: <ProjectsPage /> },
-          { path: "/projects/:projectId", element: <ProjectSetupPage /> },
-          { path: "*", element: <NotFoundPage /> },
+          { path: "/", element: <Overview /> },
+          { path: "/jobs", element: <Jobs /> },
+          { path: "/jobs/:jobName", element: <JobWorkspace /> },
+          { path: "/models", element: <Models /> },
+          { path: "/activity", element: <Activity /> },
+          { path: "/settings", element: <Settings /> },
+          { path: "/projects", element: <Projects /> },
+          { path: "/projects/:projectId", element: <ProjectRedirect /> },
+          { path: "/retest", element: <RetestStart /> },
+          { path: "/retest/:retestId", element: <RetestRun /> },
+          // Where the old screens used to be.
+          { path: "/spend", element: <Navigate to="/" replace /> },
+          { path: "/history", element: <Navigate to="/jobs" replace /> },
+          { path: "/alerts", element: <Navigate to="/activity" replace /> },
+          { path: "/flow", element: <Navigate to="/activity?tab=live" replace /> },
+          { path: "/news", element: <Navigate to="/activity?tab=news" replace /> },
+          { path: "/limits", element: <Navigate to={{ pathname: "/settings", hash: "#limits" }} replace /> },
+          { path: "/runs", element: <RunsRedirect /> },
+          { path: "*", element: <NotFound /> },
         ],
       },
     ],

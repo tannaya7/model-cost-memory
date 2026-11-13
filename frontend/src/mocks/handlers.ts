@@ -473,8 +473,18 @@ export const handlers = [
     const base = sampleRecommendation as Recommendation;
 
     if (jobName === "invoice-extract") {
-      // The contract sample, produced by the backend's own engine.
-      return HttpResponse.json(base);
+      // The contract sample, produced by the backend's own engine, with the saving forecast the real API
+      // adds when both models are priced.
+      return HttpResponse.json({
+        ...base,
+        forecast: base.forecast ?? {
+          runs_per_month: 3640,
+          monthly_saving_usd: 101.6,
+          extra_failures_per_month: 10.9,
+          extra_failures_low: 1.8,
+          extra_failures_high: 21.4,
+        },
+      });
     }
 
     if (jobName === "ticket-classify") {
@@ -697,6 +707,56 @@ export const handlers = [
     }
 
     return HttpResponse.json({ detail: "Job not found" }, { status: 404 });
+  }),
+
+  // GET /v1/insights/daily: 60 days per job and model, deterministic. invoice-extract moves from
+  // acme-large to acme-mini three weeks ago; acme-large's new version dips for a week.
+  http.get("/v1/insights/daily", async ({ request }) => {
+    await delay(250);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+    const url = new URL(request.url);
+    const days = Number(url.searchParams.get("days") ?? 60);
+    const onlyJob = url.searchParams.get("job");
+    let seed = 7;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const plan: Array<{ job: string; model: string; perDay: number; pass: number; cost: number; from: number; to: number }> = [
+      { job: "invoice-extract", model: "acme-large", perDay: 120, pass: 0.975, cost: 0.031, from: days, to: 21 },
+      { job: "invoice-extract", model: "acme-large", perDay: 35, pass: 0.97, cost: 0.031, from: 21, to: 0 },
+      { job: "invoice-extract", model: "acme-mini", perDay: 90, pass: 0.962, cost: 0.003, from: 21, to: 0 },
+      { job: "invoice-extract", model: "acme-mini", perDay: 12, pass: 0.955, cost: 0.003, from: 45, to: 21 },
+      { job: "ticket-classify", model: "mini", perDay: 18, pass: 0.88, cost: 0.0011, from: 14, to: 0 },
+      { job: "receipt-scan", model: "acme-mini", perDay: 26, pass: 0.985, cost: 0.0024, from: days, to: 0 },
+    ];
+    const out: Array<{ day: string; job: string; model: string; runs: number; passed: number; failed: number; spend_usd: number }> = [];
+    const today = new Date();
+    for (let d = days - 1; d >= 0; d--) {
+      const day = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - d)).toISOString().slice(0, 10);
+      const merged = new Map<string, { runs: number; passed: number; failed: number; spend_usd: number }>();
+      for (const p of plan) {
+        if (d >= p.from || d < p.to || (onlyJob && p.job !== onlyJob)) continue;
+        const weekday = new Date(day).getUTCDay();
+        const runs = Math.round(p.perDay * (weekday === 0 || weekday === 6 ? 0.55 : 1) * (0.85 + rand() * 0.3));
+        const dip = p.model === "acme-large" && d < 12 && d >= 5 ? 0.06 : 0;
+        const rate = Math.min(0.999, p.pass - dip + (rand() - 0.5) * 0.02);
+        const passed = Math.round(runs * rate);
+        const unknown = Math.round(runs * 0.01);
+        const key = `${p.job}|${p.model}`;
+        const prev = merged.get(key) ?? { runs: 0, passed: 0, failed: 0, spend_usd: 0 };
+        merged.set(key, {
+          runs: prev.runs + runs,
+          passed: prev.passed + passed,
+          failed: prev.failed + Math.max(0, runs - passed - unknown),
+          spend_usd: Math.round((prev.spend_usd + runs * p.cost * (0.9 + rand() * 0.2)) * 100) / 100,
+        });
+      }
+      for (const [key, v] of merged) {
+        const [job, model] = key.split("|");
+        out.push({ day, job, model, ...v });
+      }
+    }
+    return HttpResponse.json(out);
   }),
 
   // GET /v1/news: a few stories, one naming a model the demo project runs
@@ -986,8 +1046,8 @@ export const handlers = [
     }
     const user: User = {
       user_id: "usr_demo_1001",
-      email: "mahi@example.com",
-      name: "Mahi Demo",
+      email: "demo@example.com",
+      name: "Demo user (sample data)",
       picture_url: null,
     };
     return HttpResponse.json(user);

@@ -623,3 +623,13 @@ class NewsRefreshOut(Model):
     updated_at: datetime | None
     next_refresh_at: datetime | None
 
+
+class DayPointOut(Model):
+    day: date
+    job: str
+    model: str
+    runs: int = Field(description="Production runs that day")
+    passed: int
+    failed: int = Field(description="UNKNOWN runs count in runs but in neither passed nor failed")
+    spend_usd: float = Field(description="Priced runs only")
+
