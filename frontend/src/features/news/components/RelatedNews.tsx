@@ -1,3 +1,4 @@
+import { useP } from "../../../app/project";
 import { Link } from "react-router-dom";
 import type { NewsFilters } from "../api/newsApi";
 import { useNews } from "../hooks/useNews";
@@ -23,6 +24,7 @@ export function RelatedNews({
   emptyText?: string;
   allLink?: boolean;
 }) {
+  const p = useP();
   const query = useNews({ ...filters, limit });
   const items = query.data?.items ?? [];
 
@@ -36,7 +38,7 @@ export function RelatedNews({
       <div className="flex items-baseline justify-between gap-2">
         <h4 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-dim">{title}</h4>
         {allLink && (
-          <Link to="/news" className="text-xs font-semibold text-accent hover:underline">
+          <Link to={p("/activity?tab=news")} className="text-xs font-semibold text-accent hover:underline">
             All AI news →
           </Link>
         )}

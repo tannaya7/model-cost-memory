@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../../test/render";
 import type { Recommendation } from "../../shared/api/types";
 import recSample from "../../mocks/recommendation.sample.json";
+import { WithProject } from "../../app/project";
 import { VerdictTab } from "./VerdictTab";
 
 const downgrade = recSample as unknown as Recommendation;
@@ -30,8 +31,8 @@ describe("VerdictTab", () => {
   });
 
   it("offers the re-tests that would settle an open question", () => {
-    renderWithProviders(<VerdictTab rec={downgrade} />);
-    expect(screen.getByRole("link", { name: /Re-test acme-nano/ })).toHaveAttribute("href", "/retest?job=invoice-extract&model=acme-nano");
+    renderWithProviders(<WithProject id="acme"><VerdictTab rec={downgrade} /></WithProject>);
+    expect(screen.getByRole("link", { name: /Re-test acme-nano/ })).toHaveAttribute("href", "/p/acme/retest?job=invoice-extract&model=acme-nano");
   });
 
   it("gives the chart's numbers as a table on request", async () => {

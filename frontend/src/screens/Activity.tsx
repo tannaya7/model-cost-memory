@@ -1,4 +1,5 @@
 /** Activity: what happened and what is happening. Alerts, the live pipeline, and the AI news. */
+import { useP } from "../app/project";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link, useSearchParams } from "react-router-dom";
@@ -190,6 +191,7 @@ function Live() {
 }
 
 export default function Activity() {
+  const p = useP();
   const [params, setParams] = useSearchParams();
   const tab = (["alerts", "live", "news"].includes(params.get("tab") ?? "") ? params.get("tab") : "alerts") as Tab;
   const regressions = useAllRegressions();
@@ -219,7 +221,7 @@ export default function Activity() {
       {tab === "news" && <NewsFeed />}
       {tab === "alerts" && open > 0 && (
         <p className="text-center text-xs text-muted">
-          Resolve an alert from its card once you have dealt with it. <Link to="/settings" className="text-accent hover:underline">Set the webhook</Link> to get them in Slack or Discord.
+          Resolve an alert from its card once you have dealt with it. <Link to={p("/settings#alerts")} className="text-accent hover:underline">Set the webhook</Link> to get them in Slack or Discord.
         </p>
       )}
     </div>

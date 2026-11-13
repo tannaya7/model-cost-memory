@@ -1,4 +1,5 @@
 /** Jobs: every job with its verdict, the model it should use and what that is worth. */
+import { useP } from "../app/project";
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -16,20 +17,23 @@ import { monthlySaving, useAllRecommendations, VerdictPill } from "./shared";
 type Filter = "all" | "save" | "attention" | "learning";
 
 export default function Jobs() {
+  const p = useP();
   const jobsQuery = useJobs();
   const jobs = jobsQuery.data;
   const { byJob } = useAllRecommendations(jobs);
-  const spend = useSpendInsights();
-  const daily = useDaily({ days: 30 });
+  const [period, setPeriod] = useState<"7" | "30" | "90">("30");
+  const days = Number(period);
+  const spend = useSpendInsights(days);
+  const daily = useDaily({ days });
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const runsByJob = useMemo(() => {
-    const { rows, names } = pivot(daily.data ?? [], "job", "runs", 30);
+    const { rows, names } = pivot(daily.data ?? [], "job", "runs", days);
     return new Map(names.map((n) => [n, rows.map((r) => r[n] as number)]));
-  }, [daily.data]);
+  }, [daily.data, days]);
   const spendByJob = new Map((spend.data ?? []).map((s) => [s.job, s.spend_usd]));
 
   const counts = { all: 0, save: 0, attention: 0, learning: 0 };
@@ -75,10 +79,18 @@ export default function Jobs() {
             { value: "learning", label: "Still learning", count: counts.learning },
           ]}
         />
+        <div className="flex flex-wrap items-center gap-2">
+        <Segmented<"7" | "30" | "90">
+          label="Period"
+          value={period}
+          onChange={setPeriod}
+          options={[{ value: "7", label: "7 d" }, { value: "30", label: "30 d" }, { value: "90", label: "90 d" }]}
+        />
         <label className="flex items-center gap-2 rounded-[10px] border border-rule bg-surface px-3 py-2 text-sm text-muted focus-within:border-accent">
           <IconSearch size={15} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a job" aria-label="Find a job" className="w-44 bg-transparent text-ink outline-none placeholder:text-muted" />
         </label>
+        </div>
       </div>
 
       {jobsQuery.isError && !jobs ? (
@@ -102,7 +114,7 @@ export default function Jobs() {
             return (
               <motion.li key={job.job_id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
                 <Link
-                  to={`/jobs/${encodeURIComponent(job.name)}`}
+                  to={p(`/jobs/${encodeURIComponent(job.name)}`)}
                   className="panel group grid grid-cols-1 items-center gap-4 p-4 transition-all hover:border-rule-strong md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_repeat(3,minmax(0,0.8fr))_120px_24px] md:p-5"
                 >
                   <div className="min-w-0">
@@ -124,7 +136,7 @@ export default function Jobs() {
                     )}
                   </div>
                   <Metric label="Pass rate" value={pct((moving ? target : current)?.weighted_pass_rate)} />
-                  <Metric label="Spend 30 d" value={usd(spendByJob.get(job.name) ?? 0)} />
+                  <Metric label={`Spend ${period} d`} value={usd(spendByJob.get(job.name) ?? 0)} />
                   <Metric label="Saving" value={saving > 0 ? `${usd(saving)}/mo` : "–"} good={saving > 0} />
                   <div className="hidden md:block">
                     <Sparkline values={runsByJob.get(job.name) ?? []} color="var(--series-7)" height={34} />
@@ -138,7 +150,7 @@ export default function Jobs() {
       )}
 
       <Reveal delay={0.1}>
-        <p className="text-center text-xs text-muted">The line on the right is runs per day over the last 30 days.</p>
+        <p className="text-center text-xs text-muted">The line on the right is runs per day over the last {period} days.</p>
       </Reveal>
 
       <JobCreatePanel isOpen={creating} onClose={() => setCreating(false)} onSuccess={(message) => { setCreating(false); setNotice(message); }} />

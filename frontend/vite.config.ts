@@ -9,7 +9,7 @@ function mockApiPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = req.url || "";
-        if (!url.startsWith("/v1") && !url.startsWith("/auth")) {
+        if (!url.startsWith("/v1") && !url.startsWith("/auth") && !url.startsWith("/healthz")) {
           return next();
         }
 
@@ -90,6 +90,7 @@ export default defineConfig(() => {
         : {
             "/v1": "http://127.0.0.1:8000",
             "/auth": "http://127.0.0.1:8000",
+            "/healthz": "http://127.0.0.1:8000",
           },
     },
     test: {

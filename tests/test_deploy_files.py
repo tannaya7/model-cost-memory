@@ -39,6 +39,14 @@ def test_caddy_proxies_the_api_without_buffering_and_serves_the_app():
     assert "{$DOMAIN}" in caddyfile
 
 
+def test_every_health_check_reaches_the_api_not_the_web_app():
+    """/healthz/scheduler must be proxied: served as the web app it would answer 200 with HTML, so an uptime
+    monitor would never see a stopped scheduler."""
+    caddyfile = (ROOT / "deploy" / "Caddyfile").read_text(encoding="utf8")
+    matcher = next(line for line in caddyfile.splitlines() if line.strip().startswith("@api path"))
+    assert "/healthz/*" in matcher.split() and "/healthz" in matcher.split()
+
+
 def test_caddy_stops_other_sites_framing_or_scripting_the_app():
     caddyfile = (ROOT / "deploy" / "Caddyfile").read_text(encoding="utf8")
     policy = next(line for line in caddyfile.splitlines() if "Content-Security-Policy" in line)

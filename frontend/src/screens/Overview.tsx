@@ -1,4 +1,5 @@
 /** Overview: am I wasting money, is anything broken, where does the money go. */
+import { useP } from "../app/project";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { useAllRegressions, useDeprecatedModels } from "../features/alerts/hooks/useAlerts";
@@ -19,6 +20,7 @@ import { ButtonLink, EmptyState, ErrorState, ModelName, Panel, PanelHeader, Pill
 import { Delta, monthlySaving, StatTile, useAllRecommendations, VerdictPill } from "./shared";
 
 function Hero({ saving, movable, jobs, loading }: { saving: number; movable: number; jobs: number; loading: boolean }) {
+  const p = useP();
   const someone = movable === 1 ? "One job" : `${movable} jobs`;
   return (
     <Panel glow className="p-6 md:p-9">
@@ -62,7 +64,7 @@ function Hero({ saving, movable, jobs, loading }: { saving: number; movable: num
           )}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <ButtonLink to="/jobs" variant="primary">
+          <ButtonLink to={p("/jobs")} variant="primary">
             See every job <IconArrowRight size={16} />
           </ButtonLink>
         </div>
@@ -125,6 +127,7 @@ function Pipeline({ jobs, verdicts }: { jobs: Job[]; verdicts: number }) {
 }
 
 function JobTile({ job, rec, index }: { job: Job; rec: Recommendation | null; index: number }) {
+  const p = useP();
   const saving = monthlySaving(rec);
   const current = rec?.models.find((m) => m.model === rec.current?.model);
   const recommended = rec?.models.find((m) => m.model === rec.recommended?.model);
@@ -132,7 +135,7 @@ function JobTile({ job, rec, index }: { job: Job; rec: Recommendation | null; in
   return (
     <motion.li initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 * index }}>
       <Link
-        to={`/jobs/${encodeURIComponent(job.name)}`}
+        to={p(`/jobs/${encodeURIComponent(job.name)}`)}
         className="panel group flex h-full flex-col gap-4 p-5 transition-all hover:-translate-y-0.5 hover:border-rule-strong"
       >
         <div className="flex items-start justify-between gap-2">
@@ -175,20 +178,21 @@ function JobTile({ job, rec, index }: { job: Job; rec: Recommendation | null; in
 }
 
 function Attention() {
+  const p = useP();
   const regressions = useAllRegressions();
   const deprecated = useDeprecatedModels();
   const limits = useLimits();
   const items = [
     ...(regressions.data ?? [])
       .filter((a) => a.resolved_at === null)
-      .map((a) => ({ key: a.alert_id, tone: "bad" as const, icon: <IconAlert size={16} />, title: a.summary, sub: a.job, to: `/jobs/${encodeURIComponent(a.job)}?tab=quality` })),
+      .map((a) => ({ key: a.alert_id, tone: "bad" as const, icon: <IconAlert size={16} />, title: a.summary, sub: a.job, to: p(`/jobs/${encodeURIComponent(a.job)}?tab=quality`) })),
     ...(deprecated.data ?? []).map((m) => ({
       key: m.model,
       tone: "warn" as const,
       icon: <IconClock size={16} />,
       title: `${m.model} ${m.status === "RETIRED" ? "has been retired" : "is being retired"}`,
       sub: m.shutdown_date ? `Shutdown ${new Date(m.shutdown_date).toLocaleDateString("en", { day: "numeric", month: "short", year: "numeric" })}` : "No shutdown date published",
-      to: "/models",
+      to: p("/models"),
     })),
     ...(limits.data ?? [])
       .filter((l) => l.state === "AT_RISK" || l.state === "EXHAUSTED")
@@ -198,7 +202,7 @@ function Attention() {
         icon: <IconBolt size={16} />,
         title: `${l.name} ${l.state === "EXHAUSTED" ? "is used up" : `runs out in ${Math.round(l.hours_to_full ?? 0)} h`}`,
         sub: `Resets in ${Math.round(l.hours_to_reset)} h`,
-        to: "/settings#limits",
+        to: p("/settings#limits"),
       })),
   ];
   return (
@@ -233,6 +237,7 @@ function Attention() {
 }
 
 export default function Overview() {
+  const p = useP();
   const jobsQuery = useJobs();
   const jobs = jobsQuery.data;
   const { byJob, isPending: recsPending } = useAllRecommendations(jobs);
@@ -352,14 +357,14 @@ export default function Overview() {
             <h2 className="text-lg font-semibold tracking-tight">Your jobs</h2>
             <p className="text-sm text-dim">Each job is one kind of AI task, judged on its own runs.</p>
           </div>
-          <Link to="/jobs" className="text-sm font-semibold text-accent hover:underline">All jobs →</Link>
+          <Link to={p("/jobs")} className="text-sm font-semibold text-accent hover:underline">All jobs →</Link>
         </div>
         {jobsQuery.isPending ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {[0, 1, 2].map((i) => <Skeleton key={i} className="h-44" />)}
           </div>
         ) : !jobs || jobs.length === 0 ? (
-          <EmptyState icon={<IconJobs size={18} />} title="No jobs yet" hint="Create a job, then record runs against it with the SDK." action={<ButtonLink to="/jobs" variant="primary">Create a job</ButtonLink>} />
+          <EmptyState icon={<IconJobs size={18} />} title="No jobs yet" hint="Create a job, then record runs against it with the SDK." action={<ButtonLink to={p("/jobs")} variant="primary">Create a job</ButtonLink>} />
         ) : (
           <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {[...jobs]

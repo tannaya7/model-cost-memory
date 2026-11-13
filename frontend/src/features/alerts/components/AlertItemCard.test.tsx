@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import { renderWithProviders } from "../../../test/render";
 import type { Alert, News } from "../../../shared/api/types";
+import { WithProject } from "../../../app/project";
 import { AlertItemCard, newsWindow } from "./AlertItemCard";
 
 let requested: string[] = [];
@@ -55,10 +56,10 @@ describe("AlertItemCard", () => {
   });
 
   it("links to the failing runs of the job", () => {
-    renderWithProviders(<AlertItemCard item={{ kind: "regression", alert: regression(), ...at }} />);
+    renderWithProviders(<WithProject id="acme"><AlertItemCard item={{ kind: "regression", alert: regression(), ...at }} /></WithProject>);
     expect(screen.getByRole("link", { name: /See the failing runs/ })).toHaveAttribute(
       "href",
-      "/runs?job=invoice-extract&outcome=FAIL",
+      "/p/acme/jobs/invoice-extract?tab=runs&outcome=FAIL",
     );
   });
 

@@ -1,4 +1,5 @@
 /** Starting a re-test, and following one. Reached from a job's verdict or its Re-tests tab. */
+import { useP } from "../app/project";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { RetestProgress } from "../features/retest/components/RetestProgress";
 import { RetestStartPanel } from "../features/retest/components/RetestStartPanel";
@@ -7,13 +8,14 @@ import { IconArrowRight, IconFlask } from "../ui/icons";
 import { EmptyState, ErrorState, Panel, Skeleton } from "../ui/primitives";
 
 function Crumbs({ job, last }: { job: string; last: string }) {
+  const p = useP();
   return (
     <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-muted">
-      <Link to="/jobs" className="hover:text-ink">Jobs</Link>
+      <Link to={p("/jobs")} className="hover:text-ink">Jobs</Link>
       {job && (
         <>
           <IconArrowRight size={13} />
-          <Link to={`/jobs/${encodeURIComponent(job)}?tab=retests`} className="font-mono hover:text-ink">{job}</Link>
+          <Link to={p(`/jobs/${encodeURIComponent(job)}?tab=retests`)} className="font-mono hover:text-ink">{job}</Link>
         </>
       )}
       <IconArrowRight size={13} />
@@ -66,11 +68,12 @@ export function RetestRun() {
 }
 
 export function NotFound() {
+  const p = useP();
   return (
     <div className="flex flex-col items-center gap-4 py-24 text-center">
       <p className="text-gradient text-7xl font-semibold tracking-tight">404</p>
       <p className="text-lg font-semibold">This page does not exist</p>
-      <Link to="/" className="text-sm font-semibold text-accent hover:underline">Back to the overview</Link>
+      <Link to={p("/")} className="text-sm font-semibold text-accent hover:underline">Back to the overview</Link>
     </div>
   );
 }

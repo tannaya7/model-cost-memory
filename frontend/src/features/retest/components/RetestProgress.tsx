@@ -1,3 +1,4 @@
+import { useP } from "../../../app/project";
 import { Link } from "react-router-dom";
 import { Card } from "../../../shared/components/Card";
 import { Badge } from "../../../shared/components/Badge";
@@ -29,6 +30,7 @@ function getStatusBadge(status: RetestExecutionStatus) {
 }
 
 export function RetestProgress({ retest }: { retest: RetestStatus }) {
+  const p = useP();
   const isFinished =
     retest.status === "DONE" ||
     retest.status === "STOPPED_BUDGET" ||
@@ -61,13 +63,13 @@ export function RetestProgress({ retest }: { retest: RetestStatus }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <Link
-              to={`/jobs/${encodeURIComponent(retest.job)}`}
+              to={p(`/jobs/${encodeURIComponent(retest.job)}?tab=retests`)}
               className="rounded-md border border-rule bg-surface px-3 py-1.5 text-xs font-medium text-dim hover:bg-bg hover:text-ink"
             >
               Job: {retest.job}
             </Link>
             <Link
-              to={`/retest?job=${encodeURIComponent(retest.job)}`}
+              to={p(`/retest?job=${encodeURIComponent(retest.job)}`)}
               className="rounded-md border border-rule bg-surface px-3 py-1.5 text-xs font-medium text-accent hover:bg-bg"
             >
               + New Re-test
@@ -228,7 +230,7 @@ export function RetestProgress({ retest }: { retest: RetestStatus }) {
             </div>
             <div className="flex flex-wrap gap-2">
               <Link
-                to={`/jobs/${encodeURIComponent(retest.job)}?tab=compare`}
+                to={p(`/jobs/${encodeURIComponent(retest.job)}`)}
                 className="rounded-md bg-accent px-4 py-2 text-xs font-semibold text-on-accent hover:opacity-90 transition-opacity"
               >
                 Compare in Job Details →

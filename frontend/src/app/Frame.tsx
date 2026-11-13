@@ -3,8 +3,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { getActiveProject, setActiveProject } from "../shared/api/apiFetch";
-import { queryClient } from "../shared/api/queryClient";
+import { useP, useProject } from "./project";
 import { RouteErrorBoundary } from "../shared/components/RouteErrorBoundary";
 import { useAlertsCount } from "../features/alerts/hooks/useAlertsCount";
 import { useLogout, useMe } from "../features/auth/hooks/useAuth";
@@ -31,6 +30,12 @@ const NAV = [
   { to: "/activity", label: "Activity", icon: IconActivity },
 ];
 
+/** The four destinations, inside the current project. */
+function useNav() {
+  const p = useP();
+  return NAV.map((item) => ({ ...item, to: p(item.to) }));
+}
+
 function useOutsideClose(open: boolean, close: () => void) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -50,13 +55,20 @@ function useOutsideClose(open: boolean, close: () => void) {
 }
 
 function ProjectSwitcher() {
+  const { id: active, mode } = useProject();
   const projects = useProjects();
   const [open, setOpen] = useState(false);
   const ref = useOutsideClose(open, () => setOpen(false));
   const navigate = useNavigate();
-  const active = getActiveProject();
-  const list = projects.data ?? [];
+  const list = mode === "owned" ? projects.data ?? [] : [];
   const current = list.find((p) => p.project_id === active);
+  if (mode !== "owned") {
+    return (
+      <span className="rounded-full border border-rule px-2.5 py-1 text-xs font-semibold text-dim">
+        {mode === "demo" ? "Public demo · read only" : "Using a project key"}
+      </span>
+    );
+  }
   if (projects.isError || list.length === 0) return null;
   return (
     <div ref={ref} className="relative">
@@ -83,10 +95,8 @@ function ProjectSwitcher() {
                 key={p.project_id}
                 type="button"
                 onClick={() => {
-                  setActiveProject(p.project_id);
-                  void queryClient.invalidateQueries();
                   setOpen(false);
-                  navigate("/");
+                  navigate(`/p/${encodeURIComponent(p.project_id)}`);
                 }}
                 className={cx(
                   "flex w-full items-center justify-between rounded-[10px] px-3 py-2 text-left text-sm transition-colors hover:bg-surface-3",
@@ -99,7 +109,7 @@ function ProjectSwitcher() {
             ))}
             <div className="my-1 h-px bg-rule" />
             <Link to="/projects" onClick={() => setOpen(false)} className="block rounded-[10px] px-3 py-2 text-sm text-accent hover:bg-surface-3">
-              All projects and new project
+              All projects · new project
             </Link>
           </motion.div>
         )}
@@ -109,6 +119,8 @@ function ProjectSwitcher() {
 }
 
 function AccountMenu() {
+  const p = useP();
+  const { mode } = useProject();
   const { data: user } = useMe();
   const logout = useLogout();
   const navigate = useNavigate();
@@ -143,9 +155,9 @@ function AccountMenu() {
             )}
             <div className="my-1 h-px bg-rule" />
             {[
-              { to: "/settings", label: "Settings" },
-              { to: "/settings#limits", label: "Usage limits" },
-              { to: "/projects", label: "Projects" },
+              ...(user ? [{ to: "/projects", label: "All projects" }] : []),
+              { to: p("/settings"), label: mode === "demo" ? "About this demo" : "Project settings" },
+              { to: p("/settings#limits"), label: "Usage limits" },
             ].map((item) => (
               <Link key={item.to} to={item.to} onClick={() => setOpen(false)} className="block rounded-[10px] px-3 py-2 text-sm text-dim hover:bg-surface-3 hover:text-ink">
                 {item.label}
@@ -162,7 +174,7 @@ function AccountMenu() {
                     } catch {
                       /* signed out either way */
                     }
-                    navigate("/signin");
+                    navigate("/");
                   }}
                   className="block w-full rounded-[10px] px-3 py-2 text-left text-sm text-dim hover:bg-surface-3 hover:text-ink"
                 >
@@ -184,23 +196,24 @@ interface Command {
 }
 
 function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const p = useP();
   const jobs = useJobs();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const commands = useMemo<Command[]>(() => {
     const pages: Command[] = [
-      { label: "Overview", hint: "Savings, spend and what needs attention", to: "/" },
-      { label: "Jobs", hint: "Every job and its verdict", to: "/jobs" },
-      { label: "Models", hint: "Prices, retirements and the catalog", to: "/models" },
-      { label: "Activity", hint: "Alerts, re-tests, live runs and AI news", to: "/activity" },
-      { label: "Alerts", hint: "Regressions, silent drops, retirements", to: "/activity?tab=alerts" },
-      { label: "Live pipeline", hint: "Runs crossing the system right now", to: "/activity?tab=live" },
-      { label: "AI news", hint: "Stories about your models", to: "/activity?tab=news" },
-      { label: "Settings", hint: "Project, keys, alerts webhook, retention", to: "/settings" },
-      { label: "Usage limits", hint: "Plan limits and when they run out", to: "/settings#limits" },
+      { label: "Overview", hint: "Savings, spend and what needs attention", to: p("/") },
+      { label: "Jobs", hint: "Every job and its verdict", to: p("/jobs") },
+      { label: "Models", hint: "Prices, retirements and the catalog", to: p("/models") },
+      { label: "Activity", hint: "Alerts, re-tests, live runs and AI news", to: p("/activity") },
+      { label: "Alerts", hint: "Regressions, silent drops, retirements", to: p("/activity?tab=alerts") },
+      { label: "Live pipeline", hint: "Runs crossing the system right now", to: p("/activity?tab=live") },
+      { label: "AI news", hint: "Stories about your models", to: p("/activity?tab=news") },
+      { label: "Settings", hint: "Project, keys, alerts webhook, retention", to: p("/settings") },
+      { label: "Usage limits", hint: "Plan limits and when they run out", to: p("/settings#limits") },
     ];
-    const jobItems = (jobs.data ?? []).map((j) => ({ label: j.name, hint: "Job", to: `/jobs/${encodeURIComponent(j.name)}` }));
+    const jobItems = (jobs.data ?? []).map((j) => ({ label: j.name, hint: "Job", to: p(`/jobs/${encodeURIComponent(j.name)}`) }));
     const q = query.trim().toLowerCase();
     return [...jobItems, ...pages].filter((c) => !q || c.label.toLowerCase().includes(q) || c.hint.toLowerCase().includes(q)).slice(0, 9);
   }, [jobs.data, query]);
@@ -302,6 +315,9 @@ function PageFallback() {
 }
 
 export function Frame() {
+  const p = useP();
+  const nav = useNav();
+  const { data: user } = useMe();
   const { pathname, search } = useLocation();
   const { count: alerts } = useAlertsCount();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -326,7 +342,7 @@ export function Frame() {
       <div className="min-h-screen">
         <header className="sticky top-0 z-40 border-b border-rule bg-bg/75 backdrop-blur-xl">
           <div className="mx-auto flex h-16 max-w-[1320px] items-center gap-3 px-4 md:px-6">
-            <Link to="/" className="flex items-center gap-2.5" aria-label="Model & Cost Memory, overview">
+            <Link to={user ? "/projects" : p("/")} className="flex items-center gap-2.5" aria-label={user ? "All projects" : "Overview"}>
               <IconLogo size={28} />
               <span className="hidden text-[15px] font-semibold tracking-tight lg:inline">Model &amp; Cost Memory</span>
             </Link>
@@ -336,7 +352,7 @@ export function Frame() {
             </div>
 
             <nav aria-label="Main" className="mx-auto hidden items-center gap-1 md:flex">
-              {NAV.map(({ to, label, icon: Icon, end }) => (
+              {nav.map(({ to, label, icon: Icon, end }) => (
                 <NavLink
                   key={to}
                   to={to}
@@ -384,14 +400,14 @@ export function Frame() {
                 <IconSearch size={17} />
               </button>
               <Link
-                to="/activity?tab=alerts"
+                to={p("/activity?tab=alerts")}
                 aria-label={alerts ? `${alerts} open alerts` : "Alerts"}
                 className="relative grid h-9 w-9 place-items-center rounded-[10px] text-muted transition-colors hover:bg-surface-2 hover:text-ink"
               >
                 <IconBell size={18} />
                 {alerts > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-bad ring-2 ring-bg" />}
               </Link>
-              <Link to="/settings" aria-label="Settings" className="hidden h-9 w-9 place-items-center rounded-[10px] text-muted hover:bg-surface-2 hover:text-ink sm:grid">
+              <Link to={p("/settings")} aria-label="Project settings" className="hidden h-9 w-9 place-items-center rounded-[10px] text-muted hover:bg-surface-2 hover:text-ink sm:grid">
                 <IconSettings size={18} />
               </Link>
               <AccountMenu />
@@ -420,7 +436,7 @@ export function Frame() {
         {/* Phone: the four destinations as a bottom bar */}
         <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-bg/90 backdrop-blur-xl md:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
           <ul className="grid grid-cols-4">
-            {NAV.map(({ to, label, icon: Icon, end }) => (
+            {nav.map(({ to, label, icon: Icon, end }) => (
               <li key={to}>
                 <NavLink
                   to={to}
