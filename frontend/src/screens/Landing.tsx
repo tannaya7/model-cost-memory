@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import {
   AnimatePresence,
   motion,
+  useAnimationControls,
   useInView,
   useMotionValue,
   useReducedMotion,
@@ -23,16 +24,39 @@ import { ThemeToggle } from "../ui/ThemeToggle";
 /* ----------------------------------------------------------------------------------------------- */
 /* Small pieces                                                                                     */
 
-/** Rises into place when scrolled into view, and sinks back out when scrolled away (both directions). */
+/** Which way the page last scrolled: 1 down, -1 up. Shared by every Reveal. */
+let scrollDir: 1 | -1 = 1;
+if (typeof window !== "undefined") {
+  let lastY = window.scrollY;
+  window.addEventListener(
+    "scroll",
+    () => {
+      const now = window.scrollY;
+      if (now !== lastY) scrollDir = now > lastY ? 1 : -1;
+      lastY = now;
+    },
+    { passive: true },
+  );
+}
+
+/** Moves with the scroll, both ways. Scrolling down, it rises in from below and leaves through the
+ * top; scrolling up, it drops in from above and leaves through the bottom. */
 function Reveal({ children, delay = 0, className, y = 24 }: { children: ReactNode; delay?: number; className?: string; y?: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { amount: 0.2 });
+  const controls = useAnimationControls();
+  const reduce = useReducedMotion();
+  const shift = reduce ? 0 : y;
+  useEffect(() => {
+    if (inView) {
+      controls.set({ opacity: 0, y: scrollDir * shift });
+      controls.start({ opacity: 1, y: 0, transition: { duration: 0.7, delay, ease: [0.22, 1, 0.36, 1] } });
+    } else {
+      controls.start({ opacity: 0, y: -scrollDir * shift, transition: { duration: 0.35 } });
+    }
+  }, [inView, controls, delay, shift]);
   return (
-    <motion.div
-      initial={{ opacity: 0, y }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: false, amount: 0.2 }}
-      transition={{ duration: 0.7, delay, ease: [0.22, 1, 0.36, 1] }}
-      className={className}
-    >
+    <motion.div ref={ref} initial={{ opacity: 0, y: shift }} animate={controls} className={className}>
       {children}
     </motion.div>
   );
