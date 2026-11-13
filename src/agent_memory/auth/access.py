@@ -9,7 +9,7 @@ Three ways in, checked in this order:
 3. **The public demo** (`DEMO_PROJECT_ID`): anyone may *read* that one project, never change it, and
    never start a re-test, so the public cannot spend the API budget. Only the pages the demo shows are
    open (DEMO_READABLE): jobs, runs, recommendations and their history, alerts, insights, usage limits,
-   the model catalog and the live flow. Re-test history, the provider-key status and the re-test cap
+   the model catalog, the live flow and the AI news. Re-test history, the provider-key status and the re-test cap
    are not: they describe the operator's account, not the demo, and are refused with 403.
 """
 
@@ -33,7 +33,7 @@ READ_METHODS = ("GET", "HEAD", "OPTIONS")
 DEMO_READABLE = frozenset({
     "/v1/jobs", "/v1/jobs/{job}/recommendation", "/v1/jobs/{job}/history", "/v1/jobs/{job}/regressions",
     "/v1/jobs/{job}/insights", "/v1/runs", "/v1/runs/{run_id}", "/v1/insights/spend", "/v1/alerts",
-    "/v1/models", "/v1/flow", "/v1/flow/stream", "/v1/limits",
+    "/v1/models", "/v1/flow", "/v1/flow/stream", "/v1/limits", "/v1/news",
 })
 
 

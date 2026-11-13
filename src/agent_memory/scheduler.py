@@ -10,6 +10,7 @@
   catalog-sync     daily, and once directly at start   refreshes prices, statuses and shutdown dates; alerts
                                   for recommended models that were deprecated or retired, and
                                   re-tests for new models cheaper than what a job uses now
+  news             every hour     fetches the AI news feeds (news/); the web app can ask sooner
   retention        daily          clears the prompt, answer, tool calls and answer key of runs older
                                   than their project's retention (retention.py)
 
@@ -44,6 +45,7 @@ from .pipeline.consolidation import consolidate_all
 from .pipeline.decay import recompute
 from .pipeline.janitor import run_janitor
 from .pipeline.regression import sweep_all
+from .news.service import refresh as news_refresh
 from .retention import clear_old_content
 from .retest.runner import run_queued, start_for_new_models, start_when_unsure
 
@@ -84,6 +86,10 @@ async def run_retention(sessions: async_sessionmaker[AsyncSession], settings: Se
         return await clear_old_content(session)
 
 
+async def run_news(sessions: async_sessionmaker[AsyncSession], settings: Settings | None = None) -> bool:
+    return (await news_refresh(sessions)).refreshed  # False only when every feed failed
+
+
 async def run_catalog_sync(
     sessions: async_sessionmaker[AsyncSession],
     settings: Settings | None = None,
@@ -119,6 +125,7 @@ def build_scheduler(sessions: async_sessionmaker[AsyncSession], settings: Settin
         (run_alert_delivery, {"seconds": 60}, "alert-delivery"),
         (run_retests, {"seconds": 30}, "retests"),
         (run_retest_unsure, {"hours": 1}, "retest-unsure"),
+        (run_news, {"hours": 1}, "news"),
     ]
     for fn, every, job_id in jobs:
         scheduler.add_job(tracked(job_id, fn), "interval", **every, args=[sessions, settings], id=job_id, **common)

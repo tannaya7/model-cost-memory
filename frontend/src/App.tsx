@@ -16,6 +16,7 @@ const AlertsPage = lazy(() => import("./pages/AlertsPage"));
 const HistoryPage = lazy(() => import("./pages/HistoryPage"));
 const RetestPage = lazy(() => import("./pages/RetestPage"));
 const LimitsPage = lazy(() => import("./pages/LimitsPage"));
+const NewsPage = lazy(() => import("./pages/NewsPage"));
 const RetestRunPage = lazy(() => import("./pages/RetestRunPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
@@ -41,6 +42,7 @@ const router = createBrowserRouter([
           { path: "/history", element: <HistoryPage /> },
           { path: "/retest", element: <RetestPage /> },
           { path: "/limits", element: <LimitsPage /> },
+          { path: "/news", element: <NewsPage /> },
           { path: "/retest/:retestId", element: <RetestRunPage /> },
           { path: "/settings", element: <SettingsPage /> },
           { path: "/projects", element: <ProjectsPage /> },

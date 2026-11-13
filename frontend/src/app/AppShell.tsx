@@ -17,6 +17,7 @@ export const NAV = [
   { to: "/models", label: "Models" },
   { to: "/alerts", label: "Alerts" },
   { to: "/history", label: "History" },
+  { to: "/news", label: "AI news" },
   { to: "/retest", label: "Re-test" },
   { to: "/settings", label: "Settings" },
   { to: "/projects", label: "Projects" },

@@ -1,8 +1,25 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import { renderWithProviders } from "../../../test/render";
-import type { Alert } from "../../../shared/api/types";
-import { AlertItemCard } from "./AlertItemCard";
+import type { Alert, News } from "../../../shared/api/types";
+import { AlertItemCard, newsWindow } from "./AlertItemCard";
+
+let requested: string[] = [];
+let newsItems: News["items"] = [];
+
+beforeEach(() => {
+  requested = [];
+  newsItems = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    requested.push(url);
+    const body: News = { items: newsItems, sources: [], your_models: [], updated_at: null, next_refresh_at: null };
+    return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+  }));
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function regression(overrides: Partial<Alert> = {}): Alert {
   return {
@@ -56,5 +73,28 @@ describe("AlertItemCard", () => {
     renderWithProviders(<AlertItemCard item={{ kind: "regression", alert: resolved, ...at }} />);
     expect(screen.getByText(/^Resolved/)).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("shows what was said about the model around when the alert was raised", async () => {
+    newsItems = [{
+      item_id: "n1", source: "Acme Labs", kind: "lab", title: "acme-mini 2026-10-01 changes output formatting",
+      link: "https://example.com/acme", summary: "", published_at: "2026-10-01T10:00:00Z", affects: ["acme-mini"],
+    }];
+    renderWithProviders(<AlertItemCard item={{ kind: "regression", alert: regression(), ...at }} />);
+    expect(await screen.findByText("In the news around this alert")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /changes output formatting/ })).toBeInTheDocument();
+    const url = new URL(requested[0], "http://test");
+    expect(url.pathname).toBe("/v1/news");
+    expect(url.searchParams.get("model")).toBe("acme-mini");
+    expect(url.searchParams.get("since")).toBe(newsWindow("2026-11-10T09:00:00Z").since);
+  });
+});
+
+describe("newsWindow", () => {
+  it("runs from two weeks before an alert to three days after", () => {
+    expect(newsWindow("2026-11-15T00:00:00Z")).toEqual({
+      since: "2026-11-01T00:00:00.000Z",
+      until: "2026-11-18T00:00:00.000Z",
+    });
   });
 });

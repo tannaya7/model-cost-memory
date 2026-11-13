@@ -42,6 +42,7 @@ INTERVALS = {
     "retest-unsure": timedelta(hours=1),
     "catalog-sync": timedelta(days=1),
     "retention": timedelta(days=1),
+    "news": timedelta(hours=1),
 }
 LEADER = "scheduler"  # the row recording when this scheduler took the lead
 ALLOWANCE = 3

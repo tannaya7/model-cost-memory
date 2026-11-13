@@ -30,6 +30,10 @@ recommended and why it changed.
   option proven to still do it, at a model and reasoning effort (`sonnet-5@low` instead of `opus-5-5@medium`).
 - A React web app: Google sign-in, projects and keys, recommendations, evidence, history, alerts, re-tests,
   spend, breakdowns and a live view of runs crossing the pipeline.
+- **News about your models**: headlines from the model makers, the press and the community, refreshed hourly.
+  Each alert shows what was said about its model around when it happened (a silent drop often has an
+  announcement behind it), each job page and the overview show the stories naming the models in use, and a
+  full AI news page lists everything, with "Affects my models" as a filter.
 - **Customers' data has an end**: a run's prompt and answer are deleted after the project's retention (90 days
   by default; the figures stay), and an owner can delete a project and everything recorded under it.
 

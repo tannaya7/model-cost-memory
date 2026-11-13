@@ -585,3 +585,41 @@ class UsageLimitOut(Model):
     suggestions: list[LimitSuggestionOut]
     hours_to_full_after: float | None = Field(description="Hours until used up if the suggestions are followed")
     lasts_after: bool | None = Field(description="Whether following the suggestions makes it last until the reset")
+
+
+class NewsItemOut(Model):
+    item_id: str
+    source: str = Field(description="Who published it, e.g. 'OpenAI' or 'Hacker News'")
+    kind: Literal["lab", "press", "community"] = Field(
+        description="lab: a model maker's own announcement; press: AI reporting; community: blogs and forums")
+    title: str
+    link: str = Field(description="The story itself (http or https)")
+    summary: str = Field(description="Plain text, at most about 400 characters; never HTML")
+    published_at: datetime
+    affects: list[str] = Field(description="This project's models the story names; empty if none")
+
+
+class NewsSourceOut(Model):
+    source: str
+    kind: Literal["lab", "press", "community"]
+
+
+class NewsOut(Model):
+    """The latest AI news, newest first, with the stories that name this project's models marked."""
+
+    items: list[NewsItemOut]
+    sources: list[NewsSourceOut] = Field(description="Every feed the news comes from")
+    your_models: list[str] = Field(
+        description="The models the stories were matched against: the project's from the last 90 days, the "
+                    "job's with `job`, or the one `model` asked about")
+    updated_at: datetime | None = Field(description="When the feeds were last fetched; null if never")
+    next_refresh_at: datetime | None = Field(description="The earliest a refresh fetches again")
+
+
+class NewsRefreshOut(Model):
+    refreshed: bool = Field(description="False when the last fetch was too recent, or every feed failed")
+    added: int = Field(description="New stories stored by this refresh")
+    failed_sources: list[str]
+    updated_at: datetime | None
+    next_refresh_at: datetime | None
+
