@@ -4,8 +4,12 @@
 	encode gzip
 
 	# The API and sign-in. flush_interval -1 turns off buffering so Server-Sent Events arrive live.
-	@api path /v1/* /auth/* /healthz
+	@api path /v1/* /auth/* /healthz /healthz/*
 	handle @api {
+		# Refuse oversized bodies before they reach the API (which also checks: ratelimit.py, 5 MB).
+		request_body {
+			max_size 5MB
+		}
 		reverse_proxy api:8000 {
 			flush_interval -1
 		}
@@ -19,9 +23,16 @@
 		file_server
 	}
 
+	# The web app loads everything from this origin (no CDNs, no third-party scripts), so the policy can be
+	# strict: no other site may run script here or show the app in a frame. Inline styles stay allowed
+	# because the charts and animations set them; inline scripts do not.
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		X-Frame-Options "DENY"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
 	}
 }

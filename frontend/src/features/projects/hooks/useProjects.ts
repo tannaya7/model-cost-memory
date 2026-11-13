@@ -5,6 +5,7 @@ import type {
 } from "../../../shared/api/types";
 import {
   createProject,
+  deleteProject,
   fetchProject,
   fetchProjects,
   patchProject,
@@ -63,6 +64,18 @@ export function useRegenerateProjectKey() {
     onSuccess: (_data, id) => {
       void queryClient.invalidateQueries({ queryKey: projectsKey });
       void queryClient.invalidateQueries({ queryKey: projectDetailKey(id) });
+    },
+  });
+}
+
+export function useDeleteProject() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => deleteProject(id),
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: projectDetailKey(id) });
+      void queryClient.invalidateQueries({ queryKey: projectsKey });
     },
   });
 }

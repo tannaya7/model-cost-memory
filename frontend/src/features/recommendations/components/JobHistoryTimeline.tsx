@@ -161,7 +161,7 @@ export function JobHistoryTimeline({ jobName }: { jobName: string }) {
                     {/* Footer link to runs */}
                     <div className="flex justify-end pt-1">
                       <Link
-                        to={`/runs?recommendation=${entry.recommendation_id}`}
+                        to={`?tab=runs&recommendation=${entry.recommendation_id}`}
                         className="text-xs font-semibold text-accent hover:underline"
                       >
                         See these runs →

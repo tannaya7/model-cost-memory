@@ -1,3 +1,4 @@
+import { useP } from "../../../app/project";
 import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Alert, Model } from "../../../shared/api/types";
@@ -5,6 +6,7 @@ import { resolveAlert } from "../api/alertsApi";
 import { deprecated, formatPValue, silentDrop, versionRegression } from "../details";
 import { Badge } from "../../../shared/components/Badge";
 import { Card } from "../../../shared/components/Card";
+import { RelatedNews } from "../../news/components/RelatedNews";
 import {
   formatShutdownCountdown,
   formatShutdownDate,
@@ -38,11 +40,20 @@ function formatLocalDate(iso: string): string {
   }
 }
 
+const DAY = 86_400_000;
+
+/** Stories from two weeks before an alert to three days after it: an announcement usually comes first. */
+export function newsWindow(createdAt: string): { since: string; until: string } {
+  const at = new Date(createdAt).getTime();
+  return { since: new Date(at - 14 * DAY).toISOString(), until: new Date(at + 3 * DAY).toISOString() };
+}
+
 export type AlertListItem =
   | { kind: "regression"; alert: Alert; timestamp: string }
   | { kind: "deprecation"; model: Model; timestamp: string };
 
 export function AlertItemCard({ item }: { item: AlertListItem }) {
+  const p = useP();
   if (item.kind === "deprecation") {
     const { model } = item;
     const { text, isUrgent } = model.shutdown_date
@@ -80,12 +91,15 @@ export function AlertItemCard({ item }: { item: AlertListItem }) {
             )}
           </div>
           <Link
-            to="/models?status=DEPRECATED"
+            to={p("/models")}
             className="text-xs font-semibold text-accent hover:underline"
           >
             View in model catalog →
           </Link>
         </div>
+
+        {/* The provider's own announcement usually says what to move to */}
+        <RelatedNews title="In the news about this model" filters={{ model: model.model }} />
       </Card>
     );
   }
@@ -110,6 +124,7 @@ function Rates({ before, after, note }: { before: number; after: number; note: s
 }
 
 function AlertCard({ alert }: { alert: Alert }) {
+  const p = useP();
   const queryClient = useQueryClient();
   const resolve = useMutation({
     mutationFn: () => resolveAlert(alert.alert_id),
@@ -122,6 +137,7 @@ function AlertCard({ alert }: { alert: Alert }) {
   const regression = versionRegression(alert);
   const silent = silentDrop(alert);
   const retired = deprecated(alert);
+  const alertModel = regression?.model ?? silent?.model ?? retired?.model;
 
   return (
     <Card className={`space-y-4 ${isResolved ? "opacity-70" : ""}`}>
@@ -135,7 +151,7 @@ function AlertCard({ alert }: { alert: Alert }) {
             <Badge tone="ok">Resolved {formatLocalDate(alert.resolved_at!)}</Badge>
           )}
           <Link
-            to={`/jobs/${encodeURIComponent(alert.job)}`}
+            to={p(`/jobs/${encodeURIComponent(alert.job)}?tab=quality`)}
             className="text-base font-bold text-accent hover:underline"
           >
             {alert.job}
@@ -174,6 +190,14 @@ function AlertCard({ alert }: { alert: Alert }) {
         </>
       )}
 
+      {/* What the model makers and the press said about this model around when it happened */}
+      {alertModel && (
+        <RelatedNews
+          title="In the news around this alert"
+          filters={{ model: alertModel, ...newsWindow(alert.created_at) }}
+        />
+      )}
+
       {/* Footer: summary, delivery, actions */}
       <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-0.5">
@@ -181,6 +205,8 @@ function AlertCard({ alert }: { alert: Alert }) {
           <p className="text-[11px] text-dim">
             {alert.delivered_at
               ? `Sent to the webhook ${formatLocalTimestamp(alert.delivered_at)}`
+              : alert.delivery_failed_at
+              ? `Webhook unreachable after ${alert.delivery_attempts} attempts; stopped trying. Save the webhook URL in Settings to try again`
               : alert.delivery_attempts > 0
               ? `Webhook not reached yet (${alert.delivery_attempts} attempts); retrying`
               : "Not sent to a webhook"}
@@ -188,7 +214,7 @@ function AlertCard({ alert }: { alert: Alert }) {
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <Link
-            to={`/runs?job=${encodeURIComponent(alert.job)}&outcome=FAIL`}
+            to={p(`/jobs/${encodeURIComponent(alert.job)}?tab=runs&outcome=FAIL`)}
             className="text-xs font-semibold text-accent hover:underline"
           >
             See the failing runs →

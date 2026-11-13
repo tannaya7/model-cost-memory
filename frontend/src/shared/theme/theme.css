@@ -1,54 +1,157 @@
-/* The single place for every colour, font and spacing value.
-   Change the look of the whole app by editing only this file. */
-:root {
-  --color-bg: #f6f7fb;
+/* The single place for every colour, font and radius, in two themes.
+
+   Light is the default: a lavender-white room, deep navy ink, and one violet that glows into magenta
+   (the palette of the AICM reference). Dark is the same violet on a night-blue instrument panel.
+   The theme is chosen by data-theme on <html> (public/theme-init.js sets it before the first paint);
+   any element can also carry data-theme="dark" to be a dark band inside a light page.
+   Components only ever use these names, so both themes follow automatically. */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* planes, from the page to the most raised surface */
+  --color-bg: #efeef7;
   --color-surface: #ffffff;
-  --color-ink: #11162b;
-  --color-dim: #5b6488;
-  --color-rule: #dfe3f0;
-  --color-accent: #3552c9;
-  --color-accent-soft: #e8ecfc;
+  --color-surface-2: #f6f5fc;
+  --color-surface-3: #ebe9f6;
+  --color-rule: rgba(24, 20, 70, 0.08);
+  --color-rule-strong: rgba(24, 20, 70, 0.16);
+
+  /* ink */
+  --color-ink: #0e0f33;
+  --color-dim: #484a6e;
+  --color-muted: #6c6e90;
+
+  /* accent: one violet, with a magenta partner for glows and the brand gradient */
+  --color-accent: #7c3aed;
+  --color-accent-2: #d946ef;
+  --color-accent-ink: #6d28d9;
+  --color-accent-soft: rgba(124, 58, 237, 0.1);
   --color-on-accent: #ffffff;
-  --color-overlay: #11162b;
-  --color-ok: #14733f;
-  --color-ok-soft: #e1f5ea;
-  --color-warn: #9a4a00;
-  --color-warn-soft: #fff1e2;
-  --color-bad: #b3261e;
-  --color-bad-soft: #fdeceb;
-  --color-skeleton: #e4e7f1;
+  --color-overlay: #1b1840;
+  --grad-from: #8b5cf6;
+  --grad-to: #6d28d9;
+  --grad-text: linear-gradient(100deg, #6d28d9 0%, #8b5cf6 45%, #c026d3 100%);
 
-  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  /* status: fixed meanings, always shown with an icon and a word */
+  --color-ok: #138a4c;
+  --color-ok-soft: rgba(19, 138, 76, 0.1);
+  --color-warn: #b45309;
+  --color-warn-soft: rgba(217, 119, 6, 0.12);
+  --color-bad: #d42f2f;
+  --color-bad-soft: rgba(212, 47, 47, 0.1);
+  --color-skeleton: #e6e4f1;
+  --tab-active: #ffffff;
 
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
+  /* chart series, validated on white (dataviz validator: all checks pass, light; three slots under 3:1,
+     so every chart has a legend, tooltips and labels) */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+  --series-other: #9a9cb8;
+  --chart-grid: #ecebf4;
+  --chart-axis: #d5d3e6;
+  --chart-tick: #6c6e90;
+  --chart-cursor: rgba(24, 20, 70, 0.18);
+  --chart-hover: rgba(124, 58, 237, 0.06);
 
-  --radius: 0.75rem;
-  --sidebar-width: 15rem;
+  /* the landing scene */
+  --scene-floor: #ecebf6;
+  --scene-line: rgba(80, 60, 160, 0.13);
+  --scene-slab-top: #ffffff;
+  --scene-slab-side: #cdc6e8;
+  --scene-slab-front: #e2ddf3;
+  --scene-tube: rgba(255, 255, 255, 0.62);
+  --scene-tube-edge: rgba(150, 130, 220, 0.45);
+  --scene-shadow: rgba(60, 40, 140, 0.18);
+  --scene-speck: rgba(110, 70, 230, 0.55);
+  --scene-beam: rgba(255, 255, 255, 0.85);
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.9);
+
+  --shadow-panel: 0 1px 2px rgba(24, 20, 70, 0.04), 0 14px 34px -16px rgba(60, 40, 140, 0.16);
+  --shadow-float: 0 30px 60px -24px rgba(60, 40, 140, 0.28);
+  --panel-light: rgba(255, 255, 255, 0);
+  --page-glow-1: rgba(139, 92, 246, 0.12);
+  --page-glow-2: rgba(217, 70, 239, 0.07);
+
+  --font-sans: "Geist Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, Consolas, monospace;
+
+  --radius: 1rem;
+  --radius-sm: 0.625rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg: #0c1020;
-    --color-surface: #141a33;
-    --color-ink: #edf0fb;
-    --color-dim: #9ba4c9;
-    --color-rule: #27315a;
-    --color-accent: #8ea4ff;
-    --color-accent-soft: #1c2550;
-    --color-on-accent: #0c1020;
-    --color-overlay: #000000;
-    --color-ok: #6fdc9c;
-    --color-ok-soft: #12301f;
-    --color-warn: #ffc47a;
-    --color-warn-soft: #2a1d0c;
-    --color-bad: #ff9b94;
-    --color-bad-soft: #3a1513;
-    --color-skeleton: #232b4d;
-  }
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg: #07071a;
+  --color-surface: #100f28;
+  --color-surface-2: #171636;
+  --color-surface-3: #1f1d45;
+  --color-rule: rgba(255, 255, 255, 0.075);
+  --color-rule-strong: rgba(255, 255, 255, 0.14);
+
+  --color-ink: #efeefb;
+  --color-dim: #a6a5c9;
+  --color-muted: #75749a;
+
+  --color-accent: #a78bfa;
+  --color-accent-2: #e879f9;
+  --color-accent-ink: #c4b5fd;
+  --color-accent-soft: rgba(167, 139, 250, 0.15);
+  --color-on-accent: #120f2b;
+  --color-overlay: #000000;
+  --grad-from: #9061f9;
+  --grad-to: #7c3aed;
+  --grad-text: linear-gradient(100deg, #d6c9ff 0%, #a78bfa 40%, #e879f9 100%);
+
+  --color-ok: #3ddc84;
+  --color-ok-soft: rgba(12, 163, 12, 0.16);
+  --color-warn: #fab219;
+  --color-warn-soft: rgba(250, 178, 25, 0.14);
+  --color-bad: #ff6b6b;
+  --color-bad-soft: rgba(208, 59, 59, 0.18);
+  --color-skeleton: #1d1b40;
+  --tab-active: #262452;
+
+  /* chart series, validated on --color-surface (dataviz validator: all checks pass, dark) */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --series-other: #5d6380;
+  --chart-grid: #1e1c3a;
+  --chart-axis: #2e2c56;
+  --chart-tick: #7d7ca6;
+  --chart-cursor: rgba(255, 255, 255, 0.25);
+  --chart-hover: rgba(255, 255, 255, 0.04);
+
+  --scene-floor: #0c0b22;
+  --scene-line: rgba(167, 139, 250, 0.1);
+  --scene-slab-top: #1c1a40;
+  --scene-slab-side: #0f0e29;
+  --scene-slab-front: #151436;
+  --scene-tube: rgba(190, 175, 255, 0.16);
+  --scene-tube-edge: rgba(200, 180, 255, 0.4);
+  --scene-shadow: rgba(0, 0, 0, 0.5);
+  --scene-speck: rgba(200, 170, 255, 0.6);
+  --scene-beam: rgba(167, 139, 250, 0.07);
+  --glass: rgba(20, 18, 48, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.1);
+
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 24px 48px -24px rgba(0, 0, 0, 0.6);
+  --shadow-float: 0 30px 60px -20px rgba(0, 0, 0, 0.8);
+  --panel-light: rgba(255, 255, 255, 0.025);
+  --page-glow-1: rgba(139, 92, 246, 0.12);
+  --page-glow-2: rgba(217, 70, 239, 0.06);
 }

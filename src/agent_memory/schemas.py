@@ -29,6 +29,12 @@ class Health(Model):
     status: Literal["ok"]
 
 
+class SchedulerHealth(Model):
+    status: Literal["ok", "overdue"]
+    overdue: dict[str, float | None] = Field(
+        description="Jobs with no success within their allowance: minutes since the last success, null if never")
+
+
 ModelStatus = Literal["ACTIVE", "DEPRECATED", "RETIRED"]
 
 
@@ -101,8 +107,11 @@ class RunOut(Model):
     run_kind: RunKind
     state: RunState
     created_at: datetime
-    prompt_preview: str = Field(description="First 200 characters of the prompt")
+    prompt_preview: str | None = Field(description="First 200 characters of the prompt; null once retention cleared it")
     output_preview: str | None = Field(description="First 200 characters of the output")
+    content_removed_at: datetime | None = Field(
+        default=None, description="When the prompt, output, tool calls and answer key were cleared under the "
+                                  "project's retention; the figures are kept")
     importance_score: float = Field(default=1.0, description="How much the run matters (failures and costly runs "
                                                              "more): what decides archiving and re-test sampling")
     weight: float | None = Field(default=None, description="How much it counts in the recommendation now: "
@@ -178,7 +187,7 @@ class RunCreate(Model):
 class RunDetail(RunOut):
     """One run in full, for the detail panel."""
 
-    prompt: str
+    prompt: str | None
     output: str | None
     tool_calls: list[dict] | None
 
@@ -367,6 +376,9 @@ class AlertOut(Model):
     created_at: datetime
     delivered_at: datetime | None = Field(description="When the webhook accepted it; null if not (yet)")
     delivery_attempts: int
+    delivery_failed_at: datetime | None = Field(
+        default=None, description="When webhook delivery gave up after its last retry; saving a new webhook URL "
+                                  "tries again. Null while it is delivered or still being tried")
     resolved_at: datetime | None
 
 
@@ -452,6 +464,8 @@ class ProjectOut(Model):
     retest_monthly_cap_usd: float
     retest_allowed: bool
     key_prefix: str | None = Field(description="The first characters of the live project key")
+    content_retention_days: int = Field(
+        default=90, description="Days a run keeps its prompt, output, tool calls and answer key; the figures stay")
     created_at: datetime
 
 
@@ -470,6 +484,9 @@ class ProjectPatch(Model):
                                     description="Must be https; send null to remove")
     retest_monthly_cap_usd: float | None = Field(default=None, ge=0, le=10_000)
     retest_allowed: bool | None = None
+    content_retention_days: int | None = Field(
+        default=None, ge=1, le=3650,
+        description="Days a run keeps its prompt, output, tool calls and answer key (1 to 3650)")
 
 
 class ProjectKey(Model):
@@ -568,3 +585,51 @@ class UsageLimitOut(Model):
     suggestions: list[LimitSuggestionOut]
     hours_to_full_after: float | None = Field(description="Hours until used up if the suggestions are followed")
     lasts_after: bool | None = Field(description="Whether following the suggestions makes it last until the reset")
+
+
+class NewsItemOut(Model):
+    item_id: str
+    source: str = Field(description="Who published it, e.g. 'OpenAI' or 'Hacker News'")
+    kind: Literal["lab", "press", "community"] = Field(
+        description="lab: a model maker's own announcement; press: AI reporting; community: blogs and forums")
+    title: str
+    link: str = Field(description="The story itself (http or https)")
+    summary: str = Field(description="Plain text, at most about 400 characters; never HTML")
+    published_at: datetime
+    affects: list[str] = Field(description="This project's models the story names; empty if none")
+
+
+class NewsSourceOut(Model):
+    source: str
+    kind: Literal["lab", "press", "community"]
+
+
+class NewsOut(Model):
+    """The latest AI news, newest first, with the stories that name this project's models marked."""
+
+    items: list[NewsItemOut]
+    sources: list[NewsSourceOut] = Field(description="Every feed the news comes from")
+    your_models: list[str] = Field(
+        description="The models the stories were matched against: the project's from the last 90 days, the "
+                    "job's with `job`, or the one `model` asked about")
+    updated_at: datetime | None = Field(description="When the feeds were last fetched; null if never")
+    next_refresh_at: datetime | None = Field(description="The earliest a refresh fetches again")
+
+
+class NewsRefreshOut(Model):
+    refreshed: bool = Field(description="False when the last fetch was too recent, or every feed failed")
+    added: int = Field(description="New stories stored by this refresh")
+    failed_sources: list[str]
+    updated_at: datetime | None
+    next_refresh_at: datetime | None
+
+
+class DayPointOut(Model):
+    day: date
+    job: str
+    model: str
+    runs: int = Field(description="Production runs that day")
+    passed: int
+    failed: int = Field(description="UNKNOWN runs count in runs but in neither passed nor failed")
+    spend_usd: float = Field(description="Priced runs only")
+

@@ -10,6 +10,12 @@
   catalog-sync     daily, and once directly at start   refreshes prices, statuses and shutdown dates; alerts
                                   for recommended models that were deprecated or retired, and
                                   re-tests for new models cheaper than what a job uses now
+  news             every hour     fetches the AI news feeds (news/); the web app can ask sooner
+  retention        daily          clears the prompt, answer, tool calls and answer key of runs older
+                                  than their project's retention (retention.py)
+
+Every job leaves a heartbeat (heartbeat.py): GET /healthz/scheduler answers 503 when one is overdue,
+and OPERATOR_WEBHOOK_URL, when set, hears about each failure.
 
 Only one scheduler runs jobs at a time: it holds a Postgres advisory lock (become_leader); a second
 one waits as a standby.
@@ -32,12 +38,15 @@ from sqlalchemy.pool import NullPool
 from .alerts.notifier import deliver_pending
 from .alerts.service import catalog_alerts
 from .catalog.sync import fetch_price_list, sync_catalog
-from .config import Settings, get_settings, load_dotenv_file, normalize_database_url
+from .config import Settings, check_startup, get_settings, load_dotenv_file, normalize_database_url
+from .heartbeat import LEADER, record, tracked
 from .logging_config import configure_logging
 from .pipeline.consolidation import consolidate_all
 from .pipeline.decay import recompute
 from .pipeline.janitor import run_janitor
 from .pipeline.regression import sweep_all
+from .news.service import refresh as news_refresh
+from .retention import clear_old_content
 from .retest.runner import run_queued, start_for_new_models, start_when_unsure
 
 log = logging.getLogger("agent_memory.scheduler")
@@ -72,6 +81,15 @@ async def run_retest_unsure(sessions: async_sessionmaker[AsyncSession], settings
         await start_when_unsure(session, settings=settings or get_settings())
 
 
+async def run_retention(sessions: async_sessionmaker[AsyncSession], settings: Settings | None = None) -> int:
+    async with sessions() as session:
+        return await clear_old_content(session)
+
+
+async def run_news(sessions: async_sessionmaker[AsyncSession], settings: Settings | None = None) -> bool:
+    return (await news_refresh(sessions)).refreshed  # False only when every feed failed
+
+
 async def run_catalog_sync(
     sessions: async_sessionmaker[AsyncSession],
     settings: Settings | None = None,
@@ -99,24 +117,22 @@ def build_scheduler(sessions: async_sessionmaker[AsyncSession], settings: Settin
     settings = settings or get_settings()
     scheduler = AsyncIOScheduler()
     common = {"max_instances": 1, "coalesce": True, "replace_existing": True}
-    scheduler.add_job(run_janitor, "interval", seconds=60, args=[sessions, settings], id="outbox-janitor", **common)
-    scheduler.add_job(run_decay, "interval", hours=1, args=[sessions, settings], id="decay", **common)
-    scheduler.add_job(
-        run_consolidation, "interval", minutes=15, args=[sessions, settings], id="consolidation", **common
-    )
-    scheduler.add_job(
-        run_regression_sweep, "interval", minutes=15, args=[sessions, settings], id="regression", **common
-    )
-    scheduler.add_job(
-        run_alert_delivery, "interval", seconds=60, args=[sessions, settings], id="alert-delivery", **common
-    )
-    scheduler.add_job(run_retests, "interval", seconds=30, args=[sessions, settings], id="retests", **common)
-    scheduler.add_job(
-        run_retest_unsure, "interval", hours=1, args=[sessions, settings], id="retest-unsure", **common
-    )
-    scheduler.add_job(
-        run_catalog_sync, "cron", hour=3, minute=30, args=[sessions, settings], id="catalog-sync", **common
-    )
+    jobs = [
+        (run_janitor, {"seconds": 60}, "outbox-janitor"),
+        (run_decay, {"hours": 1}, "decay"),
+        (run_consolidation, {"minutes": 15}, "consolidation"),
+        (run_regression_sweep, {"minutes": 15}, "regression"),
+        (run_alert_delivery, {"seconds": 60}, "alert-delivery"),
+        (run_retests, {"seconds": 30}, "retests"),
+        (run_retest_unsure, {"hours": 1}, "retest-unsure"),
+        (run_news, {"hours": 1}, "news"),
+    ]
+    for fn, every, job_id in jobs:
+        scheduler.add_job(tracked(job_id, fn), "interval", **every, args=[sessions, settings], id=job_id, **common)
+    scheduler.add_job(tracked("catalog-sync", run_catalog_sync), "cron", hour=3, minute=30,
+                      args=[sessions, settings], id="catalog-sync", **common)
+    scheduler.add_job(tracked("retention", run_retention), "cron", hour=4, minute=0,
+                      args=[sessions, settings], id="retention", **common)
     return scheduler
 
 
@@ -149,12 +165,14 @@ async def _main() -> None:
     load_dotenv_file()
     configure_logging()
     settings = get_settings()
+    check_startup(settings)  # the scheduler makes the outbound calls, so it refuses unsafe settings too
     lock_engine = create_async_engine(normalize_database_url(settings.database_url), poolclass=NullPool)
     leader = await become_leader(lock_engine)
     sessions = session_factory()
+    await record(sessions, LEADER)  # overdue checks count from now, not from a previous leader's last run
     # Prices first, called directly: as a one-off scheduled job it could be dropped as a misfire if
     # start-up took a moment, leaving a fresh server without prices.
-    await run_catalog_sync(sessions, settings)
+    await tracked("catalog-sync", run_catalog_sync)(sessions, settings)
     scheduler = build_scheduler(sessions, settings)
     scheduler.start()
     log.info("scheduler started with jobs: %s", [j.id for j in scheduler.get_jobs()])

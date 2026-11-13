@@ -109,6 +109,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/healthz/scheduler": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Scheduler Health
+         * @description Is the scheduler keeping up? 503 when any job has had no success within its allowance, so an
+         *     uptime monitor can alert on it. Shows job names and ages only, never error text.
+         */
+        get: operations["scheduler_health_healthz_scheduler_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/alerts": {
         parameters: {
             query?: never;
@@ -179,9 +200,31 @@ export interface paths {
         /**
          * Stream Flow
          * @description Server-Sent Events: each run's steps as they happen. The browser reconnects by itself and
-         *     resumes from Last-Event-ID. Read-only, one short query a second, no WebSockets.
+         *     resumes from Last-Event-ID. Read-only, no WebSockets. Everyone watching a project shares one
+         *     poller (pipeline/flow_hub.py); at most STREAMS_PER_IP connections per IP (429 beyond).
          */
         get: operations["stream_flow_v1_flow_stream_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/daily": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Daily
+         * @description Production runs, outcomes and spend per UTC day, job and model, oldest first: quality and spend
+         *     over time. Days without runs are absent.
+         */
+        get: operations["get_daily_v1_insights_daily_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -480,6 +523,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/news": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get News
+         * @description The latest AI news from public feeds (refreshed hourly), newest first. Stories that name a watched
+         *     model carry it in `affects`: the project's models from the last 90 days, one job's with `job`, or one
+         *     `model`. With `job` or `model` only those stories are returned.
+         */
+        get: operations["get_news_v1_news_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/news/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh News
+         * @description Fetch the feeds now, unless they were fetched in the last 10 minutes (shared by everyone), in
+         *     which case nothing is fetched and `refreshed` is false.
+         */
+        post: operations["refresh_news_v1_news_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects": {
         parameters: {
             query?: never;
@@ -512,13 +598,20 @@ export interface paths {
         get: operations["get_project_v1_projects__project_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Project Endpoint
+         * @description Delete the project and everything recorded under it: jobs, runs with their prompts and answers,
+         *     re-tests, recommendations, alerts, the stored provider key and usage limits. It cannot be undone,
+         *     and the project key stops working at once.
+         */
+        delete: operations["delete_project_endpoint_v1_projects__project_id__delete"];
         options?: never;
         head?: never;
         /**
          * Patch Project
-         * @description Change the name, the alert webhook (https only; null removes it), the monthly re-test cap or
-         *     the project-wide re-test switch. Only the fields sent change.
+         * @description Change the name, the alert webhook (https only; null removes it), the monthly re-test cap, the
+         *     project-wide re-test switch or how long run content is kept. Only the fields sent change. A shorter
+         *     retention applies at the next daily clean-up.
          */
         patch: operations["patch_project_v1_projects__project_id__patch"];
         trace?: never;
@@ -601,6 +694,7 @@ export interface paths {
         /**
          * Record Run Endpoint
          * @description Record one model call. Safe to retry: the same `run_id` is only ever stored once.
+         *     A project may record at most RUNS_PER_DAY_PER_PROJECT runs per UTC day (429 after that).
          */
         post: operations["record_run_endpoint_v1_runs_post"];
         delete?: never;
@@ -676,6 +770,11 @@ export interface components {
             /** Delivery Attempts */
             delivery_attempts: number;
             /**
+             * Delivery Failed At
+             * @description When webhook delivery gave up after its last retry; saving a new webhook URL tries again. Null while it is delivered or still being tried
+             */
+            delivery_failed_at?: string | null;
+            /**
              * Detail
              * @description VERSION_REGRESSION: model, old_version, new_version, old_pass_rate, new_pass_rate, n_old, n_new, drop, p_value, failing_run_ids. SILENT_DROP: model, model_version, before_pass_rate, after_pass_rate, n_before, n_after, drop, p_value. MODEL_DEPRECATED: model, model_version, status.
              */
@@ -741,6 +840,35 @@ export interface components {
             passed: number;
             /** Runs */
             runs: number;
+        };
+        /** DayPointOut */
+        DayPointOut: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /**
+             * Failed
+             * @description UNKNOWN runs count in runs but in neither passed nor failed
+             */
+            failed: number;
+            /** Job */
+            job: string;
+            /** Model */
+            model: string;
+            /** Passed */
+            passed: number;
+            /**
+             * Runs
+             * @description Production runs that day
+             */
+            runs: number;
+            /**
+             * Spend Usd
+             * @description Priced runs only
+             */
+            spend_usd: number;
         };
         /** DevLogin */
         DevLogin: {
@@ -1199,6 +1327,101 @@ export interface components {
             /** Runs */
             runs: number;
         };
+        /** NewsItemOut */
+        NewsItemOut: {
+            /**
+             * Affects
+             * @description This project's models the story names; empty if none
+             */
+            affects: string[];
+            /** Item Id */
+            item_id: string;
+            /**
+             * Kind
+             * @description lab: a model maker's own announcement; press: AI reporting; community: blogs and forums
+             * @enum {string}
+             */
+            kind: "lab" | "press" | "community";
+            /**
+             * Link
+             * @description The story itself (http or https)
+             */
+            link: string;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /**
+             * Source
+             * @description Who published it, e.g. 'OpenAI' or 'Hacker News'
+             */
+            source: string;
+            /**
+             * Summary
+             * @description Plain text, at most about 400 characters; never HTML
+             */
+            summary: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * NewsOut
+         * @description The latest AI news, newest first, with the stories that name this project's models marked.
+         */
+        NewsOut: {
+            /** Items */
+            items: components["schemas"]["NewsItemOut"][];
+            /**
+             * Next Refresh At
+             * @description The earliest a refresh fetches again
+             */
+            next_refresh_at: string | null;
+            /**
+             * Sources
+             * @description Every feed the news comes from
+             */
+            sources: components["schemas"]["NewsSourceOut"][];
+            /**
+             * Updated At
+             * @description When the feeds were last fetched; null if never
+             */
+            updated_at: string | null;
+            /**
+             * Your Models
+             * @description The models the stories were matched against: the project's from the last 90 days, the job's with `job`, or the one `model` asked about
+             */
+            your_models: string[];
+        };
+        /** NewsRefreshOut */
+        NewsRefreshOut: {
+            /**
+             * Added
+             * @description New stories stored by this refresh
+             */
+            added: number;
+            /** Failed Sources */
+            failed_sources: string[];
+            /** Next Refresh At */
+            next_refresh_at: string | null;
+            /**
+             * Refreshed
+             * @description False when the last fetch was too recent, or every feed failed
+             */
+            refreshed: boolean;
+            /** Updated At */
+            updated_at: string | null;
+        };
+        /** NewsSourceOut */
+        NewsSourceOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "lab" | "press" | "community";
+            /** Source */
+            source: string;
+        };
         /** ProjectCreate */
         ProjectCreate: {
             /** Name */
@@ -1223,6 +1446,12 @@ export interface components {
         };
         /** ProjectOut */
         ProjectOut: {
+            /**
+             * Content Retention Days
+             * @description Days a run keeps its prompt, output, tool calls and answer key; the figures stay
+             * @default 90
+             */
+            content_retention_days: number;
             /**
              * Created At
              * Format: date-time
@@ -1251,6 +1480,11 @@ export interface components {
         };
         /** ProjectPatch */
         ProjectPatch: {
+            /**
+             * Content Retention Days
+             * @description Days a run keeps its prompt, output, tool calls and answer key (1 to 3650)
+             */
+            content_retention_days?: number | null;
             /** Name */
             name?: string | null;
             /** Retest Allowed */
@@ -1591,6 +1825,11 @@ export interface components {
             /** Cache Write Tokens */
             cache_write_tokens: number;
             /**
+             * Content Removed At
+             * @description When the prompt, output, tool calls and answer key were cleared under the project's retention; the figures are kept
+             */
+            content_removed_at?: string | null;
+            /**
              * Cost Usd
              * @description Null when the model has no catalog price and none was sent
              */
@@ -1639,12 +1878,12 @@ export interface components {
              */
             output_preview: string | null;
             /** Prompt */
-            prompt: string;
+            prompt: string | null;
             /**
              * Prompt Preview
-             * @description First 200 characters of the prompt
+             * @description First 200 characters of the prompt; null once retention cleared it
              */
-            prompt_preview: string;
+            prompt_preview: string | null;
             /** Prompt Version */
             prompt_version: string | null;
             /**
@@ -1685,6 +1924,11 @@ export interface components {
             cache_read_tokens: number;
             /** Cache Write Tokens */
             cache_write_tokens: number;
+            /**
+             * Content Removed At
+             * @description When the prompt, output, tool calls and answer key were cleared under the project's retention; the figures are kept
+             */
+            content_removed_at?: string | null;
             /**
              * Cost Usd
              * @description Null when the model has no catalog price and none was sent
@@ -1733,9 +1977,9 @@ export interface components {
             output_preview: string | null;
             /**
              * Prompt Preview
-             * @description First 200 characters of the prompt
+             * @description First 200 characters of the prompt; null once retention cleared it
              */
-            prompt_preview: string;
+            prompt_preview: string | null;
             /** Prompt Version */
             prompt_version: string | null;
             /**
@@ -1772,6 +2016,21 @@ export interface components {
              * @description Pass as ?cursor= to get the next page; null on the last page
              */
             next_cursor: string | null;
+        };
+        /** SchedulerHealth */
+        SchedulerHealth: {
+            /**
+             * Overdue
+             * @description Jobs with no success within their allowance: minutes since the last success, null if never
+             */
+            overdue: {
+                [key: string]: number | null;
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "overdue";
         };
         /** SpendOut */
         SpendOut: {
@@ -2096,6 +2355,35 @@ export interface operations {
             };
         };
     };
+    scheduler_health_healthz_scheduler_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchedulerHealth"];
+                };
+            };
+            /** @description A scheduled job is overdue */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchedulerHealth"];
+                };
+            };
+        };
+    };
     list_alerts_v1_alerts_get: {
         parameters: {
             query?: {
@@ -2223,6 +2511,44 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_daily_v1_insights_daily_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back */
+                days?: number;
+                /** @description Only this job */
+                job?: string | null;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayPointOut"][];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -2800,6 +3126,86 @@ export interface operations {
             };
         };
     };
+    get_news_v1_news_get: {
+        parameters: {
+            query?: {
+                /** @description Only this source */
+                source?: string | null;
+                /** @description Only stories naming a model this project uses */
+                mine?: boolean;
+                /** @description Only stories naming this model (e.g. an alert's model) */
+                model?: string | null;
+                /** @description Only stories naming a model this job uses */
+                job?: string | null;
+                /** @description Only stories published at or after this time */
+                since?: string | null;
+                /** @description Only stories published at or before this time */
+                until?: string | null;
+                limit?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_news_v1_news_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsRefreshOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_projects_v1_projects_get: {
         parameters: {
             query?: never;
@@ -2872,6 +3278,38 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProjectOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_project_endpoint_v1_projects__project_id__delete: {
+        parameters: {
+            query: {
+                /** @description The project id again, so a project is never deleted by accident */
+                confirm: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

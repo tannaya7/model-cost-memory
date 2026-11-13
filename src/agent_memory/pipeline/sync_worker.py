@@ -125,7 +125,8 @@ async def run_once(
                 .where(Run.run_id.in_(run_ids))
             )
         ).all()
-        prompts = {r.run_id: r.prompt for r in rows}
+        prompts = {r.run_id: r.prompt for r in rows if r.prompt is not None}
+        cleared = {r.run_id for r in rows if r.prompt is None}  # retention removed the text: nothing to embed
         meta = {r.run_id: {"run_id": str(r.run_id), "job_id": str(r.job_id), "project_id": r.project_id} for r in rows}
         states = {r.run_id: r.state for r in rows}
         upserts = [(oid, rid) for oid, rid, op, _ in claimed if op == "UPSERT" and rid in prompts]
@@ -158,9 +159,11 @@ async def run_once(
         for outbox_id, run_id, op, retry_count in claimed:
             with bind(**meta.get(run_id, {"run_id": str(run_id)}), outbox_id=str(outbox_id)):
                 try:
-                    if run_id is None or (op == "UPSERT" and run_id not in prompts):
+                    if op == "UPSERT" and run_id in cleared:
+                        log.info("run not indexed: its content was cleared by retention")
+                    elif run_id is None or (op == "UPSERT" and run_id not in prompts):
                         raise LookupError("the run no longer exists")
-                    if op == "UPSERT":
+                    elif op == "UPSERT":
                         if batch_error:
                             raise RuntimeError(batch_error)
                         await store.upsert(run_id, vectors[run_id], model=embedder.name)

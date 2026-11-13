@@ -33,18 +33,24 @@ SETTINGS = Settings(secret_key="test-secret", retest_concurrency=2, retest_defau
 class FakeProvider:
     """Answers with the right total `accuracy` of the time, like a model would."""
 
-    def __init__(self, accuracy=1.0, fail_after=None):
+    def __init__(self, accuracy=1.0, fail_after=None, cut_off_every=None):
         self.accuracy, self.fail_after, self.calls = accuracy, fail_after, 0
-        self.efforts = []
+        self.cut_off_every = cut_off_every
+        self.efforts, self.max_tokens = [], []
 
-    async def complete(self, model, prompt, effort=None):
+    async def complete(self, model, prompt, effort=None, max_tokens=None):
         self.calls += 1
         self.efforts.append(effort)
+        self.max_tokens.append(max_tokens)
         if self.fail_after is not None and self.calls > self.fail_after:
             raise RateLimited("429")
+        if self.cut_off_every and self.calls % self.cut_off_every == 0:  # ran out of output room
+            return {"model": f"{model}-2026-10-01", "usage": {"prompt_tokens": 1000, "completion_tokens": max_tokens},
+                    "choices": [{"message": {"content": '{"total": 10'}, "finish_reason": "length"}]}
         right = (self.calls % 10) < self.accuracy * 10  # e.g. 0.9: every tenth answer is wrong
         return {"model": f"{model}-2026-10-01", "usage": {"prompt_tokens": 1000, "completion_tokens": 100},
-                "choices": [{"message": {"content": '{"total": %s}' % (100.0 if right else 1.0)}}]}
+                "choices": [{"message": {"content": '{"total": %s}' % (100.0 if right else 1.0)},
+                             "finish_reason": "stop"}]}
 
 
 @pytest.fixture
@@ -105,26 +111,28 @@ async def test_a_re_test_replays_runs_records_them_and_stays_within_budget(engin
 
 
 async def test_the_budget_stops_a_re_test_before_it_is_exceeded(engine, session, world):
+    # A run costs $0.0012, but a call may answer up to its 500-token output limit, $0.002, and that worst
+    # case is what is reserved. After 3 runs ($0.0036) a 4th could reach $0.0056, over $0.005: stop.
     _, project, job = world
-    retest = await enqueue(session, project, job, "mini", 0.005, "MANUAL")  # room for 4 runs at $0.0012
+    retest = await enqueue(session, project, job, "mini", 0.005, "MANUAL")
     await session.commit()
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     done = await run_retest(sessions, retest.retest_id, settings=SETTINGS, client_factory=factory(FakeProvider()),
                             sample_size=20)
-    assert done.status == "STOPPED_BUDGET" and done.runs_done == 4
+    assert done.status == "STOPPED_BUDGET" and done.runs_done == 3
     assert Decimal(done.spent_usd) <= Decimal("0.005")
 
 
 async def test_the_monthly_cap_stops_a_re_test(engine, session, world):
     _, project, job = world
-    project.retest_monthly_cap_usd = Decimal("0.01")  # whole cents; room for 8 runs at $0.0012
+    project.retest_monthly_cap_usd = Decimal("0.01")  # whole cents: 7 runs, then an 8th could reach $0.0104
     await session.commit()
     retest = await enqueue(session, project, job, "mini", 1.0, "MANUAL")
     await session.commit()
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     done = await run_retest(sessions, retest.retest_id, settings=SETTINGS, client_factory=factory(FakeProvider()),
                             sample_size=20)
-    assert done.status == "STOPPED_CAP" and done.runs_done == 8
+    assert done.status == "STOPPED_CAP" and done.runs_done == 7
 
 
 async def test_a_provider_that_keeps_rate_limiting_fails_with_partial_results(engine, session, world):
@@ -150,11 +158,16 @@ async def test_a_prompt_is_never_replayed_twice_on_the_same_model(engine, sessio
     assert len(await sample_sources(session, job, "mini", 60)) == 40
 
 
-async def test_sampling_prefers_important_runs(session, world):
+async def test_sampling_is_uniform_so_failures_do_not_make_a_candidate_look_worse(session, world):
+    # 10 of the 60 runs are "important" (as failed runs are). Importance-weighted sampling picked them
+    # about three times too often, so the replayed prompts were harder than production's.
     _, _, job = world
-    picked = await sample_sources(session, job, "mini", 10, seed=7)
-    important = sum(int(r.prompt.split()[1]) < 10 for r in picked)
-    assert important >= 4  # 10 of 60 runs weigh 3x: far more than the 1-2 a uniform draw would give
+    counts = []
+    for seed in range(200):
+        picked = await sample_sources(session, job, "mini", 10, seed=seed)
+        assert len({r.prompt_hash for r in picked}) == 10  # without replacement
+        counts.append(sum(int(r.prompt.split()[1]) < 10 for r in picked))
+    assert 1.4 < sum(counts) / len(counts) < 1.95  # uniform: 10 x 10/60 = 1.67 on average
 
 
 @pytest.mark.parametrize(
@@ -324,3 +337,64 @@ async def test_a_model_at_a_reasoning_effort_is_re_tested_at_that_effort(engine,
     # The same prompts may still be replayed on mini at another effort, never again at this one.
     assert len(await sample_sources(session, job, "mini@low", 60)) == 55
     assert len(await sample_sources(session, job, "mini@high", 60)) == 60
+
+
+async def test_every_call_has_an_output_limit_and_a_cut_off_answer_is_not_a_failure(engine, session, world):
+    _, project, job = world
+    retest = await enqueue(session, project, job, "mini", 1.0, "MANUAL")
+    await session.commit()
+    provider = FakeProvider(cut_off_every=5)
+    done = await run_retest(async_sessionmaker(engine, expire_on_commit=False), retest.retest_id,
+                            settings=SETTINGS, client_factory=factory(provider), sample_size=10)
+    assert set(provider.max_tokens) == {500}  # 4 x the original 100 tokens, raised to the 500 floor
+    assert (done.runs_done, done.passed, done.failed) == (10, 8, 0)  # two cut off: neither pass nor fail
+    session.expunge_all()
+    replayed = (await session.execute(select(Run).where(Run.retest_id == retest.retest_id))).scalars().all()
+    cut = [r for r in replayed if r.outcome == "UNKNOWN"]
+    assert len(cut) == 2 and all("output limit of 500 tokens" in r.outcome_reason for r in cut)
+
+
+def test_the_output_limit_is_four_times_the_original_answer_and_at_least_500_tokens():
+    from agent_memory.retest.runner import output_limit
+
+    assert (output_limit(100), output_limit(2000), output_limit(None)) == (500, 8000, 500)
+
+
+async def test_a_waiting_call_runs_once_the_call_in_flight_has_cost_less_than_reserved(engine, session, world):
+    # Concurrency 2, budget $0.0045 holds two worst cases ($0.004) in flight, so a third call
+    # must wait for both to settle ($0.0024 spent) and then fits; a 4th could not. Without waiting: 2 runs.
+    _, project, job = world
+    retest = await enqueue(session, project, job, "mini", 0.0045, "MANUAL")
+    await session.commit()
+    done = await run_retest(async_sessionmaker(engine, expire_on_commit=False), retest.retest_id,
+                            settings=SETTINGS, client_factory=factory(FakeProvider()), sample_size=20)
+    assert done.status == "STOPPED_BUDGET" and done.runs_done == 3
+    assert Decimal(done.spent_usd) == Decimal("0.003600")
+
+
+async def test_a_re_test_endpoint_that_now_resolves_to_a_private_address_is_never_called(engine, session, world,
+                                                                                          monkeypatch):
+    from agent_memory import urls
+
+    _, project, job = world
+    retest = await enqueue(session, project, job, "mini", 1.0, "MANUAL")
+    await session.commit()
+
+    async def rebound(host, port):  # the name was public when saved, and now points inside
+        return ["10.0.0.5"]
+
+    monkeypatch.setattr(urls, "_resolve", rebound)
+    provider = FakeProvider()
+    done = await run_retest(async_sessionmaker(engine, expire_on_commit=False), retest.retest_id,
+                            settings=SETTINGS, client_factory=factory(provider), sample_size=5)
+    assert (done.status, provider.calls) == ("FAILED", 0) and "private" in done.message
+
+
+async def test_a_private_base_url_is_refused_unless_the_server_allows_it(session, world):
+    with pytest.raises(ValueError, match="private"):
+        await keys.set_key(session, "demo", provider="local", api_key="sk-local-1234",
+                           base_url="http://127.0.0.1:11434/v1", settings=SETTINGS)
+    dev = Settings(secret_key="test-secret", allow_private_urls=True)
+    row = await keys.set_key(session, "demo", provider="local", api_key="sk-local-1234",
+                             base_url="http://127.0.0.1:11434/v1", settings=dev)
+    assert row.base_url == "http://127.0.0.1:11434/v1"

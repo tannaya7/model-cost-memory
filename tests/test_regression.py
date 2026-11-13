@@ -112,6 +112,61 @@ async def test_too_few_runs_on_the_new_version_are_not_judged(session, world):
     assert (await sweep_job(session, job, now=T0 + timedelta(days=5))).alerts == []
 
 
+def test_the_mix_adjusted_test_is_the_plain_test_with_one_band():
+    from agent_memory.pipeline.regression import stratified_drop_test
+
+    assert stratified_drop_test([(90, 100, 75, 100)]) == pytest.approx(drop_test(90, 100, 75, 100))
+    assert stratified_drop_test([]) == (0.0, 1.0)
+
+
+def test_longer_inputs_alone_are_not_a_drop():
+    from agent_memory.pipeline.regression import stratified_drop_test
+
+    # Short inputs pass 98% and long ones 80% on both sides; long ones go from 10% to 50% of traffic.
+    overall_drop, _ = drop_test(882 + 80, 1000, 490 + 400, 1000)
+    assert overall_drop == pytest.approx(0.072)  # the plain comparison sees 7 points
+    strata = [(882, 900, 490, 500), (80, 100, 400, 500)]  # (short), (long): before passed/runs, after
+    drop, p = stratified_drop_test(strata)
+    assert drop == pytest.approx(0.0, abs=1e-9) and p == pytest.approx(0.5)
+
+
+async def _add_sized(session, job, n, *, version, passes, start, tokens_in):
+    for i in range(n):
+        session.add(Run(
+            run_id=uuid.uuid4(), job_id=job.job_id, project_id="demo", prompt="p", prompt_hash="h", model="big",
+            model_version=version, outcome="PASS" if i < passes else "FAIL", cost_usd=0.03, state="INDEXED",
+            tokens_in=tokens_in, created_at=start + timedelta(minutes=5 * i),
+        ))
+    await session.commit()
+
+
+async def test_an_upgrade_that_arrives_as_inputs_get_longer_is_not_called_a_regression(session, world):
+    _, job, _ = world
+    # Old version: mostly short inputs. New version: half long. Same quality on each kind of input.
+    await _add_sized(session, job, 450, version="big-2026-08", passes=441, start=T0, tokens_in=900)  # 98%
+    await _add_sized(session, job, 50, version="big-2026-08", passes=40, start=T0, tokens_in=12_000)  # 80%
+    later = T0 + timedelta(days=3)
+    await _add_sized(session, job, 250, version="big-2026-09", passes=245, start=later, tokens_in=900)  # 98%
+    await _add_sized(session, job, 250, version="big-2026-09", passes=200, start=later, tokens_in=12_000)  # 80%
+    # Overall 96.2% -> 89%: the plain comparison would flag 7 points.
+    assert (await sweep_job(session, job, now=T0 + timedelta(days=6))).alerts == []
+
+
+async def test_a_real_drop_is_still_caught_while_inputs_get_longer(session, world):
+    _, job, _ = world
+    await _add_sized(session, job, 450, version="big-2026-08", passes=441, start=T0, tokens_in=900)  # 98%
+    await _add_sized(session, job, 50, version="big-2026-08", passes=40, start=T0, tokens_in=12_000)  # 80%
+    later = T0 + timedelta(days=3)
+    await _add_sized(session, job, 250, version="big-2026-09", passes=220, start=later, tokens_in=900)  # 88%
+    await _add_sized(session, job, 250, version="big-2026-09", passes=175, start=later, tokens_in=12_000)  # 70%
+    [alert] = (await sweep_job(session, job, now=T0 + timedelta(days=6))).alerts
+    assert alert.detail["drop"] == pytest.approx(0.10, abs=1e-9)  # 10 points on each kind of input
+    assert alert.detail["same_input_mix"] is True
+    assert "compared on the same mix of input sizes" in alert.detail["summary"]
+    # The old version is reported on today's mix (half long): 89%, not its raw 96.2%.
+    assert alert.detail["old_pass_rate"] == pytest.approx(0.89) and alert.detail["new_pass_rate"] == pytest.approx(0.79)
+
+
 async def test_alerts_are_listed_and_resolved_through_the_api(client, session, world):
     key, job, add = world
     await add(200, version="big-2026-08", passes=190, start=T0)

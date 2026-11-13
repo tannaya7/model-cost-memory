@@ -54,6 +54,10 @@ def _int(name: str, default: int) -> int:
     return int(os.environ.get(name, default))
 
 
+def _bool(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes")
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str = ""
@@ -108,8 +112,25 @@ class Settings:
     dev_login: bool = False  # local development only: sign in as any email without Google
     # A project anyone may read without a key (the public demo); empty means none.
     demo_project_id: str = ""
-    # Optional two-sentence recommendation summary (Claude). Off unless a key is set.
-    summary_model: str = "claude-haiku-5-5"
+    # Optional two-sentence recommendation summary, from any OpenAI-compatible endpoint (Gemini's free
+    # tier by default). Off unless SUMMARY_API_KEY or GEMINI_API_KEY is set. Written once per verdict and
+    # stored; at most summary_daily_limit calls a day across the server.
+    summary_model: str = "gemini-3.5-flash-lite"
+    summary_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    summary_effort: str = "minimal"  # Gemini 3.x cannot switch thinking off; empty sends no reasoning_effort
+    summary_daily_limit: int = 200
+    # The operator's own incoming webhook (Slack, Discord, ...): a failing scheduled job posts there,
+    # at most once an hour per job (heartbeat.py). Empty: failures are only logged and shown as overdue.
+    operator_webhook_url: str = ""
+    # Outbound URLs (webhooks, re-test endpoints) must be public addresses unless this is on (urls.py).
+    allow_private_urls: bool = False
+    # Abuse limits (ratelimit.py). Requests per minute per project key, and per IP for requests without
+    # one; runs a project may record per UTC day; live-stream connections per IP and in all.
+    rate_limit_key_per_minute: int = 1200
+    rate_limit_ip_per_minute: int = 120
+    runs_per_day_per_project: int = 200_000
+    streams_per_ip: int = 3
+    streams_total: int = 200
     extras: dict[str, str] = field(default_factory=dict)
 
     @classmethod
@@ -144,10 +165,60 @@ class Settings:
             google_client_id=os.environ.get("GOOGLE_CLIENT_ID", ""),
             google_client_secret=os.environ.get("GOOGLE_CLIENT_SECRET", ""),
             public_url=os.environ.get("PUBLIC_URL", cls.public_url).rstrip("/"),
-            dev_login=os.environ.get("DEV_LOGIN", "").lower() in ("1", "true", "yes"),
+            dev_login=_bool("DEV_LOGIN"),
             demo_project_id=os.environ.get("DEMO_PROJECT_ID", ""),
             summary_model=os.environ.get("SUMMARY_MODEL", cls.summary_model),
+            summary_base_url=os.environ.get("SUMMARY_BASE_URL", cls.summary_base_url),
+            summary_effort=os.environ.get("SUMMARY_EFFORT", cls.summary_effort),
+            summary_daily_limit=_int("SUMMARY_DAILY_LIMIT", 200),
+            allow_private_urls=_bool("ALLOW_PRIVATE_URLS"),
+            operator_webhook_url=os.environ.get("OPERATOR_WEBHOOK_URL", ""),
+            rate_limit_key_per_minute=_int("RATE_LIMIT_KEY_PER_MINUTE", 1200),
+            rate_limit_ip_per_minute=_int("RATE_LIMIT_IP_PER_MINUTE", 120),
+            runs_per_day_per_project=_int("RUNS_PER_DAY_PER_PROJECT", 200_000),
+            streams_per_ip=_int("STREAMS_PER_IP", 3),
+            streams_total=_int("STREAMS_TOTAL", 200),
         )
+
+    @property
+    def is_public(self) -> bool:
+        """Served over https: a real deployment, not a laptop."""
+        return self.public_url.startswith("https://")
+
+
+MIN_SECRET_KEY_LENGTH = 32
+
+
+class UnsafeSettings(RuntimeError):
+    """The settings would run a public server unsafely; the process refuses to start."""
+
+
+def startup_problems(settings: Settings) -> list[str]:
+    """What makes these settings unsafe to serve with. Empty when they are fine.
+
+    A SECRET_KEY, when set, must be long enough to resist guessing (it signs sign-in cookies and
+    protects stored provider keys). On a public (https) server it is required, and the development
+    switches that skip sign-in or the private-address check are refused."""
+    problems = []
+    if settings.secret_key and len(settings.secret_key) < MIN_SECRET_KEY_LENGTH:
+        problems.append(f"SECRET_KEY must be at least {MIN_SECRET_KEY_LENGTH} characters "
+                        "(generate one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\")")
+    if settings.is_public:
+        if not settings.secret_key:
+            problems.append("SECRET_KEY is required on a server whose PUBLIC_URL is https")
+        if settings.dev_login:
+            problems.append("DEV_LOGIN lets anyone sign in as any email; it is refused when PUBLIC_URL is https")
+        if settings.allow_private_urls:
+            problems.append("ALLOW_PRIVATE_URLS lets projects make this server call its own network; "
+                            "it is refused when PUBLIC_URL is https")
+    return problems
+
+
+def check_startup(settings: Settings | None = None) -> None:
+    """Raise UnsafeSettings listing every problem (the API and the scheduler call this first)."""
+    problems = startup_problems(settings or get_settings())
+    if problems:
+        raise UnsafeSettings("Refusing to start: " + "; ".join(problems))
 
 
 def get_settings() -> Settings:

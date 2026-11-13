@@ -6,7 +6,9 @@ long random strings, so a plain fast hash is enough (there is nothing to brute-f
 
 from __future__ import annotations
 
+import base64
 import hashlib
+import hmac
 import secrets
 
 KEY_PREFIX = "mcm_live_"
@@ -26,14 +28,28 @@ class SecretKeyMissing(RuntimeError):
     """The server has no SECRET_KEY, so it cannot store or read customer provider keys."""
 
 
-def _fernet(secret_key: str):
-    import base64
+def derive(secret_key: str, purpose: str) -> bytes:
+    """A 32-byte key for one purpose, from SECRET_KEY (HMAC-SHA256 keyed by the secret, with the purpose
+    as the message). The cookie signer and the provider-key cipher get different keys, so neither
+    use can reveal or forge the other's."""
+    return hmac.new(secret_key.encode(), purpose.encode(), hashlib.sha256).digest()
 
-    from cryptography.fernet import Fernet
+
+def session_secret(secret_key: str) -> str:
+    """The key that signs sign-in cookies."""
+    return base64.urlsafe_b64encode(derive(secret_key, "mcm session cookie v1")).decode()
+
+
+def _fernet(secret_key: str):
+    """Encrypts with the provider-key key. Also reads keys stored before the keys were separated
+    (encrypted with SHA-256 of SECRET_KEY itself); they are re-encrypted the next time they are saved."""
+    from cryptography.fernet import Fernet, MultiFernet
 
     if not secret_key:
         raise SecretKeyMissing("set SECRET_KEY on the server to store provider keys")
-    return Fernet(base64.urlsafe_b64encode(hashlib.sha256(secret_key.encode()).digest()))
+    current = Fernet(base64.urlsafe_b64encode(derive(secret_key, "mcm provider keys v1")))
+    legacy = Fernet(base64.urlsafe_b64encode(hashlib.sha256(secret_key.encode()).digest()))
+    return MultiFernet([current, legacy])
 
 
 def encrypt(text: str, secret_key: str) -> str:

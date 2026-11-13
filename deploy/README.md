@@ -18,13 +18,26 @@ Laptops need none of this: development uses a free hosted Neon database. Docker 
    (long and random; it encrypts stored provider keys and signs sign-in cookies, so keep it stable) and
    `PUBLIC_URL=https://<DOMAIN>`. For Google sign-in, create an OAuth client (Web application) with the redirect
    URI `https://<DOMAIN>/auth/google/callback` and set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Leave
-   `DEV_LOGIN` false. Optional: `ANTHROPIC_API_KEY` for recommendation summaries, `DEMO_PROJECT_ID` for a public
-   read-only demo (fill it with `python scripts/seed_demo.py`).
+   `DEV_LOGIN` and `ALLOW_PRIVATE_URLS` false: with `PUBLIC_URL` on https the API and the scheduler refuse to start
+   if either is on, or if `SECRET_KEY` is missing or shorter than 32 characters. Optional: `SUMMARY_API_KEY` (or
+   `GEMINI_API_KEY`) for two-sentence recommendation summaries on Gemini's free tier, `DEMO_PROJECT_ID` for a public read-only demo (fill it with
+   `python scripts/seed_demo.py`), and the abuse limits (`RATE_LIMIT_*`, `RUNS_PER_DAY_PER_PROJECT`, `STREAMS_*`),
+   whose defaults suit one small server.
 6. **Build the web app** so `frontend/dist` is present: `npm ci && npm run build` in `frontend/`.
 7. **First deploy:** `./deploy/deploy.sh`. It builds, runs `alembic upgrade head`, starts everything and checks `/healthz`.
 8. **Create the first project:** `docker compose run --rm api python scripts/create_project.py my-company`.
    It prints the project key once; copy it somewhere safe.
-9. **Backups:** add the cron line from `deploy/backup.sh`, and copy `backups/` off the machine.
+9. **Backups, off the machine:** install [rclone](https://rclone.org), run `rclone config` to add your object
+   storage (Vultr Object Storage, Backblaze B2 or any S3-compatible bucket) and a **crypt** remote on top of it,
+   because the dumps hold customers' prompts. Set `BACKUP_REMOTE` (for example `mcm-crypt:backups`) in `.env`,
+   then add the cron line from `deploy/backup.sh`. Each night's dump is kept 14 days on the server and
+   `REMOTE_KEEP_DAYS` (30) at the remote. Without `BACKUP_REMOTE` the script warns that the backup is local only.
+10. **Monitoring:** in a free uptime monitor (UptimeRobot, Better Stack or Healthchecks.io), check
+    `https://<DOMAIN>/healthz` (the API and database) and `https://<DOMAIN>/healthz/scheduler` (503 when a
+    scheduled job is overdue) every 5 minutes, alerting you by email. Make a Healthchecks.io check with a
+    one-day period for the backup and put its URL in `BACKUP_PING_URL`: a backup that fails or stops running is
+    then reported too. Optionally set `OPERATOR_WEBHOOK_URL` to a Slack or Discord incoming webhook to hear
+    about each failing scheduled job (at most once an hour per job).
 
 ## Every release
 
@@ -33,7 +46,19 @@ Laptops need none of this: development uses a free hosted Neon database. Docker 
 ## Proving the backups work (before the demo)
 
 `./deploy/restore.sh backups/<file>.dump` restores into a scratch database, counts the rows and drops it,
-leaving the live database untouched.
+leaving the live database untouched. Try it once on a dump fetched back from the remote too
+(`rclone copy $BACKUP_REMOTE/<file>.dump backups/`), so the off-site copy is known to restore.
+
+## Deleting a customer's data
+
+A signed-in owner deletes a project from the web app (Projects, open the project, Delete project). For a project made
+with `create_project.py`, which has no owner, run
+`docker compose run --rm api python scripts/delete_project.py <project-id> --yes`. Either way every job,
+run, re-test, recommendation, alert and stored key of that project goes in one transaction. Dumps already
+taken still hold it until they age out (14 days here, `REMOTE_KEEP_DAYS` at the remote).
+
+Run content (prompt, answer, tool calls, answer key) is cleared after each project's retention, 90 days by
+default and set per project in Settings; the figures the recommendations use are kept.
 
 ## What runs where
 

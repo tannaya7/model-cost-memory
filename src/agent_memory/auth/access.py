@@ -7,7 +7,10 @@ Three ways in, checked in this order:
 2. **Signed-in user** (session cookie) with `X-Project-Id`: only a project the user owns. With no
    header, a user who owns exactly one project gets that one.
 3. **The public demo** (`DEMO_PROJECT_ID`): anyone may *read* that one project, never change it, and
-   never start a re-test, so the public cannot spend the API budget.
+   never start a re-test, so the public cannot spend the API budget. Only the pages the demo shows are
+   open (DEMO_READABLE): jobs, runs, recommendations and their history, alerts, insights, usage limits,
+   the model catalog, the live flow and the AI news. Re-test history, the provider-key status and the re-test cap
+   are not: they describe the operator's account, not the demo, and are refused with 403.
 """
 
 from __future__ import annotations
@@ -25,6 +28,18 @@ from ..models import Project, User
 from ..security import extract_key, hash_key
 
 READ_METHODS = ("GET", "HEAD", "OPTIONS")
+
+# The route templates the public demo may read, without a key or a sign-in.
+DEMO_READABLE = frozenset({
+    "/v1/jobs", "/v1/jobs/{job}/recommendation", "/v1/jobs/{job}/history", "/v1/jobs/{job}/regressions",
+    "/v1/jobs/{job}/insights", "/v1/runs", "/v1/runs/{run_id}", "/v1/insights/spend", "/v1/alerts",
+    "/v1/models", "/v1/flow", "/v1/flow/stream", "/v1/limits", "/v1/news", "/v1/insights/daily",
+})
+
+
+def _route_template(request: Request) -> str | None:
+    route = request.scope.get("route")
+    return getattr(route, "path", None)
 
 
 async def optional_user(request: Request, session: AsyncSession = Depends(get_session)) -> User | None:
@@ -75,6 +90,8 @@ async def current_project(
     else:
         demo = get_settings().demo_project_id
         if demo and request.method in READ_METHODS:
+            if _route_template(request) not in DEMO_READABLE:
+                raise HTTPException(403, "The public demo does not show this. Sign in, or use a project key")
             project = await session.get(Project, demo)
     if project is None:
         raise HTTPException(401, "Missing or invalid project key", headers={"WWW-Authenticate": "Bearer"})

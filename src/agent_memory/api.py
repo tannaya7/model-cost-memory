@@ -22,13 +22,14 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import func, select, text, tuple_
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import __version__, ingest
 from .db import dispose_engine, get_session
+from .insights.service import daily as insights_daily
 from .insights.service import job_insights, spend_by_job
 from .logging_config import configure_logging, set_context
 from .limits import forecast as limit_forecast
@@ -39,11 +40,17 @@ from .recommend.summary import summarize
 from .retest import keys as provider_keys
 from .retest.runner import RetestRefused, enqueue, spent_this_month, start_on_first_key
 from .schemas import (
+    DayPointOut,
     AlertOut,
     BreakdownOut,
     FlowEventOut,
     ForecastOut,
     Health,
+    NewsItemOut,
+    NewsOut,
+    NewsRefreshOut,
+    NewsSourceOut,
+    SchedulerHealth,
     HistoryEntryOut,
     HistoryOut,
     JobCreate,
@@ -76,9 +83,14 @@ from .schemas import (
 )
 from .auth import routes as auth_routes
 from .auth.access import current_project
-from .config import get_settings
-from .security import SecretKeyMissing
+from .config import check_startup, get_settings
+from .heartbeat import overdue
+from .news import service as news_service
+from .news.feeds import FEEDS as NEWS_FEEDS
+from .ratelimit import DAILY_RUNS, STREAMS, RateLimitMiddleware
+from .security import SecretKeyMissing, session_secret
 from .pipeline import flow
+from .pipeline.flow_hub import HUB, Overflowed
 from .pipeline.decay import current_versions, family_key
 from .pipeline.scoring import age_days, freshness, stability_days
 from .storage import lineage
@@ -91,6 +103,7 @@ log = logging.getLogger("agent_memory.api")
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     configure_logging()
+    check_startup()  # refuses an unsafe public configuration (config.startup_problems)
     yield
     await dispose_engine()
 
@@ -103,7 +116,7 @@ def _session_secret() -> str:
     if not secret:
         log.warning("SECRET_KEY is not set: sign-in sessions will not survive a restart")
         return secrets.token_urlsafe(32)
-    return secret
+    return session_secret(secret)
 
 
 # The signed session cookie: httpOnly (Starlette's default), SameSite=Lax, Secure on an https site.
@@ -111,6 +124,7 @@ app.add_middleware(
     SessionMiddleware, secret_key=_session_secret(), session_cookie="mcm_session", same_site="lax",
     https_only=get_settings().public_url.startswith("https://"), max_age=14 * 24 * 3600,
 )
+app.add_middleware(RateLimitMiddleware)  # added last, so it runs first: refused requests do no work
 app.include_router(auth_routes.router)
 
 
@@ -118,6 +132,16 @@ app.include_router(auth_routes.router)
 async def healthz(session: AsyncSession = Depends(get_session)) -> Health:
     await session.execute(text("SELECT 1"))
     return Health(status="ok")
+
+
+@app.get("/healthz/scheduler", response_model=SchedulerHealth, tags=["system"],
+         responses={503: {"model": SchedulerHealth, "description": "A scheduled job is overdue"}})
+async def scheduler_health(session: AsyncSession = Depends(get_session)) -> JSONResponse:
+    """Is the scheduler keeping up? 503 when any job has had no success within its allowance, so an
+    uptime monitor can alert on it. Shows job names and ages only, never error text."""
+    late = await overdue(session)
+    body = SchedulerHealth(status="overdue" if late else "ok", overdue=late)
+    return JSONResponse(body.model_dump(), status_code=503 if late else 200)
 
 
 @app.get("/v1/jobs", response_model=list[JobOut], tags=["jobs"])
@@ -172,9 +196,9 @@ def _run_fields(r: Run, job_name: str, weight: float | None = None) -> dict:
         cache_read_tokens=r.cache_read_tokens, cache_write_tokens=r.cache_write_tokens,
         cost_usd=float(r.cost_usd) if r.cost_usd is not None else None, latency_ms=r.latency_ms, outcome=r.outcome,
         outcome_reason=r.outcome_reason, run_kind=r.run_kind, state=r.state, created_at=r.created_at,
-        prompt_preview=r.prompt[:PREVIEW_CHARS],
+        prompt_preview=r.prompt[:PREVIEW_CHARS] if r.prompt is not None else None,
         output_preview=r.output[:PREVIEW_CHARS] if r.output is not None else None,
-        importance_score=float(r.importance_score), weight=weight,
+        importance_score=float(r.importance_score), weight=weight, content_removed_at=r.content_removed_at,
     )
 
 
@@ -263,11 +287,24 @@ async def record_run_endpoint(
     project: Project = Depends(current_project),
     session: AsyncSession = Depends(get_session),
 ) -> RunAccepted:
-    """Record one model call. Safe to retry: the same `run_id` is only ever stored once."""
+    """Record one model call. Safe to retry: the same `run_id` is only ever stored once.
+    A project may record at most RUNS_PER_DAY_PER_PROJECT runs per UTC day (429 after that)."""
+    limit = get_settings().runs_per_day_per_project
+
+    async def count_today(since: datetime) -> int:
+        return (await session.execute(select(func.count()).where(
+            Run.project_id == project.project_id, Run.run_kind == "PRODUCTION", Run.created_at >= since))).scalar_one()
+
+    if not await DAILY_RUNS.admit(project.project_id, limit, count_today):
+        raise HTTPException(429, f"This project has recorded its {limit:,} runs for today (UTC); "
+                                 "raise RUNS_PER_DAY_PER_PROJECT on the server if that is expected")
     try:
         stored = await ingest.record_run(session, project, body)
     except ingest.UnknownJob as exc:
+        DAILY_RUNS.forget(project.project_id)
         raise HTTPException(404, f"Unknown job '{body.job}'. Create it first with POST /v1/jobs") from exc
+    if not stored:
+        DAILY_RUNS.forget(project.project_id)
     await session.commit()
     return RunAccepted(run_id=body.run_id, status="accepted" if stored else "duplicate")
 
@@ -415,10 +452,11 @@ async def get_recommendation(
 
     Refuses with INSUFFICIENT_EVIDENCE, and progress toward the floor, until there is enough to judge.
     """
-    result = await cached_recommend(session, await _job(session, project, job))
+    found = await _job(session, project, job)
+    result = await cached_recommend(session, found)
     log.info("verdict served", extra={"verdict": result.decision.verdict, "n_runs": result.n_runs,
                                       "evidence_weight": round(result.evidence_weight, 2)})
-    return _recommendation_out(result, *await summarize(result, get_settings()))
+    return _recommendation_out(result, *await summarize(session, found, result, get_settings()))
 
 
 @app.get("/v1/jobs/{job}/history", response_model=HistoryOut, tags=["recommendations"])
@@ -459,11 +497,25 @@ async def get_spend(
     return [SpendOut(**vars(s)) for s in await spend_by_job(session, project.project_id, days=days)]
 
 
+@app.get("/v1/insights/daily", response_model=list[DayPointOut], tags=["insights"])
+async def get_daily(
+    days: int = Query(default=60, ge=1, le=365, description="How many days back"),
+    job: str | None = Query(default=None, max_length=200, description="Only this job"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> list[DayPointOut]:
+    """Production runs, outcomes and spend per UTC day, job and model, oldest first: quality and spend
+    over time. Days without runs are absent."""
+    job_id = (await _job(session, project, job)).job_id if job else None
+    return [DayPointOut(**vars(p)) for p in await insights_daily(session, project.project_id, days=days, job_id=job_id)]
+
+
 def _alert_out(alert: Alert, job_name: str) -> AlertOut:
     return AlertOut(
         alert_id=alert.alert_id, job=job_name, kind=alert.kind, summary=alert.detail.get("summary", alert.kind),
         detail=alert.detail, created_at=alert.created_at, delivered_at=alert.delivered_at,
-        delivery_attempts=alert.delivery_attempts, resolved_at=alert.resolved_at,
+        delivery_attempts=alert.delivery_attempts, delivery_failed_at=alert.delivery_failed_at,
+        resolved_at=alert.resolved_at,
     )
 
 
@@ -662,6 +714,7 @@ async def get_flow(
 
 STREAM_POLL_SECONDS = 1.0
 STREAM_HEARTBEAT_SECONDS = 15.0
+STREAM_CATCH_UP = 200  # events read per query while a viewer catches up from its Last-Event-ID
 
 
 @app.get("/v1/flow/stream", tags=["flow"], response_class=StreamingResponse)
@@ -672,38 +725,69 @@ async def stream_flow(
     session: AsyncSession = Depends(get_session),
 ):
     """Server-Sent Events: each run's steps as they happen. The browser reconnects by itself and
-    resumes from Last-Event-ID. Read-only, one short query a second, no WebSockets."""
+    resumes from Last-Event-ID. Read-only, no WebSockets. Everyone watching a project shares one
+    poller (pipeline/flow_hub.py); at most STREAMS_PER_IP connections per IP (429 beyond)."""
     try:
         cursor = int(last_event_id) if last_event_id else 0
     except ValueError:
         cursor = 0
     project_id = project.project_id
+    settings = get_settings()
+    client = getattr(request, "client", None)
+    ip = client.host if client else "unknown"
+    if not STREAMS.acquire(ip, settings.streams_per_ip, settings.streams_total):
+        raise HTTPException(429, "Too many live views open from here; close one and try again",
+                            headers={"Retry-After": "10"})
+    try:
+        viewer = await HUB.subscribe(project_id, async_sessionmaker(session.bind, expire_on_commit=False))
+    except Exception:
+        STREAMS.release(ip)
+        raise
 
     def frame(e) -> str:
         return f"id: {e.event_id}\ndata: {json.dumps(_event_out(e).model_dump(mode='json'))}\n\n"
 
     async def events():
         nonlocal cursor
-        quiet = 0.0
-        if cursor == 0:  # start with the recent trail, so the view is not empty
-            for e in await flow.events_after(session, project_id, 0, 50):
-                cursor = e.event_id
-                yield frame(e)
-        while not await request.is_disconnected():
-            await session.rollback()  # end the read so the next poll sees new rows
-            fresh = await flow.events_after(session, project_id, cursor, 200)
-            for e in fresh:
-                cursor = e.event_id
-                yield frame(e)
-            quiet = 0.0 if fresh else quiet + STREAM_POLL_SECONDS
-            if quiet >= STREAM_HEARTBEAT_SECONDS:  # keeps proxies from closing an idle connection
+        try:
+            # Catch up once from the database, then take events from the shared poller.
+            if cursor == 0:  # start with the recent trail, so the view is not empty
+                for e in await flow.events_after(session, project_id, 0, 50):
+                    cursor = e.event_id
+                    yield frame(e)
+            else:
+                while True:
+                    batch = await flow.events_after(session, project_id, cursor, STREAM_CATCH_UP)
+                    for e in batch:
+                        cursor = e.event_id
+                        yield frame(e)
+                    if len(batch) < STREAM_CATCH_UP:
+                        break
+            await session.rollback()  # the request's connection goes back to the pool for the rest
+            quiet = 0.0
+            while not await request.is_disconnected():
+                if viewer.overflowed:
+                    raise Overflowed
+                try:
+                    e = await asyncio.wait_for(viewer.queue.get(), STREAM_POLL_SECONDS)
+                except TimeoutError:
+                    quiet += STREAM_POLL_SECONDS
+                    if quiet >= STREAM_HEARTBEAT_SECONDS:  # keeps proxies from closing an idle connection
+                        quiet = 0.0
+                        yield ": still here\n\n"
+                    continue
                 quiet = 0.0
-                yield ": still here\n\n"
-            await asyncio.sleep(STREAM_POLL_SECONDS)
+                if e.event_id > cursor:  # the catch-up may already have sent it
+                    cursor = e.event_id
+                    yield frame(e)
+        except Overflowed:
+            return  # the browser reconnects with Last-Event-ID and catches up
+        finally:
+            await HUB.unsubscribe(project_id, viewer)
+            STREAMS.release(ip)
 
     return StreamingResponse(events(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-
 
 
 # --- Usage limits (limits.py) ---
@@ -728,6 +812,57 @@ async def _own_limit(session: AsyncSession, project: Project, limit_id: uuid.UUI
     if limit is None or limit.project_id != project.project_id:
         raise HTTPException(404, "No such limit in this project")
     return limit
+
+
+def _news_times(updated_at):
+    return updated_at, (updated_at + news_service.MIN_REFRESH_GAP) if updated_at else None
+
+
+@app.get("/v1/news", response_model=NewsOut, tags=["news"])
+async def get_news(
+    source: str | None = Query(default=None, max_length=60, description="Only this source"),
+    mine: bool = Query(default=False, description="Only stories naming a model this project uses"),
+    model: str | None = Query(default=None, max_length=200,
+                              description="Only stories naming this model (e.g. an alert's model)"),
+    job: str | None = Query(default=None, max_length=200, description="Only stories naming a model this job uses"),
+    since: datetime | None = Query(default=None, description="Only stories published at or after this time"),
+    until: datetime | None = Query(default=None, description="Only stories published at or before this time"),
+    limit: int = Query(default=60, ge=1, le=200),
+    project: Project = Depends(current_project), session: AsyncSession = Depends(get_session),
+) -> NewsOut:
+    """The latest AI news from public feeds (refreshed hourly), newest first. Stories that name a watched
+    model carry it in `affects`: the project's models from the last 90 days, one job's with `job`, or one
+    `model`. With `job` or `model` only those stories are returned."""
+    job_id = (await _job(session, project, job)).job_id if job else None
+    listed, models = await news_service.list_news(
+        session, project.project_id, source=source, mine=mine, model=model, job_id=job_id, since=since,
+        until=until, limit=limit)
+    updated_at, next_at = _news_times(await news_service.last_refreshed(session))
+    return NewsOut(
+        items=[NewsItemOut(item_id=x.item.item_id, source=x.item.source, kind=x.item.kind, title=x.item.title,
+                           link=x.item.link, summary=x.item.summary, published_at=x.item.published_at,
+                           affects=x.affects) for x in listed],
+        sources=[NewsSourceOut(source=f.source, kind=f.kind) for f in NEWS_FEEDS],
+        your_models=models, updated_at=updated_at, next_refresh_at=next_at,
+    )
+
+
+@app.post("/v1/news/refresh", response_model=NewsRefreshOut, tags=["news"])
+async def refresh_news(
+    project: Project = Depends(current_project), session: AsyncSession = Depends(get_session),
+) -> NewsRefreshOut:
+    """Fetch the feeds now, unless they were fetched in the last 10 minutes (shared by everyone), in
+    which case nothing is fetched and `refreshed` is false."""
+    last = await news_service.last_refreshed(session)
+    if last is not None and datetime.now(UTC) - last < news_service.MIN_REFRESH_GAP:
+        updated_at, next_at = _news_times(last)
+        return NewsRefreshOut(refreshed=False, added=0, failed_sources=[], updated_at=updated_at,
+                              next_refresh_at=next_at)
+    await session.commit()  # end this request's transaction before the fetch, which takes seconds
+    result = await news_service.refresh(async_sessionmaker(session.bind, expire_on_commit=False))
+    updated_at, next_at = _news_times(await news_service.last_refreshed(session))
+    return NewsRefreshOut(refreshed=result.refreshed, added=result.added, failed_sources=result.failed,
+                          updated_at=updated_at, next_refresh_at=next_at)
 
 
 @app.get("/v1/limits", response_model=list[UsageLimitOut], tags=["limits"])

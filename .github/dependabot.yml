@@ -1,7 +1,24 @@
-# Actions are pinned to exact commits in ci.yml for reproducible builds; Dependabot proposes the bumps.
+# Dependabot proposes version bumps as pull requests; CI (tests, pip-audit, npm audit) checks each one.
+# Actions are pinned to exact commits in ci.yml; Python versions to requirements-lock.txt; npm to package-lock.json.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      python-minor-and-patch:   # one pull request a week for routine updates; majors come one by one
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]

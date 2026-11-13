@@ -17,6 +17,7 @@ import type {
   RetestLimits,
   User,
   Project,
+  NewsItem,
 } from "../shared/api/types";
 import initialJobs from "./jobs.sample.json";
 import sampleRunsData from "./runs.sample.json";
@@ -62,6 +63,7 @@ const projects: Project[] = [
     webhook_secret: "whsec_mock_secret",
     retest_monthly_cap_usd: 10,
     retest_allowed: true,
+    content_retention_days: 90,
     key_prefix: "mcm_live_prod",
     created_at: "2026-09-01T00:00:00Z",
   },
@@ -72,6 +74,7 @@ const projects: Project[] = [
     webhook_secret: "whsec_mock_secret",
     retest_monthly_cap_usd: 50,
     retest_allowed: false,
+    content_retention_days: 90,
     key_prefix: "mcm_live_stag",
     created_at: "2026-09-15T00:00:00Z",
   },
@@ -324,6 +327,7 @@ export const handlers = [
     const job = url.searchParams.get("job");
     const model = url.searchParams.get("model");
     const outcome = url.searchParams.get("outcome");
+    const recommendation = url.searchParams.get("recommendation");
     const limitParam = url.searchParams.get("limit");
     const cursorParam = url.searchParams.get("cursor");
 
@@ -337,6 +341,10 @@ export const handlers = [
     }
     if (outcome && outcome !== "All") {
       filtered = filtered.filter((r) => r.outcome === outcome);
+    }
+    if (recommendation) {
+      // The runs one verdict rests on: in the sample data, a stable half of the job's runs.
+      filtered = filtered.filter((r) => parseInt(r.run_id.slice(-2), 16) % 2 === 0);
     }
 
     const limit = Math.min(200, Math.max(1, limitParam ? parseInt(limitParam, 10) : 50));
@@ -470,8 +478,18 @@ export const handlers = [
     const base = sampleRecommendation as Recommendation;
 
     if (jobName === "invoice-extract") {
-      // The contract sample, produced by the backend's own engine.
-      return HttpResponse.json(base);
+      // The contract sample, produced by the backend's own engine, with the saving forecast the real API
+      // adds when both models are priced.
+      return HttpResponse.json({
+        ...base,
+        forecast: base.forecast ?? {
+          runs_per_month: 3640,
+          monthly_saving_usd: 101.6,
+          extra_failures_per_month: 10.9,
+          extra_failures_low: 1.8,
+          extra_failures_high: 21.4,
+        },
+      });
     }
 
     if (jobName === "ticket-classify") {
@@ -696,6 +714,128 @@ export const handlers = [
     return HttpResponse.json({ detail: "Job not found" }, { status: 404 });
   }),
 
+  // GET /healthz and /healthz/scheduler: the API is up and the background jobs keep up.
+  http.get("/healthz", () => HttpResponse.json({ status: "ok" })),
+  http.get("/healthz/scheduler", () => HttpResponse.json({ status: "ok", overdue: {} })),
+
+  // GET /v1/insights/daily: 60 days per job and model, deterministic. invoice-extract moves from
+  // acme-large to acme-mini three weeks ago; acme-large's new version dips for a week.
+  http.get("/v1/insights/daily", async ({ request }) => {
+    await delay(250);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+    const url = new URL(request.url);
+    const days = Number(url.searchParams.get("days") ?? 60);
+    const onlyJob = url.searchParams.get("job");
+    let seed = 7;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const plan: Array<{ job: string; model: string; perDay: number; pass: number; cost: number; from: number; to: number }> = [
+      { job: "invoice-extract", model: "acme-large", perDay: 120, pass: 0.975, cost: 0.031, from: days, to: 21 },
+      { job: "invoice-extract", model: "acme-large", perDay: 35, pass: 0.97, cost: 0.031, from: 21, to: 0 },
+      { job: "invoice-extract", model: "acme-mini", perDay: 90, pass: 0.962, cost: 0.003, from: 21, to: 0 },
+      { job: "invoice-extract", model: "acme-mini", perDay: 12, pass: 0.955, cost: 0.003, from: 45, to: 21 },
+      { job: "ticket-classify", model: "mini", perDay: 18, pass: 0.88, cost: 0.0011, from: 14, to: 0 },
+      { job: "receipt-scan", model: "acme-mini", perDay: 26, pass: 0.985, cost: 0.0024, from: days, to: 0 },
+    ];
+    const out: Array<{ day: string; job: string; model: string; runs: number; passed: number; failed: number; spend_usd: number }> = [];
+    const today = new Date();
+    for (let d = days - 1; d >= 0; d--) {
+      const day = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - d)).toISOString().slice(0, 10);
+      const merged = new Map<string, { runs: number; passed: number; failed: number; spend_usd: number }>();
+      for (const p of plan) {
+        if (d >= p.from || d < p.to || (onlyJob && p.job !== onlyJob)) continue;
+        const weekday = new Date(day).getUTCDay();
+        const runs = Math.round(p.perDay * (weekday === 0 || weekday === 6 ? 0.55 : 1) * (0.85 + rand() * 0.3));
+        const dip = p.model === "acme-large" && d < 12 && d >= 5 ? 0.06 : 0;
+        const rate = Math.min(0.999, p.pass - dip + (rand() - 0.5) * 0.02);
+        const passed = Math.round(runs * rate);
+        const unknown = Math.round(runs * 0.01);
+        const key = `${p.job}|${p.model}`;
+        const prev = merged.get(key) ?? { runs: 0, passed: 0, failed: 0, spend_usd: 0 };
+        merged.set(key, {
+          runs: prev.runs + runs,
+          passed: prev.passed + passed,
+          failed: prev.failed + Math.max(0, runs - passed - unknown),
+          spend_usd: Math.round((prev.spend_usd + runs * p.cost * (0.9 + rand() * 0.2)) * 100) / 100,
+        });
+      }
+      for (const [key, v] of merged) {
+        const [job, model] = key.split("|");
+        out.push({ day, job, model, ...v });
+      }
+    }
+    return HttpResponse.json(out);
+  }),
+
+  // GET /v1/news: a few stories, one naming a model the demo project runs
+  http.get("/v1/news", async ({ request }) => {
+    await delay(300);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+    const url = new URL(request.url);
+    const source = url.searchParams.get("source");
+    const mine = url.searchParams.get("mine") === "true";
+    const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+    const all: NewsItem[] = [
+      {
+        item_id: "n1", source: "Acme Labs", kind: "lab", published_at: hoursAgo(2),
+        title: "acme-mini gets a new version and a lower price",
+        link: "https://example.com/acme-mini", affects: ["acme-mini"],
+        summary: "The 2026-11 snapshot cuts input prices by a third and changes default output length.",
+      },
+      {
+        item_id: "n2", source: "Simon Willison", kind: "community", published_at: hoursAgo(5),
+        title: "Notes on structured output across five providers",
+        link: "https://example.com/structured", affects: [],
+        summary: "Which models keep to a JSON schema under load, and which drift after a few thousand calls.",
+      },
+      {
+        item_id: "n3", source: "The Verge", kind: "press", published_at: hoursAgo(26),
+        title: "A new open-weight model tops the coding benchmarks",
+        link: "https://example.com/open-weights", affects: [],
+        summary: "Released under a permissive licence, with a small version that runs on a laptop.",
+      },
+    ];
+    const model = url.searchParams.get("model");
+    const job = url.searchParams.get("job");
+    const since = url.searchParams.get("since");
+    const until = url.searchParams.get("until");
+    const about = (i: NewsItem) => (model ? i.title.includes(model) : i.affects.length > 0);
+    const items = all.filter(
+      (i) =>
+        (!source || i.source === source) &&
+        (!(mine || model || job) || about(i)) &&
+        (!since || i.published_at >= since) &&
+        (!until || i.published_at <= until),
+    );
+    return HttpResponse.json({
+      items,
+      sources: [
+        { source: "Acme Labs", kind: "lab" },
+        { source: "Simon Willison", kind: "community" },
+        { source: "The Verge", kind: "press" },
+      ],
+      your_models: ["acme-large", "acme-mini"],
+      updated_at: hoursAgo(0.3),
+      next_refresh_at: hoursAgo(0.3 - 10 / 60),
+    });
+  }),
+
+  // POST /v1/news/refresh
+  http.post("/v1/news/refresh", async ({ request }) => {
+    await delay(900);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+    const now = new Date();
+    return HttpResponse.json({
+      refreshed: true, added: 2, failed_sources: [], updated_at: now.toISOString(),
+      next_refresh_at: new Date(now.getTime() + 10 * 60_000).toISOString(),
+    });
+  }),
+
   // GET /v1/limits: one plan limit about to run out, with a proven cheaper option
   http.get("/v1/limits", async ({ request }) => {
     await delay(300);
@@ -915,8 +1055,8 @@ export const handlers = [
     }
     const user: User = {
       user_id: "usr_demo_1001",
-      email: "mahi@example.com",
-      name: "Mahi Demo",
+      email: "demo@example.com",
+      name: "Demo user (sample data)",
       picture_url: null,
     };
     return HttpResponse.json(user);
@@ -986,6 +1126,7 @@ export const handlers = [
       webhook_secret: "whsec_mock_secret",
       retest_monthly_cap_usd: 10,
       retest_allowed: true,
+      content_retention_days: 90,
       key_prefix: keyPrefix,
       created_at: new Date().toISOString(),
     };
@@ -1009,6 +1150,7 @@ export const handlers = [
       webhook_url?: string | null;
       retest_monthly_cap_usd?: number;
       retest_allowed?: boolean;
+      content_retention_days?: number;
     };
     if (body.name !== undefined) {
       const name = body.name.trim();
@@ -1043,7 +1185,35 @@ export const handlers = [
     if (body.retest_allowed !== undefined) {
       project.retest_allowed = Boolean(body.retest_allowed);
     }
+    if (body.content_retention_days !== undefined) {
+      const days = Number(body.content_retention_days);
+      if (!Number.isInteger(days) || days < 1 || days > 3650) {
+        return HttpResponse.json(
+          { detail: "content_retention_days must be between 1 and 3650" },
+          { status: 422 },
+        );
+      }
+      project.content_retention_days = days;
+    }
     return HttpResponse.json(project);
+  }),
+
+  // DELETE /v1/projects/:project_id?confirm=<project_id>
+  http.delete("/v1/projects/:project_id", async ({ request, params }) => {
+    await delay(350);
+    if (!isMockSignedIn(request)) {
+      return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
+    }
+    const id = String(params.project_id);
+    const index = projects.findIndex((p) => p.project_id === id);
+    if (index === -1) {
+      return HttpResponse.json({ detail: "Project not found" }, { status: 404 });
+    }
+    if (new URL(request.url).searchParams.get("confirm") !== id) {
+      return HttpResponse.json({ detail: "confirm must equal the project id" }, { status: 422 });
+    }
+    projects.splice(index, 1);
+    return new HttpResponse(null, { status: 204 });
   }),
 
   // POST /v1/projects/:project_id/key

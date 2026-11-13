@@ -2,9 +2,10 @@ import { apiFetch } from "../../../shared/api/apiFetch";
 import type { Alert, Model } from "../../../shared/api/types";
 import { fetchModels } from "../../models/api/modelsApi";
 
+/** One job's alerts, open and resolved: the job page shows its whole history. */
 export function fetchJobRegressions(jobName: string): Promise<Alert[]> {
   return apiFetch<Alert[]>(
-    `/v1/jobs/${encodeURIComponent(jobName)}/regressions`,
+    `/v1/jobs/${encodeURIComponent(jobName)}/regressions?include_resolved=true`,
   );
 }
 
