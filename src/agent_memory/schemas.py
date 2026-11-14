@@ -73,6 +73,19 @@ class JobCreate(Model):
         return self
 
 
+class JobPatch(Model):
+    """Change a job's description. Name and check settings cannot be changed."""
+
+    description: str | None = Field(default=None, max_length=500,
+                                    description="Null or an empty string clears it")
+
+    @field_validator("description")
+    @classmethod
+    def _trim(cls, v: str | None) -> str | None:
+        v = v.strip() if v is not None else None
+        return v or None
+
+
 class JobOut(Model):
     job_id: uuid.UUID
     name: str
@@ -96,6 +109,10 @@ class RunOut(Model):
     model_version: str
     prompt_version: str | None
     effort: str | None = None
+    agent: str | None = Field(default=None, description="Which agent or role made the call, if the SDK said")
+    trace_id: str | None = Field(default=None, description="Shared by every call serving the same user task")
+    tools_tokens: int | None = Field(default=None, description="Estimated tokens of the tool definitions sent")
+    tool_call_count: int | None = Field(default=None, description="Tool calls the response made")
     tokens_in: int
     tokens_out: int
     cache_read_tokens: int
@@ -107,8 +124,10 @@ class RunOut(Model):
     run_kind: RunKind
     state: RunState
     created_at: datetime
-    prompt_preview: str | None = Field(description="First 200 characters of the prompt; null once retention cleared it")
-    output_preview: str | None = Field(description="First 200 characters of the output")
+    prompt_preview: str | None = Field(description="First 240 characters of the prompt, whitespace "
+                                                                   "collapsed, ending in an ellipsis when cut; "
+                                                                   "null once retention cleared it")
+    output_preview: str | None = Field(description="Same for the output")
     content_removed_at: datetime | None = Field(
         default=None, description="When the prompt, output, tool calls and answer key were cleared under the "
                                   "project's retention; the figures are kept")
@@ -155,6 +174,11 @@ class RunCreate(Model):
         description="The reasoning effort the call asked for (e.g. low, medium, high). The same model at different "
                     "efforts is compared as separate options",
     )
+    agent: str | None = Field(default=None, max_length=100, description="Which agent or role made the call")
+    trace_id: str | None = Field(default=None, max_length=200,
+                                 description="One id shared by every call that serves the same user task")
+    tools_tokens: int | None = Field(default=None, ge=0, le=MAX_TOKENS,
+                                     description="Estimated tokens of the tool definitions sent with the call")
     tokens_in: int = Field(default=0, ge=0, le=MAX_TOKENS, description="Uncached input tokens")
     tokens_out: int = Field(default=0, ge=0, le=MAX_TOKENS, description="Output tokens, thinking included")
     cache_read_tokens: int = Field(default=0, ge=0, le=MAX_TOKENS)
@@ -632,4 +656,43 @@ class DayPointOut(Model):
     passed: int
     failed: int = Field(description="UNKNOWN runs count in runs but in neither passed nor failed")
     spend_usd: float = Field(description="Priced runs only")
+    tokens_in: int = Field(default=0, description="Uncached input tokens, summed over the group's runs")
+    tokens_out: int = Field(default=0, description="Output tokens, summed over the group's runs")
+    cache_read_tokens: int = Field(default=0, description="Input tokens read from the prompt cache")
+    cache_write_tokens: int = Field(default=0, description="Input tokens written to the prompt cache")
+    unpriced_runs: int = Field(default=0, description="Runs with no known price (cost unknown): not in spend_usd")
+    failed_spend_usd: float = Field(default=0.0, description="Actual cost of the priced runs whose check failed")
 
+
+
+class AgentUsageOut(Model):
+    agent: str = Field(description="The agent or role; runs that named none are 'unlabelled'")
+    runs: int
+    tokens_in: int
+    tokens_out: int
+    cache_read_tokens: int
+    spend_usd: float = Field(description="Priced runs only")
+    share: float = Field(description="Share of the project's total tokens in the window, 0..1")
+
+
+class TraceUsageOut(Model):
+    trace_id: str
+    calls: int
+    tokens: int = Field(description="Input, output and cache tokens over every call in the trace")
+    spend_usd: float = Field(description="Priced runs only")
+    agents: int = Field(description="Distinct agents in the trace")
+    repeated_prompts: bool = Field(description="The same prompt appears 3 or more times in the trace: a likely "
+                                               "retry loop or runaway agent")
+
+
+class ToolsUsageOut(Model):
+    job: str
+    runs: int = Field(description="Runs that sent tool definitions")
+    avg_tools_tokens: int = Field(description="Estimated tokens the tool definitions add to every call")
+    share_of_tokens_in: float = Field(description="Of those runs' input tokens (cache included), 0..1")
+
+
+class AgentInsightsOut(Model):
+    agents: list[AgentUsageOut]
+    traces: list[TraceUsageOut] = Field(description="Top 10 traces by total tokens")
+    tools: list[ToolsUsageOut]

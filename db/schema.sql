@@ -116,13 +116,18 @@ CREATE TABLE runs (
     retest_id         UUID REFERENCES retests(retest_id),  -- which re-test produced a RETEST run
     expected          JSONB,                        -- answer key, kept only for jobs with re-test consent
     provider          TEXT,                         -- who served the call, e.g. 'groq'; picks the price (0010)
-    content_removed_at TIMESTAMPTZ                  -- when retention cleared prompt, output, tool calls, answer key, embedding (0015)
+    content_removed_at TIMESTAMPTZ,                 -- when retention cleared prompt, output, tool calls, answer key, embedding (0015)
+    agent             TEXT,                         -- which agent or role made the call (0017)
+    trace_id          TEXT,                         -- shared by every call serving one user task (0017)
+    tools_tokens      INTEGER,                      -- estimated tokens of the tool definitions sent, chars / 4 (0017)
+    tool_call_count   INTEGER                       -- number of tool calls in the response (0017)
 );
 CREATE INDEX idx_runs_content_kept ON runs(created_at) WHERE content_removed_at IS NULL;
 CREATE INDEX idx_runs_retest ON runs(retest_id) WHERE retest_id IS NOT NULL;
 CREATE INDEX idx_runs_job_model ON runs(job_id, model, model_version);
 CREATE INDEX idx_runs_job_created ON runs(job_id, created_at DESC);   -- "recent runs for this job"
 CREATE INDEX idx_runs_prompt_hash ON runs(prompt_hash);
+CREATE INDEX idx_runs_project_trace ON runs(project_id, trace_id) WHERE trace_id IS NOT NULL;   -- (0017)
 CREATE INDEX idx_runs_embedding ON runs USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX idx_runs_embedding_cache ON runs(project_id, prompt_hash, embedding_model) WHERE embedding IS NOT NULL;
 

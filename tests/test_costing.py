@@ -47,3 +47,30 @@ def test_more_usage_never_costs_less(a, b, c, d):
     assert compute_cost(price, a + 1, b, c, d) >= base
     assert compute_cost(price, a, b + 1, c, d) >= base
     assert base >= 0
+
+
+def test_cache_read_factor_follows_the_model_family():
+    from agent_memory.costing import cache_factors
+
+    assert cache_factors("claude-opus-5-5-20260901")[0] == Decimal("0.05")
+    assert cache_factors("Claude-Sonnet-5.5")[0] == Decimal("0.05")
+    assert cache_factors("claude-fable-5-2")[0] == Decimal("0.025")
+    assert cache_factors("something-unknown") == (Decimal("0.1"), Decimal("1.25"))
+    assert cache_factors(None) == (Decimal("0.1"), Decimal("1.25"))
+
+
+def test_price_uses_model_cache_factor_and_keeps_default_for_unknown():
+    fable = Price.from_input_output(10, 50, model="claude-fable-5-1")
+    other = Price.from_input_output(10, 50, model="gpt-x")
+    assert compute_cost(fable, 0, 0, cache_read_tokens=1_000_000) == Decimal("0.250000")
+    assert compute_cost(other, 0, 0, cache_read_tokens=1_000_000) == Decimal("1.000000")
+    assert compute_cost(fable, 0, 0, cache_write_tokens=1_000_000) == Decimal("12.500000")  # priced at the 5-minute rate
+
+
+def test_write_factor_blends_the_five_minute_and_one_hour_split():
+    from agent_memory.costing import write_factor_for_split
+
+    assert write_factor_for_split(100, 0) == Decimal("1.25")
+    assert write_factor_for_split(0, 100) == Decimal("2")
+    assert write_factor_for_split(50, 50) == Decimal("1.625")
+    assert write_factor_for_split(0, 0) == Decimal("1.25")

@@ -208,3 +208,77 @@ def test_the_recorders_provider_is_sent_with_each_run():
     sender.flush(2)
     assert [b.get("provider") for b in server.bodies()] == ["groq", None]
     sender.close()
+
+
+TOOLS = [{"name": "search", "description": "Search the web", "input_schema": {"type": "object"}}]
+
+
+def test_agent_trace_and_tool_definitions_are_sent_and_the_tool_size_is_estimated():
+    server = Server()
+    sender = sender_for(server)
+    with RunRecorder(job="j", sender=sender) as rec:
+        rec.capture(anthropic_like(), prompt="p", agent="planner", trace_id="t-1", tools=TOOLS)
+    assert sender.flush(2)
+    body = server.bodies()[0]
+    assert body["agent"] == "planner" and body["trace_id"] == "t-1"
+    assert body["tools_tokens"] == len(json.dumps(TOOLS, sort_keys=True)) // 4 > 0
+    sender.close()
+
+
+def test_long_agent_and_trace_are_trimmed_and_no_tools_means_no_field():
+    server = Server()
+    sender = sender_for(server)
+    with RunRecorder(job="j", sender=sender) as rec:
+        rec.capture(anthropic_like(), prompt="p", agent="a" * 300, trace_id="t" * 500)
+    sender.flush(2)
+    body = server.bodies()[0]
+    assert len(body["agent"]) == 100 and len(body["trace_id"]) == 200 and "tools_tokens" not in body
+    sender.close()
+
+
+def test_unserialisable_tools_never_raise():
+    server = Server()
+    sender = sender_for(server)
+    cyc: list = []
+    cyc.append(cyc)
+    with RunRecorder(job="j", sender=sender) as rec:
+        rec.capture(anthropic_like(), prompt="p", tools=cyc)
+    sender.flush(2)
+    assert len(server.requests) == 1
+    sender.close()
+
+
+def test_tool_calls_are_read_from_anthropic_and_openai_responses():
+    anth = anthropic_like()
+    anth.content.append(SimpleNamespace(type="tool_use", id="tu_1", name="search", input={"q": "x"}))
+    assert [c["name"] for c in read_response(anth)["tool_calls"]] == ["search"]
+    oai = openai_like()
+    oai.choices[0].message.tool_calls = [
+        SimpleNamespace(id="c1", function=SimpleNamespace(name="a", arguments="{}")),
+        SimpleNamespace(id="c2", function=SimpleNamespace(name="b", arguments="{}")),
+    ]
+    assert len(read_response(oai)["tool_calls"]) == 2
+    assert "tool_calls" not in read_response(anthropic_like())
+
+
+def gemini_like():
+    return SimpleNamespace(
+        model_version="gemini-x",
+        usage_metadata=SimpleNamespace(prompt_token_count=1000, cached_content_token_count=400,
+                                       candidates_token_count=90, thoughts_token_count=60,
+                                       tool_use_prompt_token_count=0),
+        candidates=[SimpleNamespace(content=SimpleNamespace(parts=[SimpleNamespace(text="hi "), SimpleNamespace(text="there")]))],
+    )
+
+
+def test_reads_a_gemini_response_object_cached_inside_prompt_and_thoughts_as_output():
+    data = read_response(gemini_like())
+    assert data["tokens_in"] == 600 and data["cache_read_tokens"] == 400
+    assert data["tokens_out"] == 150  # 90 answer + 60 thinking, both billed as output
+    assert data["output"] == "hi there"
+
+
+def test_reads_a_gemini_rest_dict_with_tool_use_tokens():
+    data = read_response({"usageMetadata": {"promptTokenCount": 500, "toolUsePromptTokenCount": 40,
+                                            "candidatesTokenCount": 10}})
+    assert data["tokens_in"] == 540 and data["tokens_out"] == 10 and data["cache_read_tokens"] == 0

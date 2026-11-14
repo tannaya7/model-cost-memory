@@ -29,6 +29,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from . import __version__, ingest
 from .db import dispose_engine, get_session
+from .insights.agents import agent_insights
 from .insights.service import daily as insights_daily
 from .insights.service import job_insights, spend_by_job
 from .logging_config import configure_logging, set_context
@@ -40,6 +41,10 @@ from .recommend.summary import summarize
 from .retest import keys as provider_keys
 from .retest.runner import RetestRefused, enqueue, spent_this_month, start_on_first_key
 from .schemas import (
+    AgentInsightsOut,
+    AgentUsageOut,
+    ToolsUsageOut,
+    TraceUsageOut,
     DayPointOut,
     AlertOut,
     BreakdownOut,
@@ -56,6 +61,7 @@ from .schemas import (
     JobCreate,
     JobInsightsOut,
     JobOut,
+    JobPatch,
     LabelCreate,
     LimitSuggestionOut,
     ModelEvidenceOut,
@@ -192,7 +198,8 @@ async def _weights(session: AsyncSession, runs: list[Run], now: datetime | None 
 def _run_fields(r: Run, job_name: str, weight: float | None = None) -> dict:
     return dict(
         run_id=r.run_id, job_id=r.job_id, job=job_name, model=r.model, model_version=r.model_version,
-        prompt_version=r.prompt_version, effort=r.effort, tokens_in=r.tokens_in, tokens_out=r.tokens_out,
+        prompt_version=r.prompt_version, effort=r.effort, agent=r.agent, trace_id=r.trace_id,
+        tools_tokens=r.tools_tokens, tool_call_count=r.tool_call_count, tokens_in=r.tokens_in, tokens_out=r.tokens_out,
         cache_read_tokens=r.cache_read_tokens, cache_write_tokens=r.cache_write_tokens,
         cost_usd=float(r.cost_usd) if r.cost_usd is not None else None, latency_ms=r.latency_ms, outcome=r.outcome,
         outcome_reason=r.outcome_reason, run_kind=r.run_kind, state=r.state, created_at=r.created_at,
@@ -202,8 +209,51 @@ def _run_fields(r: Run, job_name: str, weight: float | None = None) -> dict:
     )
 
 
+LIST_PREVIEW_CHARS = 240
+_PREVIEW_SCAN = 4000  # raw characters looked at before collapsing whitespace
+
+
+def _list_preview(text_: str | None) -> str | None:
+    """First 240 characters, whitespace collapsed, with an ellipsis when cut; null when not stored."""
+    if text_ is None:
+        return None
+    collapsed = " ".join(text_[:_PREVIEW_SCAN].split())
+    if len(collapsed) > LIST_PREVIEW_CHARS or len(text_) > _PREVIEW_SCAN:
+        return collapsed[:LIST_PREVIEW_CHARS].rstrip() + "…"
+    return collapsed
+
+
 def _run_out(r: Run, job_name: str, weight: float | None = None) -> RunOut:
-    return RunOut(**_run_fields(r, job_name, weight))
+    fields = _run_fields(r, job_name, weight)
+    removed = r.content_removed_at is not None
+    fields["prompt_preview"] = None if removed else _list_preview(r.prompt)
+    fields["output_preview"] = None if removed else _list_preview(r.output)
+    return RunOut(**fields)
+
+
+@app.patch("/v1/jobs/{job}", response_model=JobOut, tags=["jobs"])
+async def patch_job_endpoint(
+    job: str,
+    body: JobPatch,
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> JobOut:
+    """Change a job's description. The name and the check settings never change (the name is what your
+    code sends, and the check decides pass or fail)."""
+    found = await _job(session, project, job)
+    await ingest.update_job_description(session, found, body.description)
+    await session.commit()
+    counts = (
+        await session.execute(
+            select(Run.state, func.count()).where(Run.job_id == found.job_id).group_by(Run.state)
+        )
+    ).all()
+    by_state = {state: n for state, n in counts}
+    return JobOut(
+        job_id=found.job_id, name=found.name, description=found.description, check_kind=found.check_kind,
+        check_config=found.check_config, retest_consent=found.retest_consent,
+        run_count=sum(by_state.values()), runs_by_state=by_state,
+    )
 
 
 async def _job_name(session: AsyncSession, job_id, project_id: str) -> str:
@@ -508,6 +558,22 @@ async def get_daily(
     over time. Days without runs are absent."""
     job_id = (await _job(session, project, job)).job_id if job else None
     return [DayPointOut(**vars(p)) for p in await insights_daily(session, project.project_id, days=days, job_id=job_id)]
+
+
+@app.get("/v1/insights/agents", response_model=AgentInsightsOut, tags=["insights"])
+async def get_agent_insights(
+    days: int = Query(default=30, ge=1, le=365, description="How many days back"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> AgentInsightsOut:
+    """Tokens and spend per agent, the ten heaviest traces (with a retry-loop flag), and what tool
+    definitions add to each call. Production runs only."""
+    found = await agent_insights(session, project.project_id, days=days)
+    return AgentInsightsOut(
+        agents=[AgentUsageOut(**vars(x)) for x in found.agents],
+        traces=[TraceUsageOut(**vars(x)) for x in found.traces],
+        tools=[ToolsUsageOut(**vars(x)) for x in found.tools],
+    )
 
 
 def _alert_out(alert: Alert, job_name: str) -> AlertOut:

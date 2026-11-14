@@ -24,6 +24,41 @@ DEFAULT_CACHE_READ_FACTOR = Decimal("0.1")
 DEFAULT_CACHE_WRITE_FACTOR = Decimal("1.25")
 
 
+WRITE_1H_FACTOR = Decimal("2")  # Anthropic 1-hour cache writes
+
+# Anthropic's pricing page (retrieved 2026-11-14): cache read is 0.1x base input on most models,
+# 0.05x on Opus 5.5 and Sonnet 5.5, 0.025x on Fable 5.1/5.2 and Mythos 5.2. Writes are 1.25x (5 minutes)
+# or 2x (1 hour). Keys are matched as substrings of the lowercased model name with "." read as "-".
+_CACHE_READ_FACTORS: tuple[tuple[str, Decimal], ...] = (
+    ("fable-5-1", Decimal("0.025")),
+    ("fable-5-2", Decimal("0.025")),
+    ("mythos-5-2", Decimal("0.025")),
+    ("opus-5-5", Decimal("0.05")),
+    ("sonnet-5-5", Decimal("0.05")),
+)
+
+
+def cache_factors(model: str | None) -> tuple[Decimal, Decimal]:
+    """(cache read factor, cache write factor) for a model; unknown models get the defaults.
+
+    The run stores one cache-write count with no 5-minute/1-hour split, so writes are priced at the
+    5-minute rate (an underestimate for 1-hour writes; use `write_factor_for_split` when the split is known).
+    """
+    name = (model or "").lower().replace(".", "-")
+    for key, factor in _CACHE_READ_FACTORS:
+        if key in name:
+            return factor, DEFAULT_CACHE_WRITE_FACTOR
+    return DEFAULT_CACHE_READ_FACTOR, DEFAULT_CACHE_WRITE_FACTOR
+
+
+def write_factor_for_split(write_5m_tokens: int, write_1h_tokens: int) -> Decimal:
+    """Blended write factor for a recorded 5-minute/1-hour split of cache-creation tokens."""
+    total = write_5m_tokens + write_1h_tokens
+    if total <= 0:
+        return DEFAULT_CACHE_WRITE_FACTOR
+    return (DEFAULT_CACHE_WRITE_FACTOR * write_5m_tokens + WRITE_1H_FACTOR * write_1h_tokens) / total
+
+
 @dataclass(frozen=True)
 class Price:
     input_per_mtok: Decimal
@@ -38,7 +73,15 @@ class Price:
         output_per_mtok: Decimal | float | str,
         cache_read_factor: Decimal = DEFAULT_CACHE_READ_FACTOR,
         cache_write_factor: Decimal = DEFAULT_CACHE_WRITE_FACTOR,
+        model: str | None = None,
     ) -> Price:
+        """Pass `model` to use that model's cache factors (explicit factors still win when not default)."""
+        if model is not None:
+            read_f, write_f = cache_factors(model)
+            if cache_read_factor == DEFAULT_CACHE_READ_FACTOR:
+                cache_read_factor = read_f
+            if cache_write_factor == DEFAULT_CACHE_WRITE_FACTOR:
+                cache_write_factor = write_f
         price_in = Decimal(str(input_per_mtok))
         return cls(
             input_per_mtok=price_in,

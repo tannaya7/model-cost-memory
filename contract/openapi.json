@@ -1,6 +1,85 @@
 {
   "components": {
     "schemas": {
+      "AgentInsightsOut": {
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/AgentUsageOut"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ToolsUsageOut"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "traces": {
+            "description": "Top 10 traces by total tokens",
+            "items": {
+              "$ref": "#/components/schemas/TraceUsageOut"
+            },
+            "title": "Traces",
+            "type": "array"
+          }
+        },
+        "required": [
+          "agents",
+          "traces",
+          "tools"
+        ],
+        "title": "AgentInsightsOut",
+        "type": "object"
+      },
+      "AgentUsageOut": {
+        "properties": {
+          "agent": {
+            "description": "The agent or role; runs that named none are 'unlabelled'",
+            "title": "Agent",
+            "type": "string"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          },
+          "share": {
+            "description": "Share of the project's total tokens in the window, 0..1",
+            "title": "Share",
+            "type": "number"
+          },
+          "spend_usd": {
+            "description": "Priced runs only",
+            "title": "Spend Usd",
+            "type": "number"
+          },
+          "tokens_in": {
+            "title": "Tokens In",
+            "type": "integer"
+          },
+          "tokens_out": {
+            "title": "Tokens Out",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "agent",
+          "runs",
+          "tokens_in",
+          "tokens_out",
+          "cache_read_tokens",
+          "spend_usd",
+          "share"
+        ],
+        "title": "AgentUsageOut",
+        "type": "object"
+      },
       "AlertOut": {
         "description": "A regression, silent drop or deprecation that needs a person's attention.",
         "properties": {
@@ -199,6 +278,18 @@
       },
       "DayPointOut": {
         "properties": {
+          "cache_read_tokens": {
+            "default": 0,
+            "description": "Input tokens read from the prompt cache",
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cache_write_tokens": {
+            "default": 0,
+            "description": "Input tokens written to the prompt cache",
+            "title": "Cache Write Tokens",
+            "type": "integer"
+          },
           "day": {
             "format": "date",
             "title": "Day",
@@ -208,6 +299,12 @@
             "description": "UNKNOWN runs count in runs but in neither passed nor failed",
             "title": "Failed",
             "type": "integer"
+          },
+          "failed_spend_usd": {
+            "default": 0.0,
+            "description": "Actual cost of the priced runs whose check failed",
+            "title": "Failed Spend Usd",
+            "type": "number"
           },
           "job": {
             "title": "Job",
@@ -230,6 +327,24 @@
             "description": "Priced runs only",
             "title": "Spend Usd",
             "type": "number"
+          },
+          "tokens_in": {
+            "default": 0,
+            "description": "Uncached input tokens, summed over the group's runs",
+            "title": "Tokens In",
+            "type": "integer"
+          },
+          "tokens_out": {
+            "default": 0,
+            "description": "Output tokens, summed over the group's runs",
+            "title": "Tokens Out",
+            "type": "integer"
+          },
+          "unpriced_runs": {
+            "default": 0,
+            "description": "Runs with no known price (cost unknown): not in spend_usd",
+            "title": "Unpriced Runs",
+            "type": "integer"
           }
         },
         "required": [
@@ -787,6 +902,26 @@
           "run_count"
         ],
         "title": "JobOut",
+        "type": "object"
+      },
+      "JobPatch": {
+        "description": "Change a job's description. Name and check settings cannot be changed.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null or an empty string clears it",
+            "title": "Description"
+          }
+        },
+        "title": "JobPatch",
         "type": "object"
       },
       "LabelCreate": {
@@ -2147,6 +2282,19 @@
       "RunCreate": {
         "description": "One model call, sent by the SDK (or any client) after the production call has finished.\n\n`run_id` is generated by the sender, so a retried send is recognised as the same run and never\ncounted twice. The outcome (pass or fail) is never accepted from the client: it is resolved here.",
         "properties": {
+          "agent": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Which agent or role made the call",
+            "title": "Agent"
+          },
           "cache_read_tokens": {
             "default": 0,
             "maximum": 10000000.0,
@@ -2311,6 +2459,33 @@
             ],
             "description": "Only each tool's name and call id are kept. Arguments are dropped unless the project has opted in to storing them, because they can hold sensitive data.",
             "title": "Tool Calls"
+          },
+          "tools_tokens": {
+            "anyOf": [
+              {
+                "maximum": 10000000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Estimated tokens of the tool definitions sent with the call",
+            "title": "Tools Tokens"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One id shared by every call that serves the same user task",
+            "title": "Trace Id"
           }
         },
         "required": [
@@ -2326,6 +2501,18 @@
       "RunDetail": {
         "description": "One run in full, for the detail panel.",
         "properties": {
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Which agent or role made the call, if the SDK said",
+            "title": "Agent"
+          },
           "cache_read_tokens": {
             "title": "Cache Read Tokens",
             "type": "integer"
@@ -2450,7 +2637,7 @@
                 "type": "null"
               }
             ],
-            "description": "First 200 characters of the output",
+            "description": "Same for the output",
             "title": "Output Preview"
           },
           "prompt": {
@@ -2473,7 +2660,7 @@
                 "type": "null"
               }
             ],
-            "description": "First 200 characters of the prompt; null once retention cleared it",
+            "description": "First 240 characters of the prompt, whitespace collapsed, ending in an ellipsis when cut; null once retention cleared it",
             "title": "Prompt Preview"
           },
           "prompt_version": {
@@ -2521,6 +2708,18 @@
             "title": "Tokens Out",
             "type": "integer"
           },
+          "tool_call_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Tool calls the response made",
+            "title": "Tool Call Count"
+          },
           "tool_calls": {
             "anyOf": [
               {
@@ -2535,6 +2734,30 @@
               }
             ],
             "title": "Tool Calls"
+          },
+          "tools_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Estimated tokens of the tool definitions sent",
+            "title": "Tools Tokens"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Shared by every call serving the same user task",
+            "title": "Trace Id"
           },
           "weight": {
             "anyOf": [
@@ -2579,6 +2802,18 @@
       "RunOut": {
         "description": "One recorded run, as a table row. Full prompt and output come from the run detail.",
         "properties": {
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Which agent or role made the call, if the SDK said",
+            "title": "Agent"
+          },
           "cache_read_tokens": {
             "title": "Cache Read Tokens",
             "type": "integer"
@@ -2692,7 +2927,7 @@
                 "type": "null"
               }
             ],
-            "description": "First 200 characters of the output",
+            "description": "Same for the output",
             "title": "Output Preview"
           },
           "prompt_preview": {
@@ -2704,7 +2939,7 @@
                 "type": "null"
               }
             ],
-            "description": "First 200 characters of the prompt; null once retention cleared it",
+            "description": "First 240 characters of the prompt, whitespace collapsed, ending in an ellipsis when cut; null once retention cleared it",
             "title": "Prompt Preview"
           },
           "prompt_version": {
@@ -2751,6 +2986,42 @@
           "tokens_out": {
             "title": "Tokens Out",
             "type": "integer"
+          },
+          "tool_call_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Tool calls the response made",
+            "title": "Tool Call Count"
+          },
+          "tools_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Estimated tokens of the tool definitions sent",
+            "title": "Tools Tokens"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Shared by every call serving the same user task",
+            "title": "Trace Id"
           },
           "weight": {
             "anyOf": [
@@ -2886,6 +3157,79 @@
           "share"
         ],
         "title": "SpendOut",
+        "type": "object"
+      },
+      "ToolsUsageOut": {
+        "properties": {
+          "avg_tools_tokens": {
+            "description": "Estimated tokens the tool definitions add to every call",
+            "title": "Avg Tools Tokens",
+            "type": "integer"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "runs": {
+            "description": "Runs that sent tool definitions",
+            "title": "Runs",
+            "type": "integer"
+          },
+          "share_of_tokens_in": {
+            "description": "Of those runs' input tokens (cache included), 0..1",
+            "title": "Share Of Tokens In",
+            "type": "number"
+          }
+        },
+        "required": [
+          "job",
+          "runs",
+          "avg_tools_tokens",
+          "share_of_tokens_in"
+        ],
+        "title": "ToolsUsageOut",
+        "type": "object"
+      },
+      "TraceUsageOut": {
+        "properties": {
+          "agents": {
+            "description": "Distinct agents in the trace",
+            "title": "Agents",
+            "type": "integer"
+          },
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "repeated_prompts": {
+            "description": "The same prompt appears 3 or more times in the trace: a likely retry loop or runaway agent",
+            "title": "Repeated Prompts",
+            "type": "boolean"
+          },
+          "spend_usd": {
+            "description": "Priced runs only",
+            "title": "Spend Usd",
+            "type": "number"
+          },
+          "tokens": {
+            "description": "Input, output and cache tokens over every call in the trace",
+            "title": "Tokens",
+            "type": "integer"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trace_id",
+          "calls",
+          "tokens",
+          "spend_usd",
+          "agents",
+          "repeated_prompts"
+        ],
+        "title": "TraceUsageOut",
         "type": "object"
       },
       "UsageLimitIn": {
@@ -3835,6 +4179,102 @@
         ]
       }
     },
+    "/v1/insights/agents": {
+      "get": {
+        "description": "Tokens and spend per agent, the ten heaviest traces (with a retry-loop flag), and what tool\ndefinitions add to each call. Production runs only.",
+        "operationId": "get_agent_insights_v1_insights_agents_get",
+        "parameters": [
+          {
+            "description": "How many days back",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "description": "How many days back",
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentInsightsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Insights",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
     "/v1/insights/daily": {
       "get": {
         "description": "Production runs, outcomes and spend per UTC day, job and model, oldest first: quality and spend\nover time. Days without runs are absent.",
@@ -4225,6 +4665,107 @@
           }
         },
         "summary": "Create Job Endpoint",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/v1/jobs/{job}": {
+      "patch": {
+        "description": "Change a job's description. The name and the check settings never change (the name is what your\ncode sends, and the check decides pass or fail).",
+        "operationId": "patch_job_endpoint_v1_jobs__job__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Job Endpoint",
         "tags": [
           "jobs"
         ]

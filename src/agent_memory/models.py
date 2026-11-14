@@ -131,6 +131,7 @@ class Run(Base):
             "idx_runs_embedding_cache", "project_id", "prompt_hash", "embedding_model",
             postgresql_where=text("embedding IS NOT NULL"),
         ),
+        Index("idx_runs_project_trace", "project_id", "trace_id", postgresql_where=text("trace_id IS NOT NULL")),
         Index("idx_runs_content_kept", "created_at", postgresql_where=text("content_removed_at IS NULL")),
     )
 
@@ -166,6 +167,10 @@ class Run(Base):
     retest_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("retests.retest_id"))
     expected: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # kept only for jobs with re-test consent
     provider: Mapped[str | None] = mapped_column(Text)  # who served the call; picks the price
+    agent: Mapped[str | None] = mapped_column(Text)  # which agent or role made the call (0017)
+    trace_id: Mapped[str | None] = mapped_column(Text)  # shared by every call serving one user task (0017)
+    tools_tokens: Mapped[int | None] = mapped_column(Integer)  # estimate: size of the tool definitions sent (0017)
+    tool_call_count: Mapped[int | None] = mapped_column(Integer)  # tool calls in the response (0017)
     # When retention cleared prompt, output, tool_calls, expected and embedding (retention.py; 0015).
     content_removed_at: Mapped[datetime | None] = mapped_column(Timestamp)
 

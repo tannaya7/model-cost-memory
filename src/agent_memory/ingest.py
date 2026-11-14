@@ -65,6 +65,13 @@ async def create_job(session: AsyncSession, project: Project, body: JobCreate) -
     return job
 
 
+async def update_job_description(session: AsyncSession, job: Job, description: str | None) -> Job:
+    """Set or clear a job's description. The caller commits."""
+    job.description = description
+    await session.flush()
+    return job
+
+
 async def find_price(
     session: AsyncSession, model: str, model_version: str, provider: str | None = None
 ) -> Price | None:
@@ -96,10 +103,10 @@ async def find_price(
         ).scalars().all()
         if sold:
             own = min(sold, key=lambda r: candidates.index(r.model))
-            return Price.from_input_output(own.price_in_per_mtok, own.price_out_per_mtok)
+            return Price.from_input_output(own.price_in_per_mtok, own.price_out_per_mtok, model=model_version or model)
     if best is None:
         return None
-    return Price.from_input_output(best.price_in_per_mtok, best.price_out_per_mtok)
+    return Price.from_input_output(best.price_in_per_mtok, best.price_out_per_mtok, model=model_version or model)
 
 
 async def record_run(
@@ -150,6 +157,8 @@ async def record_run(
                 tool_calls=sanitize_tool_calls(body.tool_calls, keep_arguments=project.store_tool_arguments),
                 outcome=result.outcome.value, outcome_reason=result.reason, state=state, run_kind=run_kind,
                 retest_id=retest_id, expected=keep_expected, provider=provider,
+                agent=body.agent, trace_id=body.trace_id, tools_tokens=body.tools_tokens,
+                tool_call_count=len(body.tool_calls) if body.tool_calls is not None else None,
             )
             .on_conflict_do_nothing(index_elements=["run_id"])
             .returning(Run.run_id)
