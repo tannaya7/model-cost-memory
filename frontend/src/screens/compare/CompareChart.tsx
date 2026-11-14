@@ -16,7 +16,6 @@ interface Pt {
   runs?: number;
 }
 
-const kilo = (v: number) => usd(v * 1000);
 
 function Dot(props: { cx?: number; cy?: number; payload?: Pt }) {
   const { cx = 0, cy = 0, payload } = props;
@@ -61,13 +60,18 @@ export function CompareChart({
       return c == null ? [] : [{ model: m.model, x: c * 1000, y: lower, tested: false }];
     });
   if (tested.length + untested.length === 0) return null;
+  // x is already the cost of 1,000 answers. A model that costs nothing to call (one you run yourself) sits at
+  // zero, which a log scale cannot draw, so the scale is only logarithmic when every point is above zero.
   const xs = [...tested, ...untested].map((p) => p.x);
-  const xMax = Math.max(...xs) * 1.15;
-  const xMin = Math.min(...xs) / 1.3;
+  const positive = xs.filter((v) => v > 0);
+  const allPositive = positive.length === xs.length;
+  const xMax = (positive.length ? Math.max(...positive) : 1) * 1.15;
+  const xMin = allPositive ? Math.min(...positive) / 1.3 : 0;
+  const useLog = allPositive && xMax / xMin > 8;
 
   const rows = [
-    ...tested.map((p) => [p.model, "Measured", kilo(p.x), rateWithRange(p.y, p.runs), `${p.runs?.toLocaleString("en")} checked answers`]),
-    ...untested.map((p) => [p.model, "Estimate", kilo(p.x), UNTESTED_LABEL, "none yet"]),
+    ...tested.map((p) => [p.model, "Measured", usd(p.x), rateWithRange(p.y, p.runs), `${p.runs?.toLocaleString("en")} checked answers`]),
+    ...untested.map((p) => [p.model, "Estimate", usd(p.x), UNTESTED_LABEL, "none yet"]),
   ];
 
   return (
@@ -89,7 +93,7 @@ export function CompareChart({
               dataKey="x"
               name="Cost"
               domain={[xMin, xMax]}
-              scale={xMax / xMin > 8 ? "log" : "linear"}
+              scale={useLog ? "log" : "linear"}
               allowDataOverflow
               tickFormatter={(v: number) => usd(v)}
               tick={{ fill: "var(--chart-tick)", fontSize: 11 }}
@@ -122,12 +126,12 @@ export function CompareChart({
                     rows={
                       p.tested
                         ? [
-                            { label: "Cost per 1,000 good answers", value: kilo(p.x / 1000) },
+                            { label: "Cost per 1,000 good answers", value: usd(p.x) },
                             { label: "Correct answers", value: rateWithRange(p.y, p.runs) },
                             { label: "Checked answers", value: p.runs?.toLocaleString("en") ?? "–" },
                           ]
                         : [
-                            { label: "Estimated cost per 1,000 answers", value: kilo(p.x / 1000) },
+                            { label: "Estimated cost per 1,000 answers", value: usd(p.x) },
                             { label: "Correct answers", value: UNTESTED_LABEL },
                           ]
                     }
