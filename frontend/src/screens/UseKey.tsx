@@ -22,7 +22,7 @@ export default function UseKey() {
       <main className="mx-auto flex max-w-2xl flex-col gap-5 px-4 py-12">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Open a project with its key</h1>
-          <p className="mt-2 text-dim">Paste the key the project was created with. It is kept in this browser only, and sent with each request.</p>
+          <p className="mt-2 text-dim">Paste the project key you were given when the project was created. It lets you see this project without signing in. It is kept in this browser only.</p>
         </div>
         <Panel className="p-6">
           <ProjectKeySettings />

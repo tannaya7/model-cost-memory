@@ -23,7 +23,7 @@ const SECTIONS = [
   { id: "project", label: "Project" },
   { id: "alerts", label: "Alerts" },
   { id: "privacy", label: "Data kept" },
-  { id: "retests", label: "Re-tests" },
+  { id: "retests", label: "Model trials" },
   { id: "keys", label: "API keys" },
   { id: "limits", label: "Usage limits" },
   { id: "status", label: "System status" },
@@ -67,7 +67,7 @@ function ProjectSection({ project }: { project: Project }) {
   const s = useFieldSave(project);
   return (
     <Panel id="project" className="scroll-mt-24 p-5 md:p-6">
-      <PanelHeader title="Project" hint={<>The project id the SDK sends runs to is <span className="font-mono text-ink">{project.project_id}</span>.</>} />
+      <PanelHeader title="Project" hint={<>Your app's SDK sends its AI calls to this project id: <span className="font-mono text-ink">{project.project_id}</span>.</>} />
       <label htmlFor="project-name" className="mt-4 block text-xs font-semibold text-dim">Name</label>
       <input id="project-name" className={cx(field, "mt-1.5 max-w-md")} value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
       <SaveRow saving={s.saving} saved={s.saved} error={s.error} dirty={name.trim() !== project.name && name.trim().length > 0} onSave={() => s.save({ name: name.trim() })} />
@@ -109,7 +109,7 @@ function PrivacySection({ project }: { project: Project }) {
   const valid = Number.isInteger(n) && n >= 1 && n <= 3650;
   return (
     <Panel id="privacy" className="scroll-mt-24 p-5 md:p-6">
-      <PanelHeader title="How long prompts and answers are kept" hint="After this many days a run's prompt, answer, tool calls and answer key are deleted each night. Pass or fail, cost and tokens stay, so recommendations do not change." />
+      <PanelHeader title="How long prompts and answers are kept" hint="After this many days, the text of each AI call (its prompt, answer, tool calls and answer key) is deleted each night. Whether it was correct, what it cost and how many tokens it used are kept, so our recommendations do not change. Tokens are the small pieces of text AI models are billed by." />
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <input id="retention" type="number" min={1} max={3650} className={cx(field, "w-28")} value={days} onChange={(e) => setDays(e.target.value)} aria-label="Days to keep run content" />
         <span className="text-sm text-dim">days</span>
@@ -136,7 +136,7 @@ function RetestsSection({ project }: { project: Project | null }) {
   const share = l && l.monthly_cap_usd > 0 ? Math.min(1, l.spent_this_month_usd / l.monthly_cap_usd) : 0;
   return (
     <Panel id="retests" className="scroll-mt-24 p-5 md:p-6">
-      <PanelHeader title="Re-tests" hint="Re-tests replay your past prompts on another model, with your provider key, to collect evidence. They never spend past the monthly cap." />
+      <PanelHeader title="Trials on a new model" hint="A trial replays your past prompts on another model, using your provider key, to see if it does as well as the one you use now. It never spends more than the monthly budget you set here." />
       {l && (
         <div className="mt-4">
           <div className="flex justify-between text-xs text-dim">
@@ -151,13 +151,13 @@ function RetestsSection({ project }: { project: Project | null }) {
       {project && (
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <label className="block">
-            <span className="text-xs font-semibold text-dim">Monthly cap (USD)</span>
+            <span className="text-xs font-semibold text-dim">Monthly budget for trials (USD)</span>
             <input type="number" min={0} max={10000} className={cx(field, "mt-1.5")} value={cap} onChange={(e) => setCap(e.target.value)} />
           </label>
           <label className="flex items-start gap-3 rounded-[12px] border border-rule bg-surface-2/50 p-3">
             <input type="checkbox" checked={allowed} onChange={(e) => setAllowed(e.target.checked)} className="mt-1 h-4 w-4 accent-[var(--color-accent)]" />
             <span>
-              <span className="block text-sm font-semibold text-ink">Allow re-tests</span>
+              <span className="block text-sm font-semibold text-ink">Allow trials on new models</span>
               <span className="text-xs text-dim">Past prompts are sent to the provider of the model being tested.</span>
             </span>
           </label>
@@ -202,7 +202,7 @@ function KeysSection({ project }: { project: Project | null }) {
   const [confirm, setConfirm] = useState(false);
   return (
     <Panel id="keys" className="scroll-mt-24 p-5 md:p-6">
-      <PanelHeader title="API keys" hint="The SDK sends runs with the project key. It is shown once when made; only its first characters are stored for display." />
+      <PanelHeader title="API keys" hint="Your app's SDK identifies itself with the project key when it sends AI calls. It is shown once when made; only its first characters are stored for display." />
       {fresh && (
         <div className="mt-4">
           <ApiKeyRevealBox apiKey={fresh} title="Your new project key. Copy it now: it is not shown again." onDismiss={() => setFresh(null)} />
@@ -236,8 +236,8 @@ function LimitsSection() {
     <Panel id="limits" className="scroll-mt-24 p-5 md:p-6">
       <PanelHeader
         title="Usage limits"
-        hint="A plan's 5-hour or weekly limit, a per-model limit or an API budget. The system forecasts whether it runs out before it resets, and which cheaper option would stretch it."
-        actions={!adding && <Button size="sm" variant="primary" onClick={() => setAdding(true)}>Add a limit</Button>}
+        hint="A usage limit is a cap you or your provider set, so a mistake cannot run up a huge bill, for example a plan's 5-hour or weekly limit, a limit on one model, or an API budget. We estimate whether you will hit it before it resets, and which cheaper option would make it last."
+        actions={!adding && <Button size="sm" variant="primary" onClick={() => setAdding(true)}>Add a usage limit</Button>}
       />
       {adding && (
         <div className="mt-4">
@@ -248,7 +248,7 @@ function LimitsSection() {
         {limits.isPending ? (
           <Skeleton className="h-24" />
         ) : (limits.data ?? []).length === 0 ? (
-          !adding && <EmptyState title="No limit yet" hint="Add the limits your plan or budget sets, and see in advance when one will run out." />
+          !adding && <EmptyState title="No usage limits yet" hint="Add the caps your plan or budget sets, and we will tell you ahead of time when one is about to run out." />
         ) : (
           (limits.data ?? []).map((l) => <LimitCard key={l.limit_id} limit={l} />)
         )}
@@ -264,7 +264,7 @@ function StatusSection() {
   const late = Object.entries(h?.overdue ?? {});
   return (
     <Panel id="status" className="scroll-mt-24 p-5 md:p-6">
-      <PanelHeader title="System status" hint="Checked every minute. The same two checks an uptime monitor should watch." />
+      <PanelHeader title="System status" hint="Checked every minute, so you can tell if the service is running normally. If something shows as not working, wait a minute and refresh." />
       {health.isPending ? (
         <Skeleton className="mt-4 h-16" />
       ) : (
@@ -278,7 +278,7 @@ function StatusSection() {
           </li>
           <li className="flex items-center justify-between gap-3 rounded-[12px] border border-rule bg-surface-2/50 p-4">
             <span>
-              <span className="block text-sm font-semibold text-ink">Background jobs</span>
+              <span className="block text-sm font-semibold text-ink">Background checks</span>
               <span className="font-mono text-[11px] text-muted">GET /healthz/scheduler</span>
             </span>
             <Pill tone={h?.scheduler === "ok" ? "good" : h?.scheduler === "overdue" ? "bad" : "neutral"}>

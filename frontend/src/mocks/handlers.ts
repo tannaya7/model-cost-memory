@@ -730,19 +730,19 @@ export const handlers = [
     const onlyJob = url.searchParams.get("job");
     let seed = 7;
     const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    const plan: Array<{ job: string; model: string; perDay: number; pass: number; cost: number; from: number; to: number }> = [
-      { job: "invoice-extract", model: "acme-large", perDay: 120, pass: 0.975, cost: 0.031, from: days, to: 21 },
-      { job: "invoice-extract", model: "acme-large", perDay: 35, pass: 0.97, cost: 0.031, from: 21, to: 0 },
-      { job: "invoice-extract", model: "acme-mini", perDay: 90, pass: 0.962, cost: 0.003, from: 21, to: 0 },
-      { job: "invoice-extract", model: "acme-mini", perDay: 12, pass: 0.955, cost: 0.003, from: 45, to: 21 },
-      { job: "ticket-classify", model: "mini", perDay: 18, pass: 0.88, cost: 0.0011, from: 14, to: 0 },
-      { job: "receipt-scan", model: "acme-mini", perDay: 26, pass: 0.985, cost: 0.0024, from: days, to: 0 },
+    const plan: Array<{ job: string; model: string; perDay: number; pass: number; cost: number; from: number; to: number; inTok: number; outTok: number; cache: number }> = [
+      { job: "invoice-extract", model: "acme-large", perDay: 120, pass: 0.975, cost: 0.031, from: days, to: 21, inTok: 3400, outTok: 520, cache: 0.35 },
+      { job: "invoice-extract", model: "acme-large", perDay: 35, pass: 0.97, cost: 0.031, from: 21, to: 0, inTok: 3400, outTok: 520, cache: 0.35 },
+      { job: "invoice-extract", model: "acme-mini", perDay: 90, pass: 0.962, cost: 0.003, from: 21, to: 0, inTok: 3300, outTok: 480, cache: 0.5 },
+      { job: "invoice-extract", model: "acme-mini", perDay: 12, pass: 0.955, cost: 0.003, from: 45, to: 21, inTok: 3300, outTok: 480, cache: 0.5 },
+      { job: "ticket-classify", model: "mini", perDay: 18, pass: 0.88, cost: 0.0011, from: 14, to: 0, inTok: 900, outTok: 130, cache: 0 },
+      { job: "receipt-scan", model: "acme-mini", perDay: 26, pass: 0.985, cost: 0.0024, from: days, to: 0, inTok: 1800, outTok: 260, cache: 0.2 },
     ];
-    const out: Array<{ day: string; job: string; model: string; runs: number; passed: number; failed: number; spend_usd: number }> = [];
+    const out: Array<{ day: string; job: string; model: string; runs: number; passed: number; failed: number; spend_usd: number; tokens_in: number; tokens_out: number; cache_read_tokens: number; cache_write_tokens: number; unpriced_runs: number; failed_spend_usd: number }> = [];
     const today = new Date();
     for (let d = days - 1; d >= 0; d--) {
       const day = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - d)).toISOString().slice(0, 10);
-      const merged = new Map<string, { runs: number; passed: number; failed: number; spend_usd: number }>();
+      const merged = new Map<string, { runs: number; passed: number; failed: number; spend_usd: number; tokens_in: number; tokens_out: number; cache_read_tokens: number; cache_write_tokens: number; unpriced_runs: number; failed_spend_usd: number }>();
       for (const p of plan) {
         if (d >= p.from || d < p.to || (onlyJob && p.job !== onlyJob)) continue;
         const weekday = new Date(day).getUTCDay();
@@ -752,12 +752,22 @@ export const handlers = [
         const passed = Math.round(runs * rate);
         const unknown = Math.round(runs * 0.01);
         const key = `${p.job}|${p.model}`;
-        const prev = merged.get(key) ?? { runs: 0, passed: 0, failed: 0, spend_usd: 0 };
+        const prev = merged.get(key) ?? { runs: 0, passed: 0, failed: 0, spend_usd: 0, tokens_in: 0, tokens_out: 0, cache_read_tokens: 0, cache_write_tokens: 0, unpriced_runs: 0, failed_spend_usd: 0 };
+        const inputTotal = Math.round(runs * p.inTok * (0.9 + rand() * 0.2));
+        const cacheRead = Math.round(inputTotal * p.cache * (0.8 + rand() * 0.4));
         merged.set(key, {
           runs: prev.runs + runs,
           passed: prev.passed + passed,
           failed: prev.failed + Math.max(0, runs - passed - unknown),
           spend_usd: Math.round((prev.spend_usd + runs * p.cost * (0.9 + rand() * 0.2)) * 100) / 100,
+          tokens_in: prev.tokens_in + inputTotal - cacheRead,
+          tokens_out: prev.tokens_out + Math.round(runs * p.outTok * (0.9 + rand() * 0.2)),
+          cache_read_tokens: prev.cache_read_tokens + cacheRead,
+          cache_write_tokens: prev.cache_write_tokens + (p.cache > 0 ? Math.round(inputTotal * 0.05) : 0),
+          // receipt-scan runs on a model with no listed price part of the time: those runs have no cost.
+          unpriced_runs: prev.unpriced_runs + (p.job === "receipt-scan" ? Math.round(runs * 0.05) : 0),
+          // what the failed answers actually cost (a failed answer tends to be a longer, dearer one)
+          failed_spend_usd: Math.round((prev.failed_spend_usd + Math.max(0, runs - passed - unknown) * p.cost * 1.15) * 100) / 100,
         });
       }
       for (const [key, v] of merged) {

@@ -133,7 +133,7 @@ export function LimitCard({ limit }: { limit: UsageLimit }) {
             </button>
           </form>
         ) : (
-          <span className="text-xs text-dim">Counted from your recorded runs.</span>
+          <span className="text-xs text-dim">Estimated from your recorded AI calls.</span>
         )}
         <button
           type="button"

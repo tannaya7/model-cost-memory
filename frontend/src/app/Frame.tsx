@@ -1,5 +1,5 @@
-/** The whole app's frame: a slim top bar with four destinations, a project switcher, a command
- * palette (Ctrl/⌘ K), alerts and the account menu. Everything else lives inside those four places. */
+/** The whole app's frame: a left sidebar (the project, four destinations and the project's own pages),
+ * a top bar with search (Ctrl/⌘ K), theme, alerts and the account menu, and a bottom bar on phones. */
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -13,21 +13,26 @@ import {
   IconActivity,
   IconArrowRight,
   IconBell,
+  IconBolt,
+  IconChart,
   IconChevron,
+  IconFlask,
   IconJobs,
   IconLogo,
   IconModels,
   IconOverview,
   IconSearch,
   IconSettings,
+  IconSidebar,
 } from "../ui/icons";
 import { ThemeToggle } from "../ui/ThemeToggle";
 import { cx, Skeleton } from "../ui/primitives";
 
 const NAV = [
   { to: "/", label: "Overview", icon: IconOverview, end: true },
-  { to: "/jobs", label: "Jobs", icon: IconJobs },
+  { to: "/jobs", label: "AI tasks", icon: IconJobs },
   { to: "/models", label: "Models", icon: IconModels },
+  { to: "/compare", label: "Compare", icon: IconChart },
   { to: "/activity", label: "Activity", icon: IconActivity },
 ];
 
@@ -77,7 +82,7 @@ function ProjectSwitcher() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex max-w-48 items-center gap-1.5 rounded-[9px] px-2 py-1 text-sm text-dim transition-colors hover:bg-surface-2 hover:text-ink"
+        className="flex w-full min-w-0 items-center justify-between gap-1.5 rounded-[9px] px-2 py-1 text-sm text-dim transition-colors hover:bg-surface-2 hover:text-ink"
       >
         <span className="truncate font-medium">{current?.name ?? "Choose a project"}</span>
         <IconChevron size={14} className={cx("shrink-0 transition-transform", open ? "-rotate-90" : "rotate-90")} />
@@ -89,7 +94,7 @@ function ProjectSwitcher() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.15 }}
-            className="absolute left-0 top-full z-50 mt-2 w-64 rounded-[14px] border border-rule-strong bg-surface-2 p-1.5 shadow-2xl"
+            className="absolute left-0 top-full z-50 mt-2 w-56 rounded-[14px] border border-rule-strong bg-surface-2 p-1.5 shadow-2xl"
           >
             {list.map((p) => (
               <button
@@ -135,7 +140,7 @@ function AccountMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-label="Account and settings"
         aria-expanded={open}
-        className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-[var(--grad-from)] to-accent-2 text-sm font-bold text-white"
+        className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-[var(--grad-from)] to-accent-2 text-sm font-bold text-on-accent"
       >
         {initials}
       </button>
@@ -205,16 +210,16 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
   const commands = useMemo<Command[]>(() => {
     const pages: Command[] = [
       { label: "Overview", hint: "Savings, spend and what needs attention", to: p("/") },
-      { label: "Jobs", hint: "Every job and its verdict", to: p("/jobs") },
+      { label: "AI tasks", hint: "Every kind of work your app asks an AI to do, and our recommendation for each", to: p("/jobs") },
       { label: "Models", hint: "Prices, retirements and the catalog", to: p("/models") },
-      { label: "Activity", hint: "Alerts, re-tests, live runs and AI news", to: p("/activity") },
-      { label: "Alerts", hint: "Regressions, silent drops, retirements", to: p("/activity?tab=alerts") },
-      { label: "Live pipeline", hint: "Runs crossing the system right now", to: p("/activity?tab=live") },
+      { label: "Activity", hint: "Quality drops, trials on new models, live AI calls and AI news", to: p("/activity") },
+      { label: "Alerts", hint: "Quality drops, quiet slowdowns and models being retired", to: p("/activity?tab=alerts") },
+      { label: "Live pipeline", hint: "AI calls arriving right now", to: p("/activity?tab=live") },
       { label: "AI news", hint: "Stories about your models", to: p("/activity?tab=news") },
-      { label: "Settings", hint: "Project, keys, alerts webhook, retention", to: p("/settings") },
-      { label: "Usage limits", hint: "Plan limits and when they run out", to: p("/settings#limits") },
+      { label: "Settings", hint: "Project name, keys, alert webhook and data retention (how long data is kept)", to: p("/settings") },
+      { label: "Usage limits", hint: "Caps that stop a mistake running up a huge bill", to: p("/settings#limits") },
     ];
-    const jobItems = (jobs.data ?? []).map((j) => ({ label: j.name, hint: "Job", to: p(`/jobs/${encodeURIComponent(j.name)}`) }));
+    const jobItems = (jobs.data ?? []).map((j) => ({ label: j.name, hint: "AI task", to: p(`/jobs/${encodeURIComponent(j.name)}`) }));
     const q = query.trim().toLowerCase();
     return [...jobItems, ...pages].filter((c) => !q || c.label.toLowerCase().includes(q) || c.hint.toLowerCase().includes(q)).slice(0, 9);
   }, [jobs.data, query]);
@@ -266,7 +271,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
                   else if (e.key === "Enter") go(commands[index]);
                   else if (e.key === "Escape") onClose();
                 }}
-                placeholder="Jump to a job, a page or a setting…"
+                placeholder="Jump to an AI task, a page or a setting…"
                 aria-label="Search"
                 className="h-14 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-muted"
               />
@@ -286,7 +291,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
                     )}
                   >
                     <span className="min-w-0">
-                      <span className={cx("block truncate text-sm font-medium", c.hint === "Job" && "font-mono")}>{c.label}</span>
+                      <span className={cx("block truncate text-sm font-medium", c.hint === "AI task" && "font-mono")}>{c.label}</span>
                       <span className="block truncate text-xs text-muted">{c.hint}</span>
                     </span>
                     {i === index && <IconArrowRight size={15} className="shrink-0 text-accent" />}
@@ -315,13 +320,149 @@ function PageFallback() {
   );
 }
 
+const SIDEBAR_KEY = "mcm_sidebar_collapsed";
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** The left sidebar: the project, the four destinations, the project's own pages, and a way to try a
+ * cheaper model. Collapses to icons; the choice is remembered in this browser. */
+function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle: () => void; alerts: number }) {
+  const p = useP();
+  const nav = useNav();
+  const { mode } = useProject();
+  const { data: user } = useMe();
+  const { hash } = useLocation();
+  const item = (active: boolean) =>
+    cx(
+      "relative flex items-center gap-3 rounded-[11px] px-3 py-2.5 text-[14px] font-medium transition-colors",
+      collapsed && "justify-center px-0",
+      active ? "text-accent-ink" : "text-dim hover:bg-surface-2 hover:text-ink",
+    );
+  const project = [
+    { to: p("/retest"), label: "Model trials", icon: IconFlask, match: (on: boolean) => on },
+    { to: p("/settings"), label: mode === "demo" ? "About this demo" : "Settings", icon: IconSettings, match: (on: boolean) => on && hash !== "#limits" },
+    { to: p("/settings#limits"), label: "Usage limits", icon: IconBolt, match: (on: boolean) => on && hash === "#limits" },
+  ];
+  return (
+    <motion.aside
+      initial={false}
+      animate={{ width: collapsed ? 76 : 256 }}
+      transition={{ type: "spring", stiffness: 300, damping: 34 }}
+      className="sticky top-0 hidden h-screen shrink-0 flex-col border-r border-rule bg-surface/70 backdrop-blur-xl md:flex"
+      aria-label="Sidebar"
+    >
+      <div className={cx("flex h-16 shrink-0 items-center gap-2.5 border-b border-rule px-4", collapsed && "justify-center px-0")}>
+        <Link to={user ? "/projects" : p("/")} className="flex min-w-0 items-center gap-2.5" aria-label={user ? "All projects" : "Overview"}>
+          <IconLogo size={28} />
+          {!collapsed && <span className="truncate text-[15px] font-semibold tracking-tight">Model &amp; Cost Memory</span>}
+        </Link>
+        {!collapsed && (
+          <button type="button" onClick={onToggle} aria-label="Collapse the sidebar" className="ml-auto grid h-8 w-8 place-items-center rounded-[8px] text-muted hover:bg-surface-2 hover:text-ink">
+            <IconSidebar size={17} />
+          </button>
+        )}
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-3 py-4">
+        {collapsed ? (
+          <button type="button" onClick={onToggle} aria-label="Expand the sidebar" className="mb-2 grid h-10 place-items-center rounded-[11px] text-muted hover:bg-surface-2 hover:text-ink">
+            <IconSidebar size={18} />
+          </button>
+        ) : (
+          <div className="mb-3 rounded-[12px] border border-rule bg-surface px-2 py-1.5">
+            <p className="px-2 pt-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Project</p>
+            <ProjectSwitcher />
+          </div>
+        )}
+
+        <nav aria-label="Main" className="flex flex-col gap-1">
+          {nav.map(({ to, label, icon: Icon, end }) => (
+            <NavLink key={to} to={to} end={end} title={collapsed ? label : undefined} className={({ isActive }) => item(isActive)}>
+              {({ isActive }) => (
+                <>
+                  {isActive && <ActiveMark />}
+                  <Icon size={18} className="relative shrink-0" />
+                  {!collapsed && <span className="relative flex-1">{label}</span>}
+                  {label === "Activity" && alerts > 0 &&
+                    (collapsed ? (
+                      <span className="absolute right-3 top-2 h-2 w-2 rounded-full bg-bad" />
+                    ) : (
+                      <span className="relative rounded-full bg-bad-soft px-2 text-[11px] font-bold leading-5 text-bad tabular">{alerts}</span>
+                    ))}
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="my-3 h-px shrink-0 bg-rule" />
+        {!collapsed && <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">This project</p>}
+        <nav aria-label="Project" className="flex flex-col gap-1">
+          {project.map(({ to, label, icon: Icon, match }) => (
+            <NavLink key={to} to={to} title={collapsed ? label : undefined} className={({ isActive }) => item(match(isActive))}>
+              {({ isActive }) => (
+                <>
+                  {match(isActive) && <ActiveMark />}
+                  <Icon size={18} className="relative shrink-0" />
+                  {!collapsed && <span className="relative">{label}</span>}
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        {!collapsed && mode !== "demo" && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="relative mt-auto shrink-0 overflow-hidden rounded-[16px] bg-gradient-to-br from-[var(--promo-from)] via-[var(--promo-via)] to-[var(--promo-to)] p-4 text-white shadow-[0_18px_40px_-18px_var(--accent-glow)]"
+          >
+            <div aria-hidden className="pointer-events-none absolute inset-0 opacity-30" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.35) 1px, transparent 1px)", backgroundSize: "10px 10px" }} />
+            <span className="relative grid h-8 w-8 place-items-center rounded-[9px] bg-white/20"><IconFlask size={16} /></span>
+            <p className="relative mt-3 text-sm font-semibold">Try a cheaper model</p>
+            <p className="relative mt-1 text-xs text-white/80">We replay your past prompts on another model to see if it does as well, within a budget you set.</p>
+            <Link to={p("/retest")} className="relative mt-3 block rounded-[10px] bg-white/95 px-3 py-2 text-center text-xs font-semibold text-[var(--promo-ink)] transition-colors hover:bg-white">
+              Start a trial on a new model
+            </Link>
+          </motion.div>
+        )}
+      </div>
+    </motion.aside>
+  );
+}
+
+/** The highlight behind the current page in the sidebar, sliding between items. */
+function ActiveMark() {
+  return (
+    <motion.span layoutId="side-active" className="absolute inset-0 rounded-[11px] bg-accent-soft" transition={{ type: "spring", stiffness: 500, damping: 40 }}>
+      <span className="absolute -left-3 bottom-1.5 top-1.5 w-[3px] rounded-r-full bg-accent" />
+    </motion.span>
+  );
+}
+
 export function Frame() {
   const p = useP();
   const nav = useNav();
-  const { data: user } = useMe();
   const { pathname, search } = useLocation();
   const { count: alerts } = useAlertsCount();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const toggle = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem(SIDEBAR_KEY, next ? "1" : "0");
+    } catch {
+      /* kept for this visit */
+    }
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -340,104 +481,75 @@ export function Frame() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="min-h-screen">
-        <header className="sticky top-0 z-40 border-b border-rule bg-bg/75 backdrop-blur-xl">
-          <div className="mx-auto flex h-16 max-w-[1320px] items-center gap-3 px-4 md:px-6">
-            <Link to={user ? "/projects" : p("/")} className="flex items-center gap-2.5" aria-label={user ? "All projects" : "Overview"}>
-              <IconLogo size={28} />
-              <span className="hidden text-[15px] font-semibold tracking-tight lg:inline">Model &amp; Cost Memory</span>
-            </Link>
-            <span aria-hidden className="hidden h-5 w-px bg-rule-strong sm:block" />
-            <div className="hidden sm:block">
-              <ProjectSwitcher />
-            </div>
+      <div className="min-h-screen md:flex">
+        <Sidebar collapsed={collapsed} onToggle={toggle} alerts={alerts} />
 
-            <nav aria-label="Main" className="mx-auto hidden items-center gap-1 md:flex">
-              {nav.map(({ to, label, icon: Icon, end }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={end}
-                  className={({ isActive }) =>
-                    cx("relative flex items-center gap-2 rounded-[10px] px-3.5 py-2 text-sm font-medium transition-colors", isActive ? "text-ink" : "text-muted hover:text-dim")
-                  }
-                >
-                  {({ isActive }) => (
-                    <>
-                      {isActive && (
-                        <motion.span
-                          layoutId="nav-active"
-                          className="absolute inset-0 rounded-[10px] bg-[var(--tab-active)] shadow-[0_1px_3px_rgba(24,20,70,0.12)] ring-1 ring-rule"
-                          transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                        />
-                      )}
-                      <Icon size={16} className="relative" />
-                      <span className="relative">{label}</span>
-                      {label === "Activity" && alerts > 0 && (
-                        <span className="relative rounded-full bg-bad px-1.5 text-[10px] font-bold leading-4 text-white tabular">{alerts}</span>
-                      )}
-                    </>
-                  )}
-                </NavLink>
-              ))}
-            </nav>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="sticky top-0 z-40 border-b border-rule bg-bg/75 backdrop-blur-xl">
+            <div className="mx-auto flex h-16 w-full max-w-[1320px] items-center gap-3 px-4 md:px-6">
+              {/* phones: the logo and project, since the sidebar is hidden */}
+              <Link to={p("/")} className="flex shrink-0 items-center md:hidden" aria-label="Overview">
+                <IconLogo size={28} />
+              </Link>
+              <div className="min-w-0 md:hidden">
+                <ProjectSwitcher />
+              </div>
 
-            <div className="ml-auto flex items-center gap-2 md:ml-0">
               <button
                 type="button"
                 onClick={() => setPaletteOpen(true)}
-                className="hidden items-center gap-2 rounded-[10px] border border-rule bg-surface px-3 py-1.5 text-sm text-muted transition-colors hover:text-dim lg:flex"
+                className="hidden w-full max-w-sm items-center gap-2 rounded-[11px] border border-rule bg-surface px-3 py-2 text-sm text-muted shadow-sm transition-colors hover:border-rule-strong hover:text-dim md:flex"
               >
                 <IconSearch size={15} />
-                <span>Jump to…</span>
-                <kbd className="rounded border border-rule px-1 font-mono text-[10px]">Ctrl K</kbd>
+                <span className="flex-1 text-left">Search AI tasks, models, pages…</span>
+                <kbd className="rounded-[6px] border border-rule bg-surface-2 px-1.5 font-mono text-[10px]">Ctrl K</kbd>
               </button>
-              <button
-                type="button"
-                onClick={() => setPaletteOpen(true)}
-                aria-label="Search"
-                className="grid h-9 w-9 place-items-center rounded-[10px] text-muted hover:bg-surface-2 hover:text-ink lg:hidden"
-              >
-                <IconSearch size={17} />
-              </button>
-              <Link
-                to={p("/activity?tab=alerts")}
-                aria-label={alerts ? `${alerts} open alerts` : "Alerts"}
-                className="relative grid h-9 w-9 place-items-center rounded-[10px] text-muted transition-colors hover:bg-surface-2 hover:text-ink"
-              >
-                <IconBell size={18} />
-                {alerts > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-bad ring-2 ring-bg" />}
-              </Link>
-              <Link to={p("/settings")} aria-label="Project settings" className="hidden h-9 w-9 place-items-center rounded-[10px] text-muted hover:bg-surface-2 hover:text-ink sm:grid">
-                <IconSettings size={18} />
-              </Link>
-              <ThemeToggle className="mx-1" />
-              <AccountMenu />
-            </div>
-          </div>
-        </header>
 
-        <main className="mx-auto max-w-[1320px] px-4 pb-28 pt-6 md:px-6 md:pb-16 md:pt-8">
-          <RouteErrorBoundary key={pathname}>
-            <Suspense fallback={<PageFallback />}>
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={pathname + search.replace(/tab=[^&]*/, "")}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.22, ease: "easeOut" }}
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaletteOpen(true)}
+                  aria-label="Search"
+                  className="grid h-9 w-9 place-items-center rounded-full text-muted hover:bg-surface-2 hover:text-ink md:hidden"
                 >
-                  <Outlet />
-                </motion.div>
-              </AnimatePresence>
-            </Suspense>
-          </RouteErrorBoundary>
-        </main>
+                  <IconSearch size={17} />
+                </button>
+                <ThemeToggle />
+                <Link
+                  to={p("/activity?tab=alerts")}
+                  aria-label={alerts ? `${alerts} open alerts` : "Alerts"}
+                  className="relative grid h-9 w-9 place-items-center rounded-full border border-rule bg-surface text-muted transition-colors hover:text-ink"
+                >
+                  <IconBell size={17} />
+                  {alerts > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-bad ring-2 ring-surface" />}
+                </Link>
+                <AccountMenu />
+              </div>
+            </div>
+          </header>
+
+          <main className="mx-auto w-full max-w-[1320px] px-4 pb-28 pt-6 md:px-6 md:pb-16 md:pt-8">
+            <RouteErrorBoundary key={pathname}>
+              <Suspense fallback={<PageFallback />}>
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={pathname + search.replace(/(tab|days)=[^&]*/g, "")}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.22, ease: "easeOut" }}
+                  >
+                    <Outlet />
+                  </motion.div>
+                </AnimatePresence>
+              </Suspense>
+            </RouteErrorBoundary>
+          </main>
+        </div>
 
         {/* Phone: the four destinations as a bottom bar */}
         <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-bg/90 backdrop-blur-xl md:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-          <ul className="grid grid-cols-4">
+          <ul className="grid grid-cols-5">
             {nav.map(({ to, label, icon: Icon, end }) => (
               <li key={to}>
                 <NavLink

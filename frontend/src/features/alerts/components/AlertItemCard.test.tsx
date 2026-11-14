@@ -47,7 +47,7 @@ const at = { timestamp: "2026-11-10T09:00:00Z" };
 describe("AlertItemCard", () => {
   it("shows a version regression with both versions and the size of the drop", () => {
     renderWithProviders(<AlertItemCard item={{ kind: "regression", alert: regression(), ...at }} />);
-    expect(screen.getByText("Regression")).toBeInTheDocument();
+    expect(screen.getByText("Quality drop")).toBeInTheDocument();
     expect(screen.getByText("acme-mini-2026-10-01")).toBeInTheDocument();
     expect(screen.getByText("96.0%")).toBeInTheDocument();
     expect(screen.getByText("88.0%")).toBeInTheDocument();
@@ -55,9 +55,9 @@ describe("AlertItemCard", () => {
     expect(screen.getByText(/p < 0.001/)).toBeInTheDocument();
   });
 
-  it("links to the failing runs of the job", () => {
+  it("links to the wrong answers of the AI task", () => {
     renderWithProviders(<WithProject id="acme"><AlertItemCard item={{ kind: "regression", alert: regression(), ...at }} /></WithProject>);
-    expect(screen.getByRole("link", { name: /See the failing runs/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /See the wrong answers/ })).toHaveAttribute(
       "href",
       "/p/acme/jobs/invoice-extract?tab=runs&outcome=FAIL",
     );

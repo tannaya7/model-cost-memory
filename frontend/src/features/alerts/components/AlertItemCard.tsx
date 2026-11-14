@@ -144,8 +144,8 @@ function AlertCard({ alert }: { alert: Alert }) {
       {/* Header: Badge, Job name, Timestamp */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          {regression && <Badge tone="bad">Regression</Badge>}
-          {silent && <Badge tone="bad">Silent drop</Badge>}
+          {regression && <Badge tone="bad">Quality drop</Badge>}
+          {silent && <Badge tone="bad">Quiet quality drop</Badge>}
           {retired && <Badge tone="warn">{retired.status === "RETIRED" ? "Retired" : "Deprecated"}</Badge>}
           {isResolved && (
             <Badge tone="ok">Resolved {formatLocalDate(alert.resolved_at!)}</Badge>
@@ -172,7 +172,7 @@ function AlertCard({ alert }: { alert: Alert }) {
           <Rates
             before={regression.old_pass_rate}
             after={regression.new_pass_rate}
-            note={`Based on ${regression.n_old.toLocaleString()} runs before and ${regression.n_new.toLocaleString()} after the change (${formatPValue(regression.p_value)})`}
+            note={`Share of correct answers before and after the model changed, based on ${regression.n_old.toLocaleString()} AI calls before and ${regression.n_new.toLocaleString()} after (${formatPValue(regression.p_value)}; a lower number means the drop is less likely to be chance)`}
           />
         </>
       )}
@@ -185,7 +185,7 @@ function AlertCard({ alert }: { alert: Alert }) {
           <Rates
             before={silent.before_pass_rate}
             after={silent.after_pass_rate}
-            note={`Earlier ${silent.n_before.toLocaleString()} runs against the latest ${silent.n_after.toLocaleString()} (${formatPValue(silent.p_value)}). The provider may have changed the model without a new name.`}
+            note={`Share of correct answers, earlier (${silent.n_before.toLocaleString()} AI calls) against the latest (${silent.n_after.toLocaleString()}) (${formatPValue(silent.p_value)}; a lower number means the drop is less likely to be chance). The provider may have changed the model without giving it a new name.`}
           />
         </>
       )}
@@ -217,7 +217,7 @@ function AlertCard({ alert }: { alert: Alert }) {
             to={p(`/jobs/${encodeURIComponent(alert.job)}?tab=runs&outcome=FAIL`)}
             className="text-xs font-semibold text-accent hover:underline"
           >
-            See the failing runs →
+            See the wrong answers →
           </Link>
           {!isResolved && (
             <button

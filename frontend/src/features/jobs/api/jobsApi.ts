@@ -8,3 +8,10 @@ export const createJob = (data: JobCreate) =>
     method: "POST",
     body: JSON.stringify(data),
   });
+
+/** Change a task's description. */
+export const updateJobDescription = (name: string, description: string | null) =>
+  apiFetch<Job>(`/v1/jobs/${encodeURIComponent(name)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ description }),
+  });

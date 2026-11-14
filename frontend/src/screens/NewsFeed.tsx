@@ -72,8 +72,7 @@ export default function NewsFeed() {
             </p>
             <h2 className="mt-2 text-3xl font-semibold tracking-tight md:text-4xl">What the AI world is saying</h2>
             <p className="mt-1 max-w-xl text-sm text-dim">
-              What changed this week at the model makers, in the press and in the community, with the stories that
-              name a model you run marked.
+              News from the companies that make AI models, the press and the community. Stories about a model you use are marked, because a price change or shutdown can affect your bill.
             </p>
           </div>
           <button
@@ -136,10 +135,10 @@ export default function NewsFeed() {
         query={query}
         skeleton={<NewsSkeleton />}
         isEmpty={(data) => data.items.length === 0}
-        emptyTitle={mine ? "No recent story names a model you run" : "No stories yet"}
+        emptyTitle={mine ? "No recent story is about a model you use" : "No stories yet"}
         emptyHint={
           mine
-            ? "That is good news. Switch to All stories to see everything."
+            ? "That is good news: nothing recent affects you. Switch to All stories to see everything."
             : "Press Fetch latest to load the news. It also refreshes by itself every hour."
         }
       >

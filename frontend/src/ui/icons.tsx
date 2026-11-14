@@ -178,13 +178,13 @@ export const IconLogo = ({ size = 22 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
     <defs>
       <linearGradient id="mcm-logo" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stopColor="#a78bfa" />
-        <stop offset="0.55" stopColor="#7c3aed" />
-        <stop offset="1" stopColor="#d946ef" />
+        <stop offset="0" stopColor="var(--logo-1)" />
+        <stop offset="0.55" stopColor="var(--logo-2)" />
+        <stop offset="1" stopColor="var(--logo-3)" />
       </linearGradient>
     </defs>
     <rect x="1" y="1" width="22" height="22" rx="7" fill="url(#mcm-logo)" />
-    <path d="M6.5 15.5 10 9l3 4.5 4.5-7" fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M6.5 15.5 10 9l3 4.5 4.5-7" fill="none" stroke="var(--color-on-accent)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 export const IconSun = (p: IconProps) => (
@@ -196,5 +196,42 @@ export const IconSun = (p: IconProps) => (
 export const IconMoon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M16.5 12.2A7 7 0 0 1 7.8 3.5a7 7 0 1 0 8.7 8.7Z" />
+  </Icon>
+);
+export const IconSidebar = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="2.5" y="3.5" width="15" height="13" rx="2.5" />
+    <path d="M7.5 3.5v13" />
+  </Icon>
+);
+export const IconWidgets = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="3" y="3" width="6" height="6" rx="1.5" />
+    <rect x="3" y="11" width="6" height="6" rx="1.5" />
+    <rect x="11" y="11" width="6" height="6" rx="1.5" />
+    <path d="M14 3v6M11 6h6" />
+  </Icon>
+);
+export const IconDownload = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M10 3v9.5M6 9l4 4 4-4M3.5 16.5h13" />
+  </Icon>
+);
+export const IconMore = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="4.5" cy="10" r="0.9" fill="currentColor" />
+    <circle cx="10" cy="10" r="0.9" fill="currentColor" />
+    <circle cx="15.5" cy="10" r="0.9" fill="currentColor" />
+  </Icon>
+);
+export const IconCalendar = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="3" y="4" width="14" height="13" rx="2.5" />
+    <path d="M3 8h14M7 2.5v3M13 2.5v3" />
+  </Icon>
+);
+export const IconGrip = (p: IconProps) => (
+  <Icon {...p}>
+    {[7, 13].flatMap((x) => [5, 10, 15].map((y) => <circle key={`${x}-${y}`} cx={x} cy={y} r="0.9" fill="currentColor" />))}
   </Icon>
 );

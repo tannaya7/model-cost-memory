@@ -8,6 +8,8 @@ import { CostQualityMap } from "../../ui/charts/charts";
 import { colorMap } from "../../ui/charts/series";
 import { MODEL_STATUS, pct, usd, type ModelStatus } from "../../ui/format";
 import { IconAlert, IconArrowRight, IconFlask, IconSpark } from "../../ui/icons";
+import { UNTESTED_LABEL } from "../compare/wilson";
+import { buildWhy } from "./why";
 import { ButtonLink, ModelName, Panel, PanelHeader, Pill, Reveal } from "../../ui/primitives";
 
 function headline(rec: Recommendation): { title: React.ReactNode; body: string } {
@@ -24,7 +26,7 @@ function headline(rec: Recommendation): { title: React.ReactNode; body: string }
     case "DOWNGRADE":
       return {
         title: <>Move to <span className="text-gradient">{to}</span></>,
-        body: `${to} passes ${pct(toStats?.weighted_pass_rate)} of the time, within ${points} points of the best model${
+        body: `${to} gets ${pct(toStats?.weighted_pass_rate)} of answers correct, within ${points} points of the best model${
           cheaper && cheaper > 1.05 ? `, at ${cheaper >= 10 ? Math.round(cheaper) : cheaper.toFixed(1)}× less per successful answer` : ""
         }. The system is ${Math.round(rec.rules.switch_confidence * 100)}% sure before it advises a move like this.`,
       };
@@ -36,12 +38,12 @@ function headline(rec: Recommendation): { title: React.ReactNode; body: string }
     case "HOLD":
       return {
         title: <>Keep using <span className="text-gradient">{cur}</span></>,
-        body: `No cheaper model is proven to do this job within ${points} points of the best. ${cur} stays the right choice until the evidence says otherwise.`,
+        body: `No cheaper model is proven to do this task within ${points} points of the best. ${cur} stays the right choice until the evidence says otherwise.`,
       };
     default:
       return {
         title: <>Still learning</>,
-        body: `There are not enough checked runs to judge this job yet. A verdict appears once the evidence reaches ${rec.rules.evidence_floor} fresh runs on a model.`,
+        body: `There are not enough checked answers to judge this task yet. A recommendation appears once there are ${rec.rules.evidence_floor} recent checked answers on a model.`,
       };
   }
 }
@@ -54,7 +56,7 @@ function ModelCard({ label, m, highlight }: { label: string; m: ModelEvidence | 
       <p className="mt-1 truncate font-mono text-[15px] font-semibold text-ink">{m.model}</p>
       <dl className="mt-3 grid grid-cols-2 gap-3">
         <div>
-          <dt className="text-[11px] text-muted">Pass rate</dt>
+          <dt className="text-[11px] text-muted">Correct answers</dt>
           <dd className="tabular text-lg font-semibold text-ink">{pct(m.weighted_pass_rate)}</dd>
           {m.pass_rate_low !== null && (
             <dd className="tabular text-[11px] text-muted">likely {pct(m.pass_rate_low, 0)}–{pct(m.pass_rate_high, 0)}</dd>
@@ -63,7 +65,7 @@ function ModelCard({ label, m, highlight }: { label: string; m: ModelEvidence | 
         <div>
           <dt className="text-[11px] text-muted">Per successful answer</dt>
           <dd className="tabular text-lg font-semibold text-ink">{usd(m.cost_per_success_usd)}</dd>
-          <dd className="tabular text-[11px] text-muted">{m.n_runs.toLocaleString("en")} checked runs</dd>
+          <dd className="tabular text-[11px] text-muted">{m.n_runs.toLocaleString("en")} checked answers</dd>
         </div>
       </dl>
     </div>
@@ -87,7 +89,7 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
           <div className="flex min-w-0 flex-col gap-4">
             <p className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.18em] text-muted">
-              <IconSpark size={14} className="text-accent" /> The verdict
+              <IconSpark size={14} className="text-accent" /> Our recommendation
             </p>
             <h2 className="text-[30px] font-semibold leading-tight tracking-tight md:text-[40px]">{title}</h2>
             <p className="max-w-xl text-[15px] leading-relaxed text-dim">{body}</p>
@@ -97,7 +99,7 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
             {rec.verdict === "INSUFFICIENT_EVIDENCE" && (
               <div className="max-w-md">
                 <div className="mb-1.5 flex justify-between text-xs text-muted">
-                  <span>Evidence collected</span>
+                  <span>Checked answers collected</span>
                   <span className="tabular">{Math.round(rec.progress * 100)}%</span>
                 </div>
                 <div className="h-2.5 overflow-hidden rounded-full bg-surface-3">
@@ -110,13 +112,8 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
                 </div>
               </div>
             )}
-            {(rec.retest_candidates.length > 0 || rec.next_step) && (
+            {rec.next_step && (
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                {rec.retest_candidates.map((model) => (
-                  <ButtonLink key={model} to={p(`/retest?job=${encodeURIComponent(rec.job)}&model=${encodeURIComponent(model)}`)} variant="primary" size="sm">
-                    <IconFlask size={14} /> Re-test {model}
-                  </ButtonLink>
-                ))}
                 {rec.next_step && <p className="text-xs text-muted">{rec.next_step}</p>}
               </div>
             )}
@@ -150,6 +147,29 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
         </div>
       </Panel>
 
+      <Reveal>
+        <Panel className="p-5 md:p-6">
+          <PanelHeader title="Why we recommend this" />
+          <dl className="mt-3 grid gap-3">
+            {buildWhy(rec).map((w) => (
+              <div key={w.title}>
+                <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted">{w.title}</dt>
+                <dd className="mt-0.5 text-sm text-dim">{w.text}</dd>
+              </div>
+            ))}
+          </dl>
+          {rec.retest_candidates.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {rec.retest_candidates.map((model) => (
+                <ButtonLink key={model} to={p(`/retest?job=${encodeURIComponent(rec.job)}&model=${encodeURIComponent(model)}`)} size="sm">
+                  <IconFlask size={14} /> Trial {model} on past prompts
+                </ButtonLink>
+              ))}
+            </div>
+          )}
+        </Panel>
+      </Reveal>
+
       {rec.warnings.length > 0 && (
         <Reveal className="flex flex-col gap-2">
           {rec.warnings.map((w) => (
@@ -160,8 +180,10 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
         </Reveal>
       )}
 
+      <details className="group flex flex-col gap-4">
+      <summary className="cursor-pointer text-sm font-semibold text-accent">See the numbers</summary>
       <Reveal delay={0.08}>
-        <Panel className="p-5 md:p-6">
+        <Panel className="mt-4 p-5 md:p-6">
           <ChartFrame
             title="Every model you have tried, on cost and quality"
             hint={
@@ -208,7 +230,7 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
                       <p className="mt-1 text-xs text-dim">{m.why}</p>
                     </div>
                     <div className="flex items-center gap-4 sm:justify-end">
-                      <span className="tabular text-sm text-dim">{pct(m.weighted_pass_rate)} · {usd(m.cost_per_success_usd)}</span>
+                      <span className="tabular text-sm text-dim">{m.n_runs > 0 ? `${pct(m.weighted_pass_rate)} of ${m.n_runs.toLocaleString("en")}` : UNTESTED_LABEL} · {usd(m.cost_per_success_usd)}</span>
                       <Pill tone={s.tone}>{s.label}</Pill>
                     </div>
                   </li>
@@ -221,6 +243,7 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
           </p>
         </Panel>
       </Reveal>
+      </details>
     </div>
   );
 }

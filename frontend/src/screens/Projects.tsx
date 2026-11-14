@@ -60,11 +60,11 @@ function ProjectCard({ project, jobs, index }: { project: Project; jobs: Job[] |
         </div>
         <dl className="grid grid-cols-2 gap-3">
           <div>
-            <dt className="text-[11px] uppercase tracking-wider text-muted">Jobs</dt>
+            <dt className="text-[11px] uppercase tracking-wider text-muted">AI tasks</dt>
             <dd className="tabular text-xl font-semibold text-ink">{jobs ? jobs.length : <Skeleton className="mt-1 h-6 w-8" />}</dd>
           </div>
           <div>
-            <dt className="text-[11px] uppercase tracking-wider text-muted">Runs recorded</dt>
+            <dt className="text-[11px] uppercase tracking-wider text-muted">AI calls recorded</dt>
             <dd className="tabular text-xl font-semibold text-ink">{runs !== undefined ? count(runs) : <Skeleton className="mt-1 h-6 w-12" />}</dd>
           </div>
         </dl>
@@ -103,7 +103,7 @@ export default function Projects() {
             <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
               {user?.name ? <>Welcome back, <span className="text-gradient">{user.name.split(" ")[0]}</span></> : "Your projects"}
             </h1>
-            <p className="mt-1.5 text-dim">Each project is one application. Open one to see its jobs, savings and alerts.</p>
+            <p className="mt-1.5 text-dim">A project is one app or product that uses AI. Open one to see what it spends, how its answers are doing and how much you could save.</p>
           </div>
           <ButtonLink to="/projects/new" variant="primary"><IconPlus size={16} /> New project</ButtonLink>
         </div>
@@ -122,7 +122,7 @@ export default function Projects() {
               >
                 <span className="grid h-11 w-11 place-items-center rounded-full bg-accent-soft text-accent"><IconPlus size={20} /></span>
                 <span className="font-semibold">New project</span>
-                <span className="max-w-60 text-xs text-muted">Another application, with its own jobs, key and alerts.</span>
+                <span className="max-w-60 text-xs text-muted">Another app, with its own AI tasks, key and alerts.</span>
               </Link>
             </motion.li>
           </ul>

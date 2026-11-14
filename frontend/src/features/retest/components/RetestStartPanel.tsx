@@ -140,7 +140,7 @@ export function RetestStartPanel() {
       } else if (err instanceof Error) {
         setSubmitError(err.message);
       } else {
-        setSubmitError("Failed to start re-test");
+        setSubmitError("The trial could not be started. Check your connection and try again.");
       }
     }
   };
@@ -156,16 +156,16 @@ export function RetestStartPanel() {
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-base font-semibold text-ink">
-                Monthly Re-test Budget Cap
+                Monthly budget for trials on new models
               </h3>
               {isCapExhausted ? (
-                <Badge tone="bad">Cap Reached</Badge>
+                <Badge tone="bad">Budget used up</Badge>
               ) : (
                 <Badge tone="ok">Available</Badge>
               )}
             </div>
             <p className="mt-1 text-xs text-dim">
-              Protects against accidental re-test runaway costs across all jobs.
+              A trial replays your past prompts on another model to see if it does as well. This is the most you allow trials to spend each month, across all your AI tasks, so a trial can never run up a surprise bill.
             </p>
           </div>
           <div className="text-right">
@@ -201,8 +201,7 @@ export function RetestStartPanel() {
 
         {isCapExhausted && (
           <div className="mt-4 rounded-md border border-bad/30 bg-bad-soft p-3 text-xs text-bad">
-            Your monthly re-test cap has been exhausted. You cannot start new
-            re-tests until the cap resets next month.
+            Your monthly trial budget is used up. You cannot start a new trial until it resets next month, or you raise the budget in Settings.
           </div>
         )}
       </Card>
@@ -218,8 +217,8 @@ export function RetestStartPanel() {
       )}
       {limits?.provider_key && (
         <p className="text-xs text-dim">
-          Re-tests use your {limits.provider_key.provider} key ending in{" "}
-          <span className="font-mono text-ink">{limits.provider_key.key_hint}</span>, within the monthly cap above.
+          Trials use your {limits.provider_key.provider} key ending in{" "}
+          <span className="font-mono text-ink">{limits.provider_key.key_hint}</span>, within the monthly budget above.
         </p>
       )}
 
@@ -228,11 +227,10 @@ export function RetestStartPanel() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="border-b border-rule pb-4">
             <h3 className="text-base font-semibold text-ink">
-              Configure Re-test Run
+              Set up a trial on a new model
             </h3>
             <p className="mt-1 text-xs text-dim">
-              Select a target job and candidate model to evaluate offline
-              without affecting live production traffic.
+              Choose the AI task and the model to try. We replay past prompts on that model, so your live app is not affected.
             </p>
           </div>
 
@@ -248,7 +246,7 @@ export function RetestStartPanel() {
               htmlFor="retest-job"
               className="block text-sm font-medium text-ink mb-1"
             >
-              Target Job <span className="text-bad">*</span>
+              AI task to test <span className="text-bad">*</span>
             </label>
             <select
               id="retest-job"
@@ -261,7 +259,7 @@ export function RetestStartPanel() {
               className="w-full rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50"
             >
               {jobs.length === 0 ? (
-                <option value="">No jobs found</option>
+                <option value="">No AI tasks yet</option>
               ) : (
                 jobs.map((j) => (
                   <option
@@ -270,7 +268,7 @@ export function RetestStartPanel() {
                     disabled={j.retest_consent === false}
                   >
                     {j.name}
-                    {j.retest_consent === false ? " (re-tests off)" : ""}
+                    {j.retest_consent === false ? " (trials off)" : ""}
                   </option>
                 ))
               )}
@@ -278,9 +276,8 @@ export function RetestStartPanel() {
 
             {isJobRetestDisabled && (
               <div className="mt-2 rounded-md border border-warn/30 bg-warn-soft p-3 text-xs text-warn">
-                <span className="font-semibold">Re-tests are disabled:</span> This
-                job has retest consent turned off in settings. To enable
-                re-testing, edit the job settings and turn re-test consent on.
+                <span className="font-semibold">Trials are turned off:</span> This
+                AI task does not allow its past prompts to be sent to another provider. To allow it, open the AI task's settings and turn trials on.
               </div>
             )}
           </div>
@@ -350,7 +347,7 @@ export function RetestStartPanel() {
                 htmlFor="retest-budget"
                 className="block text-sm font-medium text-ink"
               >
-                Max Run Budget (USD) <span className="text-bad">*</span>
+                Most this trial may spend (USD) <span className="text-bad">*</span>
               </label>
               <span className="text-xs text-dim">
                 Available: ${capRemaining.toFixed(2)}
@@ -377,13 +374,11 @@ export function RetestStartPanel() {
             </div>
             {!isBudgetValid && (
               <p className="mt-1 text-xs text-bad">
-                Budget must be greater than $0.00 and cannot exceed the available
-                cap of ${capRemaining.toFixed(2)}.
+                The budget must be more than $0.00 and no more than the ${capRemaining.toFixed(2)} left in your monthly trial budget.
               </p>
             )}
             <p className="mt-1 text-xs text-dim">
-              The re-test will immediately stop if the budget is reached before
-              all planned runs complete.
+              The trial stops straight away if it reaches this amount before all the prompts are replayed.
             </p>
           </div>
 
@@ -408,8 +403,7 @@ export function RetestStartPanel() {
             />
             {!isSampleValid && <p className="mt-1 text-xs text-bad">Between 1 and 500 prompts.</p>}
             <p className="mt-1 text-xs text-dim">
-              Chosen at random from this job's recorded prompts, one replay each. More prompts give a firmer answer and cost more; the
-              budget above still caps the spend.
+              Chosen at random from this AI task's recorded prompts, replayed once each. More prompts give a firmer answer but cost more; the budget above still caps the spend.
             </p>
           </div>
 
@@ -417,10 +411,7 @@ export function RetestStartPanel() {
           <div className="rounded-md border border-rule bg-bg p-4 text-xs text-dim space-y-1">
             <p className="font-medium text-ink">What this spends</p>
             <p>
-              Up to 50 past prompts of this job are replayed on the candidate model with your own provider key,
-              most important runs first, and each answer is checked like a production run. Before every call
-              the runner checks that this re-test stays within its budget and the project within its monthly cap,
-              so it stops before either is exceeded. It also stops early once the answer is clear.
+              Up to 50 past prompts of this AI task are replayed on the model you chose, using your own provider key, most important first. Each answer is checked the same way as your real ones. Before every call we check that the trial stays within its budget and your monthly trial budget, so it stops before either is exceeded. It also stops early once the answer is clear.
             </p>
           </div>
 
@@ -432,8 +423,8 @@ export function RetestStartPanel() {
               className="rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-on-accent shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 transition-opacity"
             >
               {startMutation.isPending
-                ? "Starting Re-test..."
-                : "Start Re-test"}
+                ? "Starting the trial..."
+                : "Start a trial on a new model"}
             </button>
           </div>
         </form>

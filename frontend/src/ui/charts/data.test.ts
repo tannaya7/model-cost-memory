@@ -5,7 +5,7 @@ import { change, dayRange, pivot, rollingPassRate } from "./data";
 const TODAY = new Date("2026-11-13T12:00:00Z");
 
 function point(day: string, job: string, model: string, runs: number, passed: number, failed: number, spend = 0): DayPoint {
-  return { day, job, model, runs, passed, failed, spend_usd: spend };
+  return { day, job, model, runs, passed, failed, spend_usd: spend, failed_spend_usd: 0, unpriced_runs: 0, tokens_in: 0, tokens_out: 0, cache_read_tokens: 0, cache_write_tokens: 0 };
 }
 
 describe("dayRange", () => {

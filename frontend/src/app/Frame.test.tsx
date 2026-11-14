@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/render";
 import { stubApi } from "../test/api";
@@ -15,11 +15,11 @@ function setup() {
 }
 
 describe("Frame", () => {
-  it("has four destinations instead of a long menu", () => {
+  it("has five destinations instead of a long menu", () => {
     setup();
     const main = screen.getAllByRole("navigation", { name: "Main" })[0];
     const links = [...main.querySelectorAll("a")].map((a) => a.textContent?.trim());
-    expect(links).toEqual(["Overview", "Jobs", "Models", "Activity"]);
+    expect(links).toEqual(["Overview", "AI tasks", "Models", "Compare", "Activity"]);
   });
 
   it("jumps anywhere from the keyboard with Ctrl K", async () => {
@@ -31,6 +31,6 @@ describe("Frame", () => {
     expect(await screen.findByText("invoice-extract")).toBeInTheDocument();
     await user.clear(search);
     await user.type(search, "retention");
-    expect(screen.getByText("Settings")).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog", { name: "Go to" })).getByText("Settings")).toBeInTheDocument();
   });
 });

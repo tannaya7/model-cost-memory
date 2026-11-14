@@ -45,9 +45,9 @@ function Picture() {
 }
 
 const POINTS_OF_VALUE = [
-  { icon: IconDollar, title: "The cheapest model that still works", text: "Proven on your own runs, with the saving per month." },
+  { icon: IconDollar, title: "The cheapest model that still works", text: "Checked against your own past AI calls, with the saving per month." },
   { icon: IconAlert, title: "A warning when an upgrade breaks things", text: "Even when the provider changes a model without a new name." },
-  { icon: IconShield, title: "Evidence that keeps itself current", text: "Old runs fade, new models are re-tested within a budget." },
+  { icon: IconShield, title: "Answers we keep checking", text: "Old results count less over time, and new models get a trial on your past prompts within a budget you set." },
 ];
 
 export default function SignIn() {
@@ -116,7 +116,7 @@ export default function SignIn() {
         </div>
         <div className="relative">
           <motion.h1 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="max-w-xl text-5xl font-semibold leading-[1.05] tracking-tight">
-            Stop paying for <span className="text-gradient">a bigger model</span> than the job needs.
+            Stop paying for <span className="text-gradient">a bigger model</span> than the task needs.
           </motion.h1>
           <div className="mt-8 h-56 max-w-md rounded-[18px] border border-rule bg-surface/60 p-4">
             <Picture />

@@ -133,9 +133,9 @@ function Slab({ top, depth, glow, id }: { top: [Pt, Pt, Pt, Pt]; depth: number; 
       <polygon points={pts([c, b, down(b), down(c)])} fill="var(--scene-slab-side)" />
       <polygon points={pts([a, b, c, d])} fill={`url(#${id}-top)`} />
       <polyline points={pts([d, a, b])} fill="none" stroke="var(--glass-border)" strokeWidth="1.2" opacity="0.8" />
-      <line x1={e1[0]} y1={e1[1]} x2={e2[0]} y2={e2[1]} stroke="#c026d3" strokeWidth="16" filter="url(#scene-blur-lg)" className="scene-pulse" />
-      <line x1={e1[0]} y1={e1[1]} x2={e2[0]} y2={e2[1]} stroke="#a855f7" strokeWidth="5" filter="url(#scene-blur-sm)" />
-      <line x1={e1[0]} y1={e1[1] - 1} x2={e2[0]} y2={e2[1] - 1} stroke="#f5e8ff" strokeWidth="1.4" />
+      <line x1={e1[0]} y1={e1[1]} x2={e2[0]} y2={e2[1]} stroke="var(--glow-a)" strokeWidth="16" filter="url(#scene-blur-lg)" className="scene-pulse" />
+      <line x1={e1[0]} y1={e1[1]} x2={e2[0]} y2={e2[1]} stroke="var(--glow-b)" strokeWidth="5" filter="url(#scene-blur-sm)" />
+      <line x1={e1[0]} y1={e1[1] - 1} x2={e2[0]} y2={e2[1] - 1} stroke="var(--glow-core)" strokeWidth="1.4" />
     </g>
   );
 }
@@ -188,9 +188,9 @@ function Scene({ reduce }: { reduce: boolean }) {
             <stop offset="1" stopColor="var(--scene-beam)" stopOpacity="0" />
           </linearGradient>
           <radialGradient id="coin" cx="0.35" cy="0.3" r="0.8">
-            <stop offset="0" stopColor="#fff6c4" />
-            <stop offset="0.45" stopColor="#f2c14e" />
-            <stop offset="1" stopColor="#a8740a" />
+            <stop offset="0" stopColor="var(--coin-hi)" />
+            <stop offset="0.45" stopColor="var(--coin-mid)" />
+            <stop offset="1" stopColor="var(--coin-lo)" />
           </radialGradient>
         </defs>
 
@@ -212,7 +212,7 @@ function Scene({ reduce }: { reduce: boolean }) {
 
         {/* violet energy running down the tube */}
         {!reduce && (
-          <path d={TUBE} pathLength={100} fill="none" stroke="#c084fc" strokeWidth="22" strokeLinecap="round" strokeDasharray="7 93" filter="url(#scene-blur-sm)" opacity="0.8">
+          <path d={TUBE} pathLength={100} fill="none" stroke="var(--glow-c)" strokeWidth="22" strokeLinecap="round" strokeDasharray="7 93" filter="url(#scene-blur-sm)" opacity="0.8">
             <animate attributeName="stroke-dashoffset" from="100" to="0" dur={`${RUN_SECONDS / 2}s`} repeatCount="indefinite" />
           </path>
         )}
@@ -224,11 +224,11 @@ function Scene({ reduce }: { reduce: boolean }) {
             return (
               <g key={i}>
                 <animateMotion dur={`${RUN_SECONDS}s`} begin={begin} repeatCount="indefinite" rotate="auto" path={TUBE} />
-                <circle r="22" fill="#a855f7" filter="url(#scene-blur-sm)" opacity="0">
+                <circle r="22" fill="var(--glow-b)" filter="url(#scene-blur-sm)" opacity="0">
                   <animate attributeName="opacity" values="0;0;0.9;0.7" keyTimes={times} dur={`${RUN_SECONDS}s`} begin={begin} repeatCount="indefinite" />
                 </circle>
-                <ellipse rx="7" ry="17" fill="#8a5e05" transform="translate(-2.5 0)" />
-                <ellipse rx="6" ry="17" fill="url(#coin)" stroke="#c99318" strokeWidth="1" />
+                <ellipse rx="7" ry="17" fill="var(--coin-back)" transform="translate(-2.5 0)" />
+                <ellipse rx="6" ry="17" fill="url(#coin)" stroke="var(--coin-edge)" strokeWidth="1" />
               </g>
             );
           })}
@@ -238,9 +238,9 @@ function Scene({ reduce }: { reduce: boolean }) {
         <path d={TUBE} fill="none" stroke="#ffffff" strokeOpacity="0.85" strokeWidth="2.5" strokeLinecap="round" transform="translate(-13 -6)" />
 
         {/* the gate: a glow that pulses each time a run passes the check */}
-        <ellipse cx={gate.x} cy={gate.y} rx="60" ry="30" fill="#a855f7" filter="url(#scene-blur-xl)" opacity="0.45" />
+        <ellipse cx={gate.x} cy={gate.y} rx="60" ry="30" fill="var(--glow-b)" filter="url(#scene-blur-xl)" opacity="0.45" />
         {!reduce && (
-          <ellipse cx={gate.x} cy={gate.y} rx="26" ry="13" fill="none" stroke="#c084fc" strokeWidth="2" opacity="0">
+          <ellipse cx={gate.x} cy={gate.y} rx="26" ry="13" fill="none" stroke="var(--glow-c)" strokeWidth="2" opacity="0">
             <animate attributeName="rx" values="26;72" dur={`${spacing}s`} begin={`${firstAtGate.toFixed(3)}s`} repeatCount="indefinite" />
             <animate attributeName="ry" values="13;36" dur={`${spacing}s`} begin={`${firstAtGate.toFixed(3)}s`} repeatCount="indefinite" />
             <animate attributeName="opacity" values="0.9;0" dur={`${spacing}s`} begin={`${firstAtGate.toFixed(3)}s`} repeatCount="indefinite" />
@@ -264,7 +264,7 @@ function Scene({ reduce }: { reduce: boolean }) {
             className="glass absolute hidden -translate-y-1/2 items-center lg:flex gap-1.5 whitespace-nowrap rounded-full py-1.5 pl-1.5 pr-3 text-xs font-semibold text-ink"
             style={side === "right" ? { left: `calc(${(p.x / 640) * 100}% + 34px)`, top: `${(p.y / 640) * 100}%` } : { right: `calc(${100 - (p.x / 640) * 100}% + 34px)`, top: `${(p.y / 640) * 100}%` }}
           >
-            <span className="grid h-5 w-5 place-items-center rounded-full bg-gradient-to-br from-[var(--grad-from)] to-accent-2 text-white"><Icon size={11} strokeWidth={2.2} /></span>
+            <span className="grid h-5 w-5 place-items-center rounded-full bg-gradient-to-br from-[var(--grad-from)] to-accent-2 text-on-accent"><Icon size={11} strokeWidth={2.2} /></span>
             {label}
           </motion.span>
         );
@@ -479,12 +479,12 @@ function Marquee() {
   );
 }
 
-/** Measured results from reports/ (see the README), not marketing numbers. */
+/** Simulated-time results only, each traced in research_notes/Product ideas deep research/claims_ledger.md. */
 const FIGURES = [
-  { value: 93, suffix: "%", label: "of 5-point quality drops caught", note: "after a model upgrade, 100 trials" },
-  { value: 2, suffix: "%", label: "false alarms", note: "on upgrades that changed nothing" },
-  { value: 76, suffix: "%", label: "of the time on the right model", note: "against 25% for a frozen test set" },
-  { value: 9, suffix: "%", label: "of spend keeps the evidence fresh", note: "re-tests, always within a budget" },
+  { value: 93, suffix: "%", label: "of 5-point quality drops caught", note: "93 of 100 simulated model upgrades (95% range 86 to 97%), when the inputs stayed the same. 81 of 100 when the inputs were also shifting." },
+  { value: 2, suffix: "%", label: "false alarms", note: "2 of 100 simulated upgrades that changed nothing (95% range 0.6 to 7%)." },
+  { value: 76, suffix: "%", label: "of the time on the right model", note: "Against 65% for re-checking once a month, and 25% for a test set never updated (which cannot follow a change, by design)." },
+  { value: 9, suffix: "%", label: "of simulated spend keeps the evidence fresh", note: "At 100 calls a day. With fewer re-tests the cost falls but so does accuracy." },
 ];
 
 const STEPS = [
@@ -583,8 +583,8 @@ export default function Landing() {
       <section id="numbers" className="scroll-mt-20">
         <div className="mx-auto max-w-[1200px] px-4 py-20 md:px-6">
           <Reveal>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent-ink">Measured, not promised</p>
-            <h2 className="mt-2 max-w-2xl text-3xl font-semibold tracking-tight md:text-4xl">How well it works, in numbers</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent-ink">Simulated so far, not yet live</p>
+            <h2 className="mt-2 max-w-2xl text-3xl font-semibold tracking-tight md:text-4xl">How well it did in our simulations</h2>
           </Reveal>
           <dl className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {FIGURES.map((f, i) => (
@@ -597,12 +597,12 @@ export default function Landing() {
               </Reveal>
             ))}
           </dl>
-          <p className="mt-4 text-xs text-muted">Results from the simulated-time harness run through the production code; the reports are in the repository.</p>
+          <p className="mt-4 text-xs text-muted">These come from simulated-time tests: 20 scripted timelines (or 100 simulated trials) with model accuracies we assumed, run through the production code. Not yet measured on live traffic. The reports are in the repository.</p>
         </div>
       </section>
 
       {/* How it works: a dark band with a line that draws itself through the steps */}
-      <section id="how" data-theme="dark" className="relative scroll-mt-20 overflow-hidden border-y border-rule bg-bg">
+      <section id="how" data-band="night" className="relative scroll-mt-20 overflow-hidden border-y border-rule bg-bg">
         <div aria-hidden className="pointer-events-none absolute left-1/2 top-0 h-[400px] w-[800px] -translate-x-1/2 rounded-full bg-accent/10 blur-3xl" />
         <div className="relative mx-auto max-w-[1200px] px-4 py-20 md:px-6">
           <Reveal>
@@ -689,7 +689,7 @@ export default function Landing() {
       {/* Call to action */}
       <section className="px-4 pb-20 md:px-6">
         <Reveal>
-          <div data-theme="dark" className="relative mx-auto max-w-[1200px] overflow-hidden rounded-[28px] border border-accent/30 bg-gradient-to-br from-[#2b1470] via-[#160f3d] to-[#3d0f52] px-6 py-14 text-center md:py-20">
+          <div data-band="night" className="relative mx-auto max-w-[1200px] overflow-hidden rounded-[28px] border border-accent/30 bg-gradient-to-br from-[var(--band-from)] via-[var(--band-via)] to-[var(--band-to)] px-6 py-14 text-center md:py-20">
             <div aria-hidden className="pointer-events-none absolute -left-20 -top-20 h-80 w-80 rounded-full bg-accent/30 blur-3xl" />
             <div aria-hidden className="pointer-events-none absolute -bottom-24 -right-20 h-80 w-80 rounded-full bg-accent-2/20 blur-3xl" />
             <h2 className="relative mx-auto max-w-2xl text-3xl font-semibold tracking-tight md:text-5xl">Find out what your AI features <span className="text-gradient">should</span> cost</h2>
@@ -734,7 +734,7 @@ export default function Landing() {
         <div className="border-t border-rule">
           <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-2 px-4 py-5 text-xs text-muted md:px-6">
             <span>© 2026 Model &amp; Cost Memory</span>
-            <span>The verdict and alert cards on this page are worked examples; the numbers row is measured.</span>
+            <span>The verdict and alert cards on this page are worked examples; the numbers row comes from simulations, not live traffic.</span>
           </div>
         </div>
       </footer>

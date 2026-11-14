@@ -48,7 +48,7 @@ export const VERDICT: Record<Verdict, { label: string; tone: Tone; short: string
   DOWNGRADE: { label: "Cheaper model found", tone: "good", short: "Save" },
   SWITCH: { label: "Better model found", tone: "warn", short: "Switch" },
   HOLD: { label: "Right model", tone: "neutral", short: "Hold" },
-  INSUFFICIENT_EVIDENCE: { label: "Gathering evidence", tone: "info", short: "Learning" },
+  INSUFFICIENT_EVIDENCE: { label: "Still learning", tone: "info", short: "Learning" },
 };
 
 export type ModelStatus = "GOOD_ENOUGH" | "UNSURE" | "CLEARLY_WORSE" | "BELOW_FLOOR" | "RETIRED";
@@ -57,6 +57,6 @@ export const MODEL_STATUS: Record<ModelStatus, { label: string; tone: Tone }> = 
   GOOD_ENOUGH: { label: "Good enough", tone: "good" },
   UNSURE: { label: "Not sure yet", tone: "warn" },
   CLEARLY_WORSE: { label: "Worse", tone: "bad" },
-  BELOW_FLOOR: { label: "Too few runs", tone: "neutral" },
+  BELOW_FLOOR: { label: "Too few AI calls", tone: "neutral" },
   RETIRED: { label: "Retired", tone: "bad" },
 };

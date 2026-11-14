@@ -212,6 +212,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/insights/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Insights
+         * @description Tokens and spend per agent, the ten heaviest traces (with a retry-loop flag), and what tool
+         *     definitions add to each call. Production runs only.
+         */
+        get: operations["get_agent_insights_v1_insights_agents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/insights/daily": {
         parameters: {
             query?: never;
@@ -275,6 +296,27 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Job Endpoint
+         * @description Change a job's description. The name and the check settings never change (the name is what your
+         *     code sends, and the check decides pass or fail).
+         */
+        patch: operations["patch_job_endpoint_v1_jobs__job__patch"];
         trace?: never;
     };
     "/v1/jobs/{job}/history": {
@@ -747,6 +789,44 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AgentInsightsOut */
+        AgentInsightsOut: {
+            /** Agents */
+            agents: components["schemas"]["AgentUsageOut"][];
+            /** Tools */
+            tools: components["schemas"]["ToolsUsageOut"][];
+            /**
+             * Traces
+             * @description Top 10 traces by total tokens
+             */
+            traces: components["schemas"]["TraceUsageOut"][];
+        };
+        /** AgentUsageOut */
+        AgentUsageOut: {
+            /**
+             * Agent
+             * @description The agent or role; runs that named none are 'unlabelled'
+             */
+            agent: string;
+            /** Cache Read Tokens */
+            cache_read_tokens: number;
+            /** Runs */
+            runs: number;
+            /**
+             * Share
+             * @description Share of the project's total tokens in the window, 0..1
+             */
+            share: number;
+            /**
+             * Spend Usd
+             * @description Priced runs only
+             */
+            spend_usd: number;
+            /** Tokens In */
+            tokens_in: number;
+            /** Tokens Out */
+            tokens_out: number;
+        };
         /**
          * AlertOut
          * @description A regression, silent drop or deprecation that needs a person's attention.
@@ -844,6 +924,18 @@ export interface components {
         /** DayPointOut */
         DayPointOut: {
             /**
+             * Cache Read Tokens
+             * @description Input tokens read from the prompt cache
+             * @default 0
+             */
+            cache_read_tokens: number;
+            /**
+             * Cache Write Tokens
+             * @description Input tokens written to the prompt cache
+             * @default 0
+             */
+            cache_write_tokens: number;
+            /**
              * Day
              * Format: date
              */
@@ -853,6 +945,12 @@ export interface components {
              * @description UNKNOWN runs count in runs but in neither passed nor failed
              */
             failed: number;
+            /**
+             * Failed Spend Usd
+             * @description Actual cost of the priced runs whose check failed
+             * @default 0
+             */
+            failed_spend_usd: number;
             /** Job */
             job: string;
             /** Model */
@@ -869,6 +967,24 @@ export interface components {
              * @description Priced runs only
              */
             spend_usd: number;
+            /**
+             * Tokens In
+             * @description Uncached input tokens, summed over the group's runs
+             * @default 0
+             */
+            tokens_in: number;
+            /**
+             * Tokens Out
+             * @description Output tokens, summed over the group's runs
+             * @default 0
+             */
+            tokens_out: number;
+            /**
+             * Unpriced Runs
+             * @description Runs with no known price (cost unknown): not in spend_usd
+             * @default 0
+             */
+            unpriced_runs: number;
         };
         /** DevLogin */
         DevLogin: {
@@ -1120,6 +1236,17 @@ export interface components {
             runs_by_state?: {
                 [key: string]: number;
             };
+        };
+        /**
+         * JobPatch
+         * @description Change a job's description. Name and check settings cannot be changed.
+         */
+        JobPatch: {
+            /**
+             * Description
+             * @description Null or an empty string clears it
+             */
+            description?: string | null;
         };
         /**
          * LabelCreate
@@ -1736,6 +1863,11 @@ export interface components {
          */
         RunCreate: {
             /**
+             * Agent
+             * @description Which agent or role made the call
+             */
+            agent?: string | null;
+            /**
              * Cache Read Tokens
              * @default 0
              */
@@ -1814,12 +1946,27 @@ export interface components {
             tool_calls?: {
                 [key: string]: unknown;
             }[] | null;
+            /**
+             * Tools Tokens
+             * @description Estimated tokens of the tool definitions sent with the call
+             */
+            tools_tokens?: number | null;
+            /**
+             * Trace Id
+             * @description One id shared by every call that serves the same user task
+             */
+            trace_id?: string | null;
         };
         /**
          * RunDetail
          * @description One run in full, for the detail panel.
          */
         RunDetail: {
+            /**
+             * Agent
+             * @description Which agent or role made the call, if the SDK said
+             */
+            agent?: string | null;
             /** Cache Read Tokens */
             cache_read_tokens: number;
             /** Cache Write Tokens */
@@ -1874,14 +2021,14 @@ export interface components {
             output: string | null;
             /**
              * Output Preview
-             * @description First 200 characters of the output
+             * @description Same for the output
              */
             output_preview: string | null;
             /** Prompt */
             prompt: string | null;
             /**
              * Prompt Preview
-             * @description First 200 characters of the prompt; null once retention cleared it
+             * @description First 240 characters of the prompt, whitespace collapsed, ending in an ellipsis when cut; null once retention cleared it
              */
             prompt_preview: string | null;
             /** Prompt Version */
@@ -1905,10 +2052,25 @@ export interface components {
             tokens_in: number;
             /** Tokens Out */
             tokens_out: number;
+            /**
+             * Tool Call Count
+             * @description Tool calls the response made
+             */
+            tool_call_count?: number | null;
             /** Tool Calls */
             tool_calls: {
                 [key: string]: unknown;
             }[] | null;
+            /**
+             * Tools Tokens
+             * @description Estimated tokens of the tool definitions sent
+             */
+            tools_tokens?: number | null;
+            /**
+             * Trace Id
+             * @description Shared by every call serving the same user task
+             */
+            trace_id?: string | null;
             /**
              * Weight
              * @description How much it counts in the recommendation now: e^(-age/S), S shorter once its version is replaced
@@ -1920,6 +2082,11 @@ export interface components {
          * @description One recorded run, as a table row. Full prompt and output come from the run detail.
          */
         RunOut: {
+            /**
+             * Agent
+             * @description Which agent or role made the call, if the SDK said
+             */
+            agent?: string | null;
             /** Cache Read Tokens */
             cache_read_tokens: number;
             /** Cache Write Tokens */
@@ -1972,12 +2139,12 @@ export interface components {
             outcome_reason: string | null;
             /**
              * Output Preview
-             * @description First 200 characters of the output
+             * @description Same for the output
              */
             output_preview: string | null;
             /**
              * Prompt Preview
-             * @description First 200 characters of the prompt; null once retention cleared it
+             * @description First 240 characters of the prompt, whitespace collapsed, ending in an ellipsis when cut; null once retention cleared it
              */
             prompt_preview: string | null;
             /** Prompt Version */
@@ -2001,6 +2168,21 @@ export interface components {
             tokens_in: number;
             /** Tokens Out */
             tokens_out: number;
+            /**
+             * Tool Call Count
+             * @description Tool calls the response made
+             */
+            tool_call_count?: number | null;
+            /**
+             * Tools Tokens
+             * @description Estimated tokens of the tool definitions sent
+             */
+            tools_tokens?: number | null;
+            /**
+             * Trace Id
+             * @description Shared by every call serving the same user task
+             */
+            trace_id?: string | null;
             /**
              * Weight
              * @description How much it counts in the recommendation now: e^(-age/S), S shorter once its version is replaced
@@ -2057,6 +2239,53 @@ export interface components {
              * @default 0
              */
             unpriced_runs: number;
+        };
+        /** ToolsUsageOut */
+        ToolsUsageOut: {
+            /**
+             * Avg Tools Tokens
+             * @description Estimated tokens the tool definitions add to every call
+             */
+            avg_tools_tokens: number;
+            /** Job */
+            job: string;
+            /**
+             * Runs
+             * @description Runs that sent tool definitions
+             */
+            runs: number;
+            /**
+             * Share Of Tokens In
+             * @description Of those runs' input tokens (cache included), 0..1
+             */
+            share_of_tokens_in: number;
+        };
+        /** TraceUsageOut */
+        TraceUsageOut: {
+            /**
+             * Agents
+             * @description Distinct agents in the trace
+             */
+            agents: number;
+            /** Calls */
+            calls: number;
+            /**
+             * Repeated Prompts
+             * @description The same prompt appears 3 or more times in the trace: a likely retry loop or runaway agent
+             */
+            repeated_prompts: boolean;
+            /**
+             * Spend Usd
+             * @description Priced runs only
+             */
+            spend_usd: number;
+            /**
+             * Tokens
+             * @description Input, output and cache tokens over every call in the trace
+             */
+            tokens: number;
+            /** Trace Id */
+            trace_id: string;
         };
         /**
          * UsageLimitIn
@@ -2523,6 +2752,42 @@ export interface operations {
             };
         };
     };
+    get_agent_insights_v1_insights_agents_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back */
+                days?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentInsightsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_daily_v1_insights_daily_get: {
         parameters: {
             query?: {
@@ -2649,6 +2914,45 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_job_endpoint_v1_jobs__job__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

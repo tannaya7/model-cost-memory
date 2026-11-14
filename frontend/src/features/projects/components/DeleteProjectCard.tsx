@@ -34,8 +34,8 @@ export function DeleteProjectCard({ projectId, projectName, onDeleted }: Props) 
       <div>
         <h3 className="text-base font-semibold text-ink">Delete project</h3>
         <p className="mt-0.5 text-xs text-dim">
-          Removes {projectName} and everything recorded under it: jobs, runs with their prompts and answers,
-          re-tests, recommendations, alerts and the stored provider key. The project key stops working at once.
+          Removes {projectName} and everything recorded under it: AI tasks, AI calls with their prompts and answers,
+          trials on new models, recommendations, alerts and the stored provider key. The project key stops working at once.
           This cannot be undone.
         </p>
       </div>
