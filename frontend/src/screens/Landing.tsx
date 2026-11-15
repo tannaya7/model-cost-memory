@@ -481,10 +481,10 @@ function Marquee() {
 
 /** Simulated-time results only, each traced in research_notes/Product ideas deep research/claims_ledger.md. */
 const FIGURES = [
-  { value: 93, suffix: "%", label: "of 5-point quality drops caught", note: "93 of 100 simulated model upgrades (95% range 86 to 97%), when the inputs stayed the same. 81 of 100 when the inputs were also shifting." },
-  { value: 2, suffix: "%", label: "false alarms", note: "2 of 100 simulated upgrades that changed nothing (95% range 0.6 to 7%)." },
-  { value: 76, suffix: "%", label: "of the time on the right model", note: "Against 65% for re-checking once a month, and 25% for a test set never updated (which cannot follow a change, by design)." },
-  { value: 9, suffix: "%", label: "of simulated spend keeps the evidence fresh", note: "At 100 calls a day. With fewer re-tests the cost falls but so does accuracy." },
+  { value: 9, suffix: " in 10", label: "five-point quality drops caught in computer tests", note: "93 of 100 on our tuning runs (95% range 86 to 97%) and 89 of 100 on new runs we had not used before (81 to 94%). 50 AI calls a day, checked 14 days after the change. 81 of 100 when inputs were also changing (tuning runs only)." },
+  { value: 2, suffix: " in 100 or fewer", label: "false alarms on stable traffic", note: "2 of 100 on tuning runs (95% range 0.6 to 7%), 0 of 100 on new runs (0 to 3.7%)." },
+  { value: 76, suffix: "%", label: "of the time on the right model", note: "Computer tests on tuning runs, not re-checked on new runs yet. Against 65% for re-checking once a month, and 25% for a test set never updated (which cannot follow a change, by design)." },
+  { value: 9, suffix: "%", label: "of spend keeps the evidence fresh", note: "Computer tests on tuning runs, not re-checked on new runs yet. At 100 calls a day. With fewer re-tests the cost falls but so does accuracy." },
 ];
 
 const STEPS = [
@@ -597,7 +597,7 @@ export default function Landing() {
               </Reveal>
             ))}
           </dl>
-          <p className="mt-4 text-xs text-muted">These come from simulated-time tests: 20 scripted timelines (or 100 simulated trials) with model accuracies we assumed, run through the production code. Not yet measured on live traffic. The reports are in the repository.</p>
+          <p className="mt-4 text-xs text-muted">These come from computer simulations (20 to 100 scripted trials with assumed model accuracies). They have not yet been measured on live traffic. The reports are in the repository.</p>
         </div>
       </section>
 
