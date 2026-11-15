@@ -381,7 +381,7 @@ class HistoryOut(Model):
     versions: list[ModelVersionSeen] = Field(description="Every model version this job has run on")
 
 
-AlertKind = Literal["VERSION_REGRESSION", "SILENT_DROP", "MODEL_DEPRECATED"]
+AlertKind = Literal["VERSION_REGRESSION", "SILENT_DROP", "MODEL_DEPRECATED", "TOKEN_BURST", "BUDGET", "TRIAL_BUDGET", "MODEL_RETIRING"]
 
 
 class AlertOut(Model):
@@ -395,7 +395,9 @@ class AlertOut(Model):
         description="VERSION_REGRESSION: model, old_version, new_version, old_pass_rate, new_pass_rate, n_old, "
                     "n_new, drop, p_value, failing_run_ids. SILENT_DROP: model, model_version, before_pass_rate, "
                     "after_pass_rate, n_before, n_after, drop, p_value. MODEL_DEPRECATED: model, model_version, "
-                    "status."
+                    "status. TOKEN_BURST: tokens_last_hour, usual_tokens_per_hour, top_job, top_job_tokens. BUDGET: "
+                    "level (85, 95 or PROJECTED), month, budget_usd, spent_usd, projected_usd. TRIAL_BUDGET: level (85 or 95), month, cap_usd, spent_usd. MODEL_RETIRING: model, "
+                    "status, shutdown_date (the earliest possible date: check your provider's notice)."
     )
     created_at: datetime
     delivered_at: datetime | None = Field(description="When the webhook accepted it; null if not (yet)")
@@ -490,6 +492,9 @@ class ProjectOut(Model):
     key_prefix: str | None = Field(description="The first characters of the live project key")
     content_retention_days: int = Field(
         default=90, description="Days a run keeps its prompt, output, tool calls and answer key; the figures stay")
+    monthly_budget_usd: float | None = Field(
+        default=None, description="Optional monthly AI spend budget in USD. Soft: alerts at 85% and 95% of actual "
+                                  "spend and when the month is projected to go over; nothing is ever blocked")
     created_at: datetime
 
 
@@ -508,6 +513,9 @@ class ProjectPatch(Model):
                                     description="Must be https; send null to remove")
     retest_monthly_cap_usd: float | None = Field(default=None, ge=0, le=10_000)
     retest_allowed: bool | None = None
+    monthly_budget_usd: float | None = Field(
+        default=None, gt=0, le=10_000_000, description="Monthly AI spend budget in USD (above 0, up to 10,000,000); "
+                                                       "send null to clear")
     content_retention_days: int | None = Field(
         default=None, ge=1, le=3650,
         description="Days a run keeps its prompt, output, tool calls and answer key (1 to 3650)")

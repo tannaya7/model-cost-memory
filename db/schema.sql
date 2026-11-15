@@ -31,7 +31,9 @@ CREATE TABLE projects (
     name          TEXT,                             -- display name chosen in the web app
     key_prefix    TEXT,                             -- first characters of the live key, for display
     content_retention_days INTEGER NOT NULL DEFAULT 90  -- days runs keep their prompt and answer (0015)
-        CONSTRAINT projects_retention_check CHECK (content_retention_days BETWEEN 1 AND 3650)
+        CONSTRAINT projects_retention_check CHECK (content_retention_days BETWEEN 1 AND 3650),
+    monthly_budget_usd NUMERIC(12,2)                -- optional soft budget; alerts only (0018)
+        CONSTRAINT projects_budget_check CHECK (monthly_budget_usd IS NULL OR monthly_budget_usd > 0)
 );
 CREATE INDEX idx_projects_owner ON projects(owner_user_id);
 
@@ -202,7 +204,7 @@ CREATE TABLE alerts (
     alert_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     job_id         UUID NOT NULL REFERENCES jobs(job_id),
     kind           TEXT NOT NULL CHECK (kind IN
-                     ('VERSION_REGRESSION','SILENT_DROP','MODEL_DEPRECATED')),
+                     ('VERSION_REGRESSION','SILENT_DROP','MODEL_DEPRECATED','TOKEN_BURST','BUDGET','TRIAL_BUDGET','MODEL_RETIRING')),
     detail         JSONB NOT NULL,                  -- rates before/after, p-value, run ids
     delivered_at   TIMESTAMPTZ,                     -- null until the webhook accepts it
     resolved_at    TIMESTAMPTZ,

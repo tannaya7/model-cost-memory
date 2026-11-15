@@ -58,6 +58,7 @@ class Project(Base):
     __table_args__ = (
         Index("idx_projects_owner", "owner_user_id"),
         CheckConstraint("content_retention_days BETWEEN 1 AND 3650", name="projects_retention_check"),
+        CheckConstraint("monthly_budget_usd IS NULL OR monthly_budget_usd > 0", name="projects_budget_check"),
     )
 
     project_id: Mapped[str] = mapped_column(Text, primary_key=True)
@@ -75,6 +76,7 @@ class Project(Base):
     key_prefix: Mapped[str | None] = mapped_column(Text)  # first characters of the live key, for display
     # Days a run keeps its prompt, answer, tool calls and answer key (retention.py; 0015).
     content_retention_days: Mapped[int] = mapped_column(Integer, server_default=text("90"))
+    monthly_budget_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))  # optional soft budget (0018)
 
 
 class ProviderKey(Base):
@@ -302,7 +304,8 @@ class Alert(Base):
     __tablename__ = "alerts"
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('VERSION_REGRESSION','SILENT_DROP','MODEL_DEPRECATED')", name="alerts_kind_check"
+            "kind IN ('VERSION_REGRESSION','SILENT_DROP','MODEL_DEPRECATED','TOKEN_BURST','BUDGET',"
+            "'TRIAL_BUDGET','MODEL_RETIRING')", name="alerts_kind_check"
         ),
         Index("idx_alerts_open", "job_id", "dedupe_key", unique=True, postgresql_where=text("resolved_at IS NULL")),
         Index("idx_alerts_undelivered", "next_attempt_at", postgresql_where=text("delivered_at IS NULL")),

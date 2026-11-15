@@ -66,6 +66,10 @@ KIND_LABELS = {
     "VERSION_REGRESSION": "Regression after a model upgrade",
     "SILENT_DROP": "Pass rate dropped with no version change",
     "MODEL_DEPRECATED": "Recommended model is being retired",
+    "TOKEN_BURST": "Unusual token use",
+    "BUDGET": "Monthly budget",
+    "TRIAL_BUDGET": "Budget for trials on a new model",
+    "MODEL_RETIRING": "A model you use is being retired",
 }
 
 

@@ -134,6 +134,7 @@ def _project_out(p: Project) -> ProjectOut:
         webhook_secret=p.webhook_secret, retest_monthly_cap_usd=float(p.retest_monthly_cap_usd),
         retest_allowed=p.retest_allowed, key_prefix=p.key_prefix, created_at=p.created_at,
         content_retention_days=p.content_retention_days,
+        monthly_budget_usd=float(p.monthly_budget_usd) if p.monthly_budget_usd is not None else None,
     )
 
 
@@ -188,6 +189,9 @@ async def patch_project(
             await retry_given_up_alerts(session, project.project_id)
     if "retest_monthly_cap_usd" in sent and body.retest_monthly_cap_usd is not None:
         project.retest_monthly_cap_usd = Decimal(str(body.retest_monthly_cap_usd))
+    if "monthly_budget_usd" in sent:  # null clears it
+        project.monthly_budget_usd = (
+            None if body.monthly_budget_usd is None else Decimal(str(body.monthly_budget_usd)))
     if "retest_allowed" in sent and body.retest_allowed is not None:
         project.retest_allowed = body.retest_allowed
     if "content_retention_days" in sent and body.content_retention_days is not None:

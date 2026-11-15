@@ -11,6 +11,9 @@
                                   for recommended models that were deprecated or retired, and
                                   re-tests for new models cheaper than what a job uses now
   news             every hour     fetches the AI news feeds (news/); the web app can ask sooner
+  token-burst      every hour     alerts when the last hour's tokens are far above the usual hour (alerts/watch.py)
+  budget-alerts    daily          soft alerts at 85% and 95% of the monthly budget, and when projected over it
+  retirement-alerts daily         alerts when a model a project ran lately is retired or about to be
   retention        daily          clears the prompt, answer, tool calls and answer key of runs older
                                   than their project's retention (retention.py)
 
@@ -37,6 +40,7 @@ from sqlalchemy.pool import NullPool
 
 from .alerts.notifier import deliver_pending
 from .alerts.service import catalog_alerts
+from .alerts.watch import check_budgets, check_retirements, check_trial_budgets, check_token_bursts
 from .catalog.sync import fetch_price_list, sync_catalog
 from .config import Settings, check_startup, get_settings, load_dotenv_file, normalize_database_url
 from .heartbeat import LEADER, record, tracked
@@ -86,6 +90,21 @@ async def run_retention(sessions: async_sessionmaker[AsyncSession], settings: Se
         return await clear_old_content(session)
 
 
+async def run_token_bursts(sessions: async_sessionmaker[AsyncSession], settings: Settings | None = None) -> int:
+    async with sessions() as session:
+        return len(await check_token_bursts(session))
+
+
+async def run_budget_alerts(sessions: async_sessionmaker[AsyncSession], settings: Settings | None = None) -> int:
+    async with sessions() as session:
+        return len(await check_budgets(session)) + len(await check_trial_budgets(session))
+
+
+async def run_retirement_alerts(sessions: async_sessionmaker[AsyncSession], settings: Settings | None = None) -> int:
+    async with sessions() as session:
+        return len(await check_retirements(session))
+
+
 async def run_news(sessions: async_sessionmaker[AsyncSession], settings: Settings | None = None) -> bool:
     return (await news_refresh(sessions)).refreshed  # False only when every feed failed
 
@@ -126,6 +145,7 @@ def build_scheduler(sessions: async_sessionmaker[AsyncSession], settings: Settin
         (run_retests, {"seconds": 30}, "retests"),
         (run_retest_unsure, {"hours": 1}, "retest-unsure"),
         (run_news, {"hours": 1}, "news"),
+        (run_token_bursts, {"hours": 1}, "token-burst"),
     ]
     for fn, every, job_id in jobs:
         scheduler.add_job(tracked(job_id, fn), "interval", **every, args=[sessions, settings], id=job_id, **common)
@@ -133,6 +153,10 @@ def build_scheduler(sessions: async_sessionmaker[AsyncSession], settings: Settin
                       args=[sessions, settings], id="catalog-sync", **common)
     scheduler.add_job(tracked("retention", run_retention), "cron", hour=4, minute=0,
                       args=[sessions, settings], id="retention", **common)
+    scheduler.add_job(tracked("budget-alerts", run_budget_alerts), "cron", hour=5, minute=0,
+                      args=[sessions, settings], id="budget-alerts", **common)
+    scheduler.add_job(tracked("retirement-alerts", run_retirement_alerts), "cron", hour=5, minute=30,
+                      args=[sessions, settings], id="retirement-alerts", **common)
     return scheduler
 
 
