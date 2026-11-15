@@ -1,7 +1,8 @@
 /* The single place for every colour, font and radius, in two themes.
 
-   Light is the default: a lavender-white room, deep navy ink, and one violet that glows into magenta
-   (the palette of the AICM reference). Dark is the same violet on a night-blue instrument panel.
+   Palette: Royal Cyan & Magenta. Deep midnight #07102b, royal cyan #0687ab, mist ice cyan #e4f5fa, accent magenta #d3249b;
+   every other shade is a blend of those four. Light is the default (ice-cyan room, midnight ink, cyan brand);
+   dark is the same four on a midnight panel. The coin stays gold.
    The theme is chosen by data-theme on <html> (public/theme-init.js sets it before the first paint);
    any element can also carry data-theme="dark" to be a dark band inside a light page.
    Components only ever use these names, so both themes follow automatically. */
@@ -10,98 +11,99 @@
   color-scheme: light;
 
   /* planes, from the page to the most raised surface */
-  --color-bg: #efeef7;
-  --color-surface: #ffffff;
-  --color-surface-2: #f6f5fc;
-  --color-surface-3: #ebe9f6;
-  --color-rule: rgba(24, 20, 70, 0.08);
-  --color-rule-strong: rgba(24, 20, 70, 0.16);
+  --color-bg: #eef9fc;
+  --color-surface: #f9fdfe;
+  --color-surface-2: #f5fbfd;
+  --color-surface-3: #e7f6fb;
+  --color-rule: rgba(7, 16, 43, 0.13);
+  --color-rule-strong: rgba(7, 16, 43, 0.22);
 
   /* ink */
-  --color-ink: #0e0f33;
-  --color-dim: #484a6e;
-  --color-muted: #6c6e90;
+  --color-ink: #07102b;
+  --color-dim: #565f72;
+  --color-muted: #636d7f;
 
-  /* accent: one violet, with a magenta partner for glows and the brand gradient */
-  --color-accent: #7c3aed;
-  --color-accent-2: #d946ef;
-  --color-accent-ink: #6d28d9;
-  --color-accent-soft: rgba(124, 58, 237, 0.1);
+  /* accent: one royal cyan, with a magenta partner for glows and the brand gradient */
+  --color-accent: #0687ab;
+  --color-accent-2: #d3249b;
+  --color-accent-ink: #057391;
+  --color-accent-soft: rgba(6, 135, 171, 0.1);
   --color-on-accent: #ffffff;
-  --color-overlay: #1b1840;
-  --grad-from: #8b5cf6;
-  --grad-to: #6d28d9;
-  --grad-text: linear-gradient(100deg, #6d28d9 0%, #8b5cf6 45%, #c026d3 100%);
+  --color-overlay: #07102b;
+  --color-accent-fill: #057796; /* fill behind small white button text: royal darkened 12% so it passes 4.5:1 */
+  --grad-from: #057796;
+  --grad-to: #04627c;
+  --grad-text: linear-gradient(100deg, #057391 0%, #0687ab 45%, #c0228f 100%);
 
   /* status: fixed meanings, always shown with an icon and a word */
-  --color-ok: #138a4c;
-  --color-ok-soft: rgba(19, 138, 76, 0.1);
+  --color-ok: #0f7a42;
+  --color-ok-soft: rgba(15, 122, 66, 0.1);
   --color-warn: #b45309;
   --color-warn-soft: rgba(217, 119, 6, 0.12);
   --color-bad: #d42f2f;
   --color-bad-soft: rgba(212, 47, 47, 0.1);
-  --color-skeleton: #e6e4f1;
+  --color-skeleton: #d1ebf3;
   --tab-active: #ffffff;
 
   /* chart series, validated on white (dataviz validator: all checks pass, light; three slots under 3:1,
      so every chart has a legend, tooltips and labels) */
-  --series-1: #2a78d6;
+  --series-1: #0687ab;
   --series-2: #eb6834;
   --series-3: #1baf7a;
   --series-4: #eda100;
-  --series-5: #e87ba4;
+  --series-5: #d3249b;
   --series-6: #008300;
   --series-7: #6250d6;
   --series-8: #e34948;
-  --series-other: #9a9cb8;
-  --chart-grid: #ecebf4;
-  --chart-axis: #d5d3e6;
-  --chart-tick: #6c6e90;
-  --chart-cursor: rgba(24, 20, 70, 0.18);
-  --chart-hover: rgba(124, 58, 237, 0.06);
+  --series-other: #8a96a8;
+  --chart-grid: #e3f1f6;
+  --chart-axis: #c9e0e8;
+  --chart-tick: #636d7f;
+  --chart-cursor: rgba(7, 16, 43, 0.18);
+  --chart-hover: rgba(6, 135, 171, 0.06);
 
   /* the landing scene */
-  --scene-floor: #ecebf6;
-  --scene-line: rgba(80, 60, 160, 0.13);
+  --scene-floor: #e4f5fa;
+  --scene-line: rgba(6, 135, 171, 0.16);
   --scene-slab-top: #ffffff;
-  --scene-slab-side: #cdc6e8;
-  --scene-slab-front: #e2ddf3;
+  --scene-slab-side: #b9dbe6;
+  --scene-slab-front: #d3ecf3;
   --scene-tube: rgba(255, 255, 255, 0.62);
-  --scene-tube-edge: rgba(150, 130, 220, 0.45);
-  --scene-shadow: rgba(60, 40, 140, 0.18);
-  --scene-speck: rgba(110, 70, 230, 0.55);
+  --scene-tube-edge: rgba(6, 135, 171, 0.4);
+  --scene-shadow: rgba(7, 16, 43, 0.18);
+  --scene-speck: rgba(6, 135, 171, 0.55);
   --scene-beam: rgba(255, 255, 255, 0.85);
   --glass: rgba(255, 255, 255, 0.72);
   --glass-border: rgba(255, 255, 255, 0.9);
 
-  --shadow-panel: 0 1px 2px rgba(24, 20, 70, 0.04), 0 14px 34px -16px rgba(60, 40, 140, 0.16);
-  --shadow-float: 0 30px 60px -24px rgba(60, 40, 140, 0.28);
+  --shadow-panel: 0 1px 2px rgba(7, 16, 43, 0.04), 0 14px 34px -16px rgba(6, 100, 130, 0.16);
+  --shadow-float: 0 30px 60px -24px rgba(6, 100, 130, 0.28);
   --panel-light: rgba(255, 255, 255, 0);
-  --page-glow-1: rgba(139, 92, 246, 0.12);
-  --page-glow-2: rgba(217, 70, 239, 0.07);
+  --page-glow-1: rgba(6, 135, 171, 0.12);
+  --page-glow-2: rgba(211, 36, 155, 0.06);
 
 
   /* things that change colour with the theme */
-  --accent-glow: rgba(124, 58, 237, 0.7);
-  --glow-a: #c026d3;
-  --glow-b: #a855f7;
-  --glow-c: #c084fc;
-  --glow-core: #f5e8ff;
+  --accent-glow: rgba(6, 135, 171, 0.6);
+  --glow-a: #0687ab;
+  --glow-b: #2aa3c6;
+  --glow-c: #4ca9c3;
+  --glow-core: #e4f5fa;
   --coin-hi: #fff6c4;
   --coin-mid: #f2c14e;
   --coin-lo: #a8740a;
   --coin-edge: #c99318;
   --coin-back: #8a5e05;
-  --logo-1: #a78bfa;
-  --logo-2: #7c3aed;
-  --logo-3: #d946ef;
-  --promo-from: #4c1d95;
-  --promo-via: #6d28d9;
-  --promo-to: #a21caf;
-  --promo-ink: #4c1d95;
-  --band-from: #2b1470;
-  --band-via: #160f3d;
-  --band-to: #3d0f52;
+  --logo-1: #4ca9c3;
+  --logo-2: #0687ab;
+  --logo-3: #057391;
+  --promo-from: #07102b;
+  --promo-via: #045a78;
+  --promo-to: #a81d7d;
+  --promo-ink: #045a78;
+  --band-from: #073a56;
+  --band-via: #050b1e;
+  --band-to: #301441;
   --grain: 0;
 
   --font-sans: "Geist Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -111,30 +113,31 @@
   --radius-sm: 0.625rem;
 }
 
-/* A dark band on the light page keeps the violet night; on the dark theme it is simply the dark theme. */
+/* A dark band on the light page keeps the midnight night; on the dark theme it is simply the dark theme. */
 :root:not([data-theme="dark"]) [data-band="night"] {
   color-scheme: dark;
 
-  --color-bg: #07071a;
-  --color-surface: #100f28;
-  --color-surface-2: #171636;
-  --color-surface-3: #1f1d45;
-  --color-rule: rgba(255, 255, 255, 0.075);
-  --color-rule-strong: rgba(255, 255, 255, 0.14);
+  --color-bg: #030714;
+  --color-surface: #072542;
+  --color-surface-2: #072f4c;
+  --color-surface-3: #073857;
+  --color-rule: rgba(228, 245, 250, 0.14);
+  --color-rule-strong: rgba(228, 245, 250, 0.26);
 
-  --color-ink: #efeefb;
-  --color-dim: #a6a5c9;
-  --color-muted: #75749a;
+  --color-ink: #e7f6fb;
+  --color-dim: #9ca9b0;
+  --color-muted: #8a969e;
 
-  --color-accent: #a78bfa;
-  --color-accent-2: #e879f9;
-  --color-accent-ink: #c4b5fd;
-  --color-accent-soft: rgba(167, 139, 250, 0.15);
-  --color-on-accent: #120f2b;
+  --color-accent: #5ab1c9;
+  --color-accent-2: #e04aae;
+  --color-accent-ink: #8bc9da;
+  --color-accent-soft: rgba(90, 177, 201, 0.16);
+  --color-on-accent: #050b1e;
   --color-overlay: #000000;
-  --grad-from: #9061f9;
-  --grad-to: #7c3aed;
-  --grad-text: linear-gradient(100deg, #d6c9ff 0%, #a78bfa 40%, #e879f9 100%);
+  --color-accent-fill: var(--color-accent);
+  --grad-from: #8bc9da;
+  --grad-to: #5ab1c9;
+  --grad-text: linear-gradient(100deg, #bfe1ec 0%, #8bc9da 40%, #ee6fc6 100%);
 
   --color-ok: #3ddc84;
   --color-ok-soft: rgba(12, 163, 12, 0.16);
@@ -142,87 +145,88 @@
   --color-warn-soft: rgba(250, 178, 25, 0.14);
   --color-bad: #ff6b6b;
   --color-bad-soft: rgba(208, 59, 59, 0.18);
-  --color-skeleton: #1d1b40;
-  --tab-active: #262452;
+  --color-skeleton: #0a3552;
+  --tab-active: #074c6b;
 
   /* chart series, validated on --color-surface (dataviz validator: all checks pass, dark) */
-  --series-1: #3987e5;
+  --series-1: #2a9fc4;
   --series-2: #d95926;
   --series-3: #199e70;
   --series-4: #c98500;
-  --series-5: #d55181;
+  --series-5: #d3249b;
   --series-6: #008300;
   --series-7: #9085e9;
   --series-8: #e66767;
-  --series-other: #5d6380;
-  --chart-grid: #1e1c3a;
-  --chart-axis: #2e2c56;
-  --chart-tick: #7d7ca6;
-  --chart-cursor: rgba(255, 255, 255, 0.25);
-  --chart-hover: rgba(255, 255, 255, 0.04);
+  --series-other: #4d6270;
+  --chart-grid: #0d3050;
+  --chart-axis: #1a4766;
+  --chart-tick: #8a969e;
+  --chart-cursor: rgba(228, 245, 250, 0.3);
+  --chart-hover: rgba(228, 245, 250, 0.05);
 
-  --scene-floor: #0c0b22;
-  --scene-line: rgba(167, 139, 250, 0.1);
-  --scene-slab-top: #1c1a40;
-  --scene-slab-side: #0f0e29;
-  --scene-slab-front: #151436;
-  --scene-tube: rgba(190, 175, 255, 0.16);
-  --scene-tube-edge: rgba(200, 180, 255, 0.4);
+  --scene-floor: #040b1c;
+  --scene-line: rgba(139, 201, 218, 0.1);
+  --scene-slab-top: #0b3354;
+  --scene-slab-side: #050f24;
+  --scene-slab-front: #08203a;
+  --scene-tube: rgba(139, 201, 218, 0.16);
+  --scene-tube-edge: rgba(190, 225, 236, 0.4);
   --scene-shadow: rgba(0, 0, 0, 0.5);
-  --scene-speck: rgba(200, 170, 255, 0.6);
-  --scene-beam: rgba(167, 139, 250, 0.07);
-  --glass: rgba(20, 18, 48, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --scene-speck: rgba(139, 201, 218, 0.6);
+  --scene-beam: rgba(6, 135, 171, 0.1);
+  --glass: rgba(7, 37, 66, 0.72);
+  --glass-border: rgba(228, 245, 250, 0.12);
 
-  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 24px 48px -24px rgba(0, 0, 0, 0.6);
+  --shadow-panel: 0 1px 0 rgba(228, 245, 250, 0.05) inset, 0 24px 48px -24px rgba(0, 0, 0, 0.7);
   --shadow-float: 0 30px 60px -20px rgba(0, 0, 0, 0.8);
-  --panel-light: rgba(255, 255, 255, 0.025);
-  --page-glow-1: rgba(139, 92, 246, 0.12);
-  --page-glow-2: rgba(217, 70, 239, 0.06);
+  --panel-light: rgba(228, 245, 250, 0.03);
+  --page-glow-1: rgba(6, 135, 171, 0.16);
+  --page-glow-2: rgba(211, 36, 155, 0.06);
 
-  --accent-glow: rgba(139, 92, 246, 0.7);
-  --glow-a: #c026d3;
-  --glow-b: #a855f7;
-  --glow-c: #c084fc;
-  --glow-core: #f5e8ff;
+  --accent-glow: rgba(90, 177, 201, 0.55);
+  --glow-a: #0687ab;
+  --glow-b: #5ab1c9;
+  --glow-c: #8bc9da;
+  --glow-core: #e4f5fa;
   --coin-hi: #fff6c4;
   --coin-mid: #f2c14e;
   --coin-lo: #a8740a;
   --coin-edge: #c99318;
   --coin-back: #8a5e05;
-  --promo-from: #4c1d95;
-  --promo-via: #6d28d9;
-  --promo-to: #a21caf;
-  --promo-ink: #4c1d95;
-  --band-from: #2b1470;
-  --band-via: #160f3d;
-  --band-to: #3d0f52;
+  --promo-from: #07102b;
+  --promo-via: #0a4a68;
+  --promo-to: #8a1a68;
+  --promo-ink: #07102b;
+  --band-from: #073a56;
+  --band-via: #050b1e;
+  --band-to: #301441;
 }
 
-/* Dark: a soft-touch plastic night. Near-black forest green, sage teal, pale mint highlights. */
+/* Dark: a soft-touch midnight. Deep midnight planes, cyan brand, ice-cyan ink. */
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --color-bg: #040a09;
-  --color-surface: #0a1513;
-  --color-surface-2: #0f1e1b;
-  --color-surface-3: #162a26;
-  --color-rule: rgba(190, 235, 222, 0.08);
-  --color-rule-strong: rgba(190, 235, 222, 0.16);
+  --color-bg: #030714;
+  --color-surface: #072542;
+  --color-surface-2: #072f4c;
+  --color-surface-3: #073857;
+  --color-rule: rgba(228, 245, 250, 0.14);
+  --color-rule-strong: rgba(228, 245, 250, 0.26);
 
-  --color-ink: #e9f4f0;
-  --color-dim: #9db8b0;
-  --color-muted: #6f8d85;
+  --color-ink: #e7f6fb;
+  --color-dim: #9ca9b0;
+  --color-muted: #8a969e;
 
-  --color-accent: #6fb5a5;
-  --color-accent-2: #b7e3d3;
-  --color-accent-ink: #a5d9c8;
-  --color-accent-soft: rgba(111, 181, 165, 0.15);
-  --color-on-accent: #04100d;
+  --color-accent: #5ab1c9;
+  --color-accent-2: #e04aae;
+  --color-accent-ink: #8bc9da;
+  --color-accent-soft: rgba(90, 177, 201, 0.16);
+  --color-on-accent: #050b1e;
   --color-overlay: #000000;
-  --grad-from: #9dd8c7;
-  --grad-to: #5fa597;
-  --grad-text: linear-gradient(100deg, #e3f6ee 0%, #a5d9c8 42%, #6fb5a5 100%);
+  --color-accent-fill: var(--color-accent);
+  --grad-from: #8bc9da;
+  --grad-to: #5ab1c9;
+  --grad-text: linear-gradient(100deg, #bfe1ec 0%, #8bc9da 40%, #ee6fc6 100%);
 
   --color-ok: #4ade80;
   --color-ok-soft: rgba(74, 222, 128, 0.14);
@@ -230,63 +234,63 @@
   --color-warn-soft: rgba(250, 178, 25, 0.14);
   --color-bad: #ff7b7b;
   --color-bad-soft: rgba(255, 107, 107, 0.16);
-  --color-skeleton: #152824;
-  --tab-active: #1b3330;
+  --color-skeleton: #0a3552;
+  --tab-active: #074c6b;
 
   /* chart series, validated on --color-surface (dataviz validator: all checks pass, dark) */
-  --series-1: #3987e5;
+  --series-1: #2a9fc4;
   --series-2: #d95926;
   --series-3: #199e70;
   --series-4: #c98500;
-  --series-5: #d55181;
+  --series-5: #d3249b;
   --series-6: #008300;
   --series-7: #9085e9;
   --series-8: #e66767;
-  --series-other: #587069;
-  --chart-grid: #132420;
-  --chart-axis: #20382f;
-  --chart-tick: #78968d;
-  --chart-cursor: rgba(190, 235, 222, 0.3);
-  --chart-hover: rgba(190, 235, 222, 0.05);
+  --series-other: #4d6270;
+  --chart-grid: #0d3050;
+  --chart-axis: #1a4766;
+  --chart-tick: #8a969e;
+  --chart-cursor: rgba(228, 245, 250, 0.3);
+  --chart-hover: rgba(228, 245, 250, 0.05);
 
-  --scene-floor: #07110f;
-  --scene-line: rgba(150, 220, 200, 0.09);
-  --scene-slab-top: #14281f;
-  --scene-slab-side: #08120f;
-  --scene-slab-front: #0e1e19;
-  --scene-tube: rgba(170, 230, 210, 0.14);
-  --scene-tube-edge: rgba(190, 240, 225, 0.4);
-  --scene-shadow: rgba(0, 0, 0, 0.6);
-  --scene-speck: rgba(160, 230, 210, 0.6);
-  --scene-beam: rgba(120, 200, 180, 0.07);
-  --glass: rgba(10, 24, 21, 0.72);
-  --glass-border: rgba(190, 235, 222, 0.13);
+  --scene-floor: #040b1c;
+  --scene-line: rgba(139, 201, 218, 0.1);
+  --scene-slab-top: #0b3354;
+  --scene-slab-side: #050f24;
+  --scene-slab-front: #08203a;
+  --scene-tube: rgba(139, 201, 218, 0.16);
+  --scene-tube-edge: rgba(190, 225, 236, 0.4);
+  --scene-shadow: rgba(0, 0, 0, 0.5);
+  --scene-speck: rgba(139, 201, 218, 0.6);
+  --scene-beam: rgba(6, 135, 171, 0.1);
+  --glass: rgba(7, 37, 66, 0.72);
+  --glass-border: rgba(228, 245, 250, 0.12);
 
-  --shadow-panel: 0 1px 0 rgba(190, 235, 222, 0.05) inset, 0 24px 48px -24px rgba(0, 0, 0, 0.7);
+  --shadow-panel: 0 1px 0 rgba(228, 245, 250, 0.05) inset, 0 24px 48px -24px rgba(0, 0, 0, 0.7);
   --shadow-float: 0 30px 60px -20px rgba(0, 0, 0, 0.85);
-  --panel-light: rgba(190, 235, 222, 0.03);
-  --page-glow-1: rgba(80, 170, 150, 0.14);
-  --page-glow-2: rgba(180, 230, 215, 0.05);
+  --panel-light: rgba(228, 245, 250, 0.03);
+  --page-glow-1: rgba(6, 135, 171, 0.16);
+  --page-glow-2: rgba(211, 36, 155, 0.06);
 
-  --accent-glow: rgba(111, 181, 165, 0.55);
-  --glow-a: #2fa58d;
-  --glow-b: #4fd1b5;
-  --glow-c: #8be8d0;
-  --glow-core: #e6fff8;
-  --coin-hi: #f4fffb;
-  --coin-mid: #b6e2d3;
-  --coin-lo: #4a8c7c;
-  --coin-edge: #7cc4b3;
-  --coin-back: #2d5f54;
-  --logo-1: #c9efe2;
-  --logo-2: #6fb5a5;
-  --logo-3: #3f8a7b;
-  --promo-from: #0d2823;
-  --promo-via: #17463d;
-  --promo-to: #2f7d6e;
-  --promo-ink: #0d2823;
-  --band-from: #0f2a25;
-  --band-via: #081513;
-  --band-to: #14332d;
+  --accent-glow: rgba(90, 177, 201, 0.55);
+  --glow-a: #0687ab;
+  --glow-b: #5ab1c9;
+  --glow-c: #8bc9da;
+  --glow-core: #e4f5fa;
+  --coin-hi: #fff6c4;
+  --coin-mid: #f2c14e;
+  --coin-lo: #a8740a;
+  --coin-edge: #c99318;
+  --coin-back: #8a5e05;
+  --logo-1: #8bc9da;
+  --logo-2: #5ab1c9;
+  --logo-3: #2f93b0;
+  --promo-from: #07102b;
+  --promo-via: #0a4a68;
+  --promo-to: #8a1a68;
+  --promo-ink: #07102b;
+  --band-from: #073a56;
+  --band-via: #050b1e;
+  --band-to: #301441;
   --grain: 1;
 }

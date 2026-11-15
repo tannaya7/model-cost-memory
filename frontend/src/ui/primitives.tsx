@@ -181,7 +181,7 @@ export function Segmented<T extends string>({
             {active && (
               <motion.span
                 layoutId={`seg-${label}`}
-                className="absolute inset-0 rounded-[9px] bg-[var(--tab-active)] shadow-[0_1px_3px_rgba(24,20,70,0.12)] ring-1 ring-rule"
+                className="absolute inset-0 rounded-[9px] bg-[var(--tab-active)] shadow-[0_1px_3px_rgba(7,16,43,0.12)] ring-1 ring-rule"
                 transition={{ type: "spring", stiffness: 500, damping: 38 }}
               />
             )}

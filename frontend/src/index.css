@@ -77,6 +77,10 @@ body {
   color: transparent;
 }
 
+/* Small text and small button labels use a derived shade of the brand so they pass 4.5:1 (exact royal cyan stays for fills, charts, logo and large text). */
+.text-accent, .hover\:text-accent:hover, .focus-visible\:text-accent:focus-visible { color: var(--color-accent-ink); }
+.bg-accent.text-on-accent { background-color: var(--color-accent-fill); }
+
 /* A panel: one raised surface with a hairline and a faint top light. */
 .panel {
   background: linear-gradient(180deg, var(--panel-light), transparent 40%), var(--color-surface);

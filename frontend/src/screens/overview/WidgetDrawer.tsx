@@ -188,7 +188,7 @@ export function WidgetDrawer({ open, onClose, ids, onAdd, onRemove }: { open: bo
                         setDragging(null);
                         setOverZone(false);
                       }}
-                      whileDrag={{ rotate: -5, scale: 1.04, zIndex: 60, boxShadow: "0 30px 60px -20px rgba(30,20,80,0.45)" }}
+                      whileDrag={{ rotate: -5, scale: 1.04, zIndex: 60, boxShadow: "0 30px 60px -20px rgba(7,16,43,0.45)" }}
                       className={cx(
                         "flex gap-4 rounded-[16px] border bg-surface p-3 transition-colors",
                         added ? "border-rule opacity-80" : "cursor-grab border-rule hover:border-accent/40 active:cursor-grabbing",
