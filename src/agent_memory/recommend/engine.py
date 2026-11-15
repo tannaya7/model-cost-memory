@@ -47,6 +47,7 @@ from ..options import option_name, split_option
 from ..pipeline.decay import current_versions, family_key
 from ..pipeline.scoring import stability_days
 from ..versions import normalize
+from .app_chosen import APP_CHOSEN_REASON, is_app_chosen
 from .stats import Sample, assess, difference, wilson, z_for
 
 Verdict = Literal["HOLD", "DOWNGRADE", "SWITCH", "INSUFFICIENT_EVIDENCE"]
@@ -123,7 +124,13 @@ def decide(
     other model needs `switch_confidence` (when higher than `confidence`); keeping advice already given
     needs only `confidence`. The gap between the two stops the answer flapping on day-to-day noise."""
     z = z_for(confidence)
-    models = [ModelEvidence(**vars(m)) for m in inputs]
+    if current_model and is_app_chosen(current_model):
+        # The app picks the model, so there is nothing to switch to: no verdict to act on, just the reason.
+        own = [ModelEvidence(**vars(m)) for m in inputs if m.model == current_model]
+        cur = own[0] if own else None
+        return Decision("HOLD", cur, cur, cur, own, warnings=[APP_CHOSEN_REASON])
+    # App labels are never offered as a model to switch to.
+    models = [ModelEvidence(**vars(m)) for m in inputs if not is_app_chosen(m.model)]
     judged: list[ModelEvidence] = []
     for m in models:
         if m.sample is not None:
