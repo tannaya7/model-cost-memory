@@ -6,6 +6,7 @@ import { LimitCard } from "../features/limits/components/LimitCard";
 import { useLimits } from "../features/limits/hooks/useLimits";
 import { ApiKeyRevealBox } from "../features/projects/components/ApiKeyRevealBox";
 import { DeleteProjectCard } from "../features/projects/components/DeleteProjectCard";
+import { parseBudget } from "../features/projects/hooks/useBudget";
 import { usePatchProject, useProject, useRegenerateProjectKey } from "../features/projects/hooks/useProjects";
 import { ProviderKeyForm } from "../features/retest/components/ProviderKeyForm";
 import { useDeleteProviderKey, useRetestLimits } from "../features/retest/hooks/useRetest";
@@ -25,6 +26,7 @@ const SECTIONS = [
   { id: "privacy", label: "Data kept" },
   { id: "retests", label: "Model trials" },
   { id: "keys", label: "API keys" },
+  { id: "budget", label: "Spending limit" },
   { id: "limits", label: "Usage limits" },
   { id: "status", label: "System status" },
   { id: "danger", label: "Delete" },
@@ -237,6 +239,43 @@ function KeysSection({ project }: { project: Project | null }) {
   );
 }
 
+/** The most the person wants their AI calls to cost each month; we only warn, never block. */
+export function BudgetSection({ project }: { project: Project }) {
+  const current = project.monthly_budget_usd ?? null;
+  const [text, setText] = useState(current === null ? "" : String(current));
+  const [problem, setProblem] = useState<string | null>(null);
+  const s = useFieldSave(project);
+  const onSave = async () => {
+    const r = parseBudget(text);
+    if ("error" in r) return setProblem(r.error);
+    setProblem(null);
+    await s.save({ monthly_budget_usd: r.value });
+  };
+  const onRemove = async () => {
+    setProblem(null);
+    await s.save({ monthly_budget_usd: null });
+    setText("");
+  };
+  return (
+    <Panel id="budget" className="scroll-mt-24 p-5 md:p-6">
+      <PanelHeader title="Monthly spending limit" hint="Set the most you want your app's AI calls to cost each month. We warn you at 85% and 95%, and if the month looks like it will go over. We only warn: nothing is ever blocked." />
+      <p className="mt-3 text-sm text-ink">Current limit: <span className="font-semibold">{current === null ? "Not set" : `$${current.toLocaleString()} a month`}</span></p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="flex items-center rounded-[10px] border border-rule bg-surface-2 px-3 focus-within:border-accent">
+          <span className="text-sm text-muted">$</span>
+          <input id="monthly-budget" inputMode="decimal" className="w-32 bg-transparent px-1.5 py-2 text-sm text-ink outline-none placeholder:text-muted" value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g. 500" aria-label="Monthly spending limit in US dollars" />
+        </span>
+        <span className="text-sm text-dim">a month</span>
+        <Button variant="primary" size="sm" onClick={onSave} disabled={s.saving}>{s.saving ? "Saving…" : "Save"}</Button>
+        {current !== null && <Button variant="ghost" size="sm" onClick={onRemove} disabled={s.saving}>Remove</Button>}
+        {s.saved && <span className="flex items-center gap-1 text-xs text-ok"><IconCheck size={14} /> Saved</span>}
+      </div>
+      {(problem || s.error) && <p role="alert" className="mt-2 text-xs text-bad">{problem ?? s.error}</p>}
+      <p className="mt-3 text-xs text-muted">The spend is an estimate from your recorded calls at list prices.</p>
+    </Panel>
+  );
+}
+
 function LimitsSection() {
   const limits = useLimits();
   const [adding, setAdding] = useState(false);
@@ -367,6 +406,7 @@ export default function Settings() {
               <ProjectSection project={project} />
               <AlertsSection project={project} />
               <PrivacySection project={project} />
+              <BudgetSection project={project} />
             </>
           ) : (
             <Panel className="p-5">

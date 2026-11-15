@@ -10,6 +10,9 @@
             "title": "Agents",
             "type": "array"
           },
+          "kinds": {
+            "$ref": "#/components/schemas/UsageKindsOut"
+          },
           "tools": {
             "items": {
               "$ref": "#/components/schemas/ToolsUsageOut"
@@ -29,7 +32,8 @@
         "required": [
           "agents",
           "traces",
-          "tools"
+          "tools",
+          "kinds"
         ],
         "title": "AgentInsightsOut",
         "type": "object"
@@ -45,6 +49,14 @@
             "title": "Cache Read Tokens",
             "type": "integer"
           },
+          "models": {
+            "description": "Models this agent called",
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          },
           "runs": {
             "title": "Runs",
             "type": "integer"
@@ -59,6 +71,18 @@
             "title": "Spend Usd",
             "type": "number"
           },
+          "steps_per_task": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Calls per trace id; null without trace ids",
+            "title": "Steps Per Task"
+          },
           "tokens_in": {
             "title": "Tokens In",
             "type": "integer"
@@ -66,6 +90,52 @@
           "tokens_out": {
             "title": "Tokens Out",
             "type": "integer"
+          },
+          "tool_servers": {
+            "description": "Server names read from mcp__server__tool names",
+            "items": {
+              "type": "string"
+            },
+            "title": "Tool Servers",
+            "type": "array"
+          },
+          "tool_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "'mcp' only when tool names look like mcp__server__tool; 'tool_list' for other tools; null when none",
+            "title": "Tool Source"
+          },
+          "top_tools": {
+            "description": "Most used tools by name",
+            "items": {
+              "$ref": "#/components/schemas/ToolCountOut"
+            },
+            "title": "Top Tools",
+            "type": "array"
+          },
+          "uses_tools": {
+            "default": false,
+            "description": "Tool definitions were sent or tool calls made (certain)",
+            "title": "Uses Tools",
+            "type": "boolean"
+          },
+          "works_like_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "'yes' (calls share a trace id and tool use repeats), 'probably' (no trace id), or null",
+            "title": "Works Like Agent"
           }
         },
         "required": [
@@ -1007,6 +1077,38 @@
         "title": "LimitSuggestionOut",
         "type": "object"
       },
+      "LoopOut": {
+        "properties": {
+          "cost_usd": {
+            "description": "Priced cost of the repeated steps",
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "repeats": {
+            "description": "Times it repeated within a window of 7 steps",
+            "title": "Repeats",
+            "type": "integer"
+          },
+          "step": {
+            "description": "What repeated, in words",
+            "title": "Step",
+            "type": "string"
+          },
+          "uses_arguments": {
+            "description": "False: matched on tool name and identical prompt, because arguments are not stored",
+            "title": "Uses Arguments",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "step",
+          "repeats",
+          "cost_usd",
+          "uses_arguments"
+        ],
+        "title": "LoopOut",
+        "type": "object"
+      },
       "ModelEvidenceOut": {
         "description": "What the runs say about one model in this job, and how the tolerance rule judged it.",
         "properties": {
@@ -1773,6 +1875,163 @@
           }
         },
         "title": "ProjectPatch",
+        "type": "object"
+      },
+      "PromptGroupOut": {
+        "properties": {
+          "avg_tokens_in": {
+            "title": "Avg Tokens In",
+            "type": "number"
+          },
+          "avg_tokens_out": {
+            "title": "Avg Tokens Out",
+            "type": "number"
+          },
+          "cache_read_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "cache_read / (cache_read + tokens_in); null when both are 0",
+            "title": "Cache Read Share"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cache_write_tokens": {
+            "title": "Cache Write Tokens",
+            "type": "integer"
+          },
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null groups all unversioned calls of the job",
+            "title": "Prompt Version"
+          },
+          "repeated_end_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Share of the prompt that ends identically in every call",
+            "title": "Repeated End Share"
+          },
+          "repeated_start_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "First 120 characters of the repeated start",
+            "title": "Repeated Start Preview"
+          },
+          "repeated_start_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Share of the prompt that starts identically in every call",
+            "title": "Repeated Start Share"
+          },
+          "share": {
+            "description": "Of the project's total tokens in the window, 0..1",
+            "title": "Share",
+            "type": "number"
+          },
+          "text_samples": {
+            "description": "Recent calls with stored prompt text that were compared (at most 50)",
+            "title": "Text Samples",
+            "type": "integer"
+          },
+          "tokens_in": {
+            "title": "Tokens In",
+            "type": "integer"
+          },
+          "tokens_out": {
+            "title": "Tokens Out",
+            "type": "integer"
+          },
+          "total_tokens": {
+            "description": "tokens_in + tokens_out + cache_read_tokens + cache_write_tokens",
+            "title": "Total Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "job",
+          "prompt_version",
+          "calls",
+          "tokens_in",
+          "tokens_out",
+          "cache_read_tokens",
+          "cache_write_tokens",
+          "total_tokens",
+          "share",
+          "avg_tokens_in",
+          "avg_tokens_out",
+          "cache_read_share",
+          "text_samples",
+          "repeated_start_share",
+          "repeated_end_share",
+          "repeated_start_preview"
+        ],
+        "title": "PromptGroupOut",
+        "type": "object"
+      },
+      "PromptsOut": {
+        "properties": {
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/PromptGroupOut"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "total_tokens": {
+            "title": "Total Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "days",
+          "total_tokens",
+          "groups"
+        ],
+        "title": "PromptsOut",
         "type": "object"
       },
       "ProviderKeyIn": {
@@ -3189,6 +3448,173 @@
         "title": "SpendOut",
         "type": "object"
       },
+      "TaskProfileOut": {
+        "description": "What the recorded calls prove about a task (measured; no AI). Fewer than 25 calls: only `calls`.",
+        "properties": {
+          "calls": {
+            "description": "Production calls in the window",
+            "title": "Calls",
+            "type": "integer"
+          },
+          "enough_data": {
+            "title": "Enough Data",
+            "type": "boolean"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "multi_agent": {
+            "title": "Multi Agent",
+            "type": "boolean"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/TaskSummaryOut"
+          },
+          "tool_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Source"
+          },
+          "typical_tokens_in": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Median input tokens per call, as billed",
+            "title": "Typical Tokens In"
+          },
+          "typical_tokens_out": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Median output tokens per call, as billed",
+            "title": "Typical Tokens Out"
+          },
+          "uses_tools": {
+            "title": "Uses Tools",
+            "type": "boolean"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          },
+          "works_like_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "'yes', 'probably' or null",
+            "title": "Works Like Agent"
+          }
+        },
+        "required": [
+          "calls",
+          "window_days",
+          "enough_data",
+          "models",
+          "uses_tools",
+          "works_like_agent",
+          "tool_source",
+          "multi_agent",
+          "typical_tokens_in",
+          "typical_tokens_out",
+          "summary"
+        ],
+        "title": "TaskProfileOut",
+        "type": "object"
+      },
+      "TaskSummaryConsentIn": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "TaskSummaryConsentIn",
+        "type": "object"
+      },
+      "TaskSummaryOut": {
+        "properties": {
+          "consent": {
+            "description": "Whether this project switched the AI summary on",
+            "title": "Consent",
+            "type": "boolean"
+          },
+          "service": {
+            "description": "The outside AI service sample prompts are sent to when it is on",
+            "title": "Service",
+            "type": "string"
+          },
+          "state": {
+            "description": "'ready', 'pending', 'off' (not switched on), 'unavailable' (no AI service configured, or a limit or failure), 'no_samples' (too little stored text) or 'deleted'",
+            "title": "State",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Two sentences written by an AI; may be wrong",
+            "title": "Text"
+          }
+        },
+        "required": [
+          "state",
+          "consent",
+          "service"
+        ],
+        "title": "TaskSummaryOut",
+        "type": "object"
+      },
+      "ToolCountOut": {
+        "properties": {
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "calls"
+        ],
+        "title": "ToolCountOut",
+        "type": "object"
+      },
       "ToolsUsageOut": {
         "properties": {
           "avg_tools_tokens": {
@@ -3222,6 +3648,14 @@
       },
       "TraceUsageOut": {
         "properties": {
+          "agent_names": {
+            "description": "Named agents in the trace",
+            "items": {
+              "type": "string"
+            },
+            "title": "Agent Names",
+            "type": "array"
+          },
           "agents": {
             "description": "Distinct agents in the trace",
             "title": "Agents",
@@ -3230,6 +3664,23 @@
           "calls": {
             "title": "Calls",
             "type": "integer"
+          },
+          "multi_agent": {
+            "default": false,
+            "description": "More than one distinct named agent shares this trace",
+            "title": "Multi Agent",
+            "type": "boolean"
+          },
+          "possible_loop": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LoopOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Beta: the same step repeated 5 or more times within 7 steps with no sign of progress"
           },
           "repeated_prompts": {
             "description": "The same prompt appears 3 or more times in the trace: a likely retry loop or runaway agent",
@@ -3260,6 +3711,64 @@
           "repeated_prompts"
         ],
         "title": "TraceUsageOut",
+        "type": "object"
+      },
+      "UsageKindsOut": {
+        "properties": {
+          "calls": {
+            "description": "Recent production calls the labels were worked out from (at most 5000)",
+            "title": "Calls",
+            "type": "integer"
+          },
+          "multi_agent": {
+            "title": "Multi Agent",
+            "type": "boolean"
+          },
+          "tool_servers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tool Servers",
+            "type": "array"
+          },
+          "tool_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "'mcp' only for mcp__server__tool names; 'tool_list'; or null",
+            "title": "Tool Source"
+          },
+          "uses_tools": {
+            "title": "Uses Tools",
+            "type": "boolean"
+          },
+          "works_like_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "'yes', 'probably' or null",
+            "title": "Works Like Agent"
+          }
+        },
+        "required": [
+          "calls",
+          "uses_tools",
+          "works_like_agent",
+          "tool_source",
+          "tool_servers",
+          "multi_agent"
+        ],
+        "title": "UsageKindsOut",
         "type": "object"
       },
       "UsageLimitIn": {
@@ -4424,6 +4933,135 @@
         ]
       }
     },
+    "/v1/insights/prompts": {
+      "get": {
+        "description": "Which prompts use the most tokens (largest first), and how much of each prompt is identical in\nevery call, so you can see what to trim or cache. Production runs only; the repeated-text figures\nuse the most recent calls whose text is still stored.",
+        "operationId": "get_prompt_insights_v1_insights_prompts_get",
+        "parameters": [
+          {
+            "description": "How many days back",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "description": "How many days back",
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Only this job",
+            "in": "query",
+            "name": "job",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this job",
+              "title": "Job"
+            }
+          },
+          {
+            "description": "How many prompts to return",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 3,
+              "description": "How many prompts to return",
+              "maximum": 10,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Prompt Insights",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
     "/v1/insights/spend": {
       "get": {
         "description": "Production spend per job over the last `days` days, most expensive first.",
@@ -4997,6 +5635,111 @@
         ]
       }
     },
+    "/v1/jobs/{job}/profile": {
+      "get": {
+        "description": "What the recorded calls prove about a task: models, tool use, typical size (measured, no AI). With\nfewer than 25 calls only the count is given. Also the optional AI summary's state; the summary is\nwritten only when the project switched it on.",
+        "operationId": "get_task_profile_v1_jobs__job__profile_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "description": "How many days back",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "description": "How many days back",
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Task Profile",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
     "/v1/jobs/{job}/recommendation": {
       "get": {
         "description": "The cheapest model that does this job properly, with the evidence and failing runs behind it.\n\nRefuses with INSUFFICIENT_EVIDENCE, and progress toward the floor, until there is enough to judge.",
@@ -5489,6 +6232,90 @@
         "summary": "List Retests",
         "tags": [
           "retests"
+        ]
+      }
+    },
+    "/v1/jobs/{job}/summary": {
+      "delete": {
+        "description": "Delete the stored AI summary of this task. It is not written again unless the sample calls change.",
+        "operationId": "delete_task_summary_v1_jobs__job__summary_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Task Summary",
+        "tags": [
+          "jobs"
         ]
       }
     },
@@ -7268,6 +8095,98 @@
         "summary": "Label Run Endpoint",
         "tags": [
           "runs"
+        ]
+      }
+    },
+    "/v1/task-summary-consent": {
+      "put": {
+        "description": "Switch the AI-written task summaries on or off for this project. Off by default; while off, no\nsample prompt is ever sent to an outside AI service.",
+        "operationId": "put_task_summary_consent_v1_task_summary_consent_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskSummaryConsentIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Task Summary Consent",
+        "tags": [
+          "jobs"
         ]
       }
     }

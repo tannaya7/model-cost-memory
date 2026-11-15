@@ -1,7 +1,8 @@
-/** A monthly spend budget the person sets for a project. Kept in this browser only. */
+/** The monthly spending limit now lives on the account (the project's monthly_budget_usd).
+ * These two helpers only find and clear a limit an earlier version saved in this browser. */
 const key = (project: string) => `mcm_budget_${project}`;
 
-export function readBudget(project: string): number | null {
+export function readBrowserBudget(project: string): number | null {
   try {
     const v = Number(localStorage.getItem(key(project)));
     return Number.isFinite(v) && v > 0 ? v : null;
@@ -10,11 +11,10 @@ export function readBudget(project: string): number | null {
   }
 }
 
-export function writeBudget(project: string, value: number | null) {
+export function clearBrowserBudget(project: string) {
   try {
-    if (value === null) localStorage.removeItem(key(project));
-    else localStorage.setItem(key(project), String(value));
+    localStorage.removeItem(key(project));
   } catch {
-    /* kept for this visit */
+    /* nothing to clear */
   }
 }

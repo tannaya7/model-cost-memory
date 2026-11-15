@@ -76,6 +76,8 @@ class Project(Base):
     key_prefix: Mapped[str | None] = mapped_column(Text)  # first characters of the live key, for display
     # Days a run keeps its prompt, answer, tool calls and answer key (retention.py; 0015).
     content_retention_days: Mapped[int] = mapped_column(Integer, server_default=text("90"))
+    # Opt-in: may a few sample prompts be sent to an outside AI service to write a task summary (0019).
+    task_summary_consent: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     monthly_budget_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))  # optional soft budget (0018)
 
 
@@ -336,6 +338,22 @@ class RecommendationSummary(Base):
     summary_key: Mapped[str] = mapped_column(Text, primary_key=True)
     job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("jobs.job_id", ondelete="CASCADE"))
     summary: Mapped[str | None] = mapped_column(Text)  # null while being written, or after a failed call
+    prompt_version: Mapped[str] = mapped_column(Text)
+    attempts: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    attempted_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+
+
+class TaskSummary(Base):
+    """The optional AI summary of what a task does, one per job (0019). `fingerprint` identifies the sample
+    calls it was written from, so it is written again only when they change."""
+
+    __tablename__ = "task_summaries"
+    __table_args__ = (Index("idx_task_summaries_attempted", "attempted_at"),)
+
+    job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("jobs.job_id", ondelete="CASCADE"),
+                                              primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(Text)
+    summary: Mapped[str | None] = mapped_column(Text)
     prompt_version: Mapped[str] = mapped_column(Text)
     attempts: Mapped[int] = mapped_column(Integer, server_default=text("1"))
     attempted_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)

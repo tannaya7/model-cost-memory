@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy import func, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
@@ -30,6 +30,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from . import __version__, ingest
 from .db import dispose_engine, get_session
 from .insights.agents import agent_insights
+from .insights.prompts import prompt_insights
 from .insights.service import daily as insights_daily
 from .insights.service import job_insights, spend_by_job
 from .logging_config import configure_logging, set_context
@@ -37,12 +38,20 @@ from .limits import forecast as limit_forecast
 from .models import Alert, CatalogEntry, Job, Project, ProviderKey, Retest, Run, UsageLimit
 from .recommend.cache import cached_recommend
 from .recommend.engine import JobRecommendation, ModelEvidence
+from .insights.task_profile import MIN_CALLS, task_profile
 from .recommend.summary import summarize
+from .recommend.task_summary import delete_summary, provider_name, task_summary_state
 from .retest import keys as provider_keys
 from .retest.runner import RetestRefused, enqueue, spent_this_month, start_on_first_key
 from .schemas import (
+    TaskProfileOut,
+    TaskSummaryConsentIn,
+    TaskSummaryOut,
     AgentInsightsOut,
     AgentUsageOut,
+    LoopOut,
+    ToolCountOut,
+    UsageKindsOut,
     ToolsUsageOut,
     TraceUsageOut,
     DayPointOut,
@@ -69,6 +78,8 @@ from .schemas import (
     ModelPage,
     ModelRef,
     ModelVersionSeen,
+    PromptGroupOut,
+    PromptsOut,
     ProviderKeyIn,
     ProviderKeyOut,
     RecommendationEvidence,
@@ -254,6 +265,55 @@ async def patch_job_endpoint(
         check_config=found.check_config, retest_consent=found.retest_consent,
         run_count=sum(by_state.values()), runs_by_state=by_state,
     )
+
+
+@app.get("/v1/jobs/{job}/profile", response_model=TaskProfileOut, tags=["jobs"])
+async def get_task_profile(
+    job: str,
+    days: int = Query(default=30, ge=1, le=365, description="How many days back"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> TaskProfileOut:
+    """What the recorded calls prove about a task: models, tool use, typical size (measured, no AI). With
+    fewer than 25 calls only the count is given. Also the optional AI summary's state; the summary is
+    written only when the project switched it on."""
+    found = await _job(session, project, job)
+    settings = get_settings()
+    profile = await task_profile(session, found, days=days)
+    state, text = await task_summary_state(session, project, found, settings)
+    summary = TaskSummaryOut(state=state, text=text, consent=project.task_summary_consent,
+                             service=provider_name(settings))
+    if profile.calls < MIN_CALLS:
+        return TaskProfileOut(calls=profile.calls, window_days=days, enough_data=False, models=[], uses_tools=False,
+                              works_like_agent=None, tool_source=None, multi_agent=False, typical_tokens_in=None,
+                              typical_tokens_out=None, summary=summary)
+    return TaskProfileOut(**vars(profile), window_days=days, enough_data=True, summary=summary)
+
+
+@app.put("/v1/task-summary-consent", response_model=TaskSummaryOut, tags=["jobs"])
+async def put_task_summary_consent(
+    body: TaskSummaryConsentIn,
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> TaskSummaryOut:
+    """Switch the AI-written task summaries on or off for this project. Off by default; while off, no
+    sample prompt is ever sent to an outside AI service."""
+    project.task_summary_consent = body.enabled
+    await session.commit()
+    return TaskSummaryOut(state="off" if not body.enabled else "pending", text=None, consent=body.enabled,
+                          service=provider_name(get_settings()))
+
+
+@app.delete("/v1/jobs/{job}/summary", status_code=204, tags=["jobs"])
+async def delete_task_summary(
+    job: str,
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Delete the stored AI summary of this task. It is not written again unless the sample calls change."""
+    await delete_summary(session, await _job(session, project, job))
+    await session.commit()
+    return Response(status_code=204)
 
 
 async def _job_name(session: AsyncSession, job_id, project_id: str) -> str:
@@ -570,9 +630,29 @@ async def get_agent_insights(
     definitions add to each call. Production runs only."""
     found = await agent_insights(session, project.project_id, days=days)
     return AgentInsightsOut(
-        agents=[AgentUsageOut(**vars(x)) for x in found.agents],
-        traces=[TraceUsageOut(**vars(x)) for x in found.traces],
+        agents=[AgentUsageOut(**{**vars(x), "top_tools": [ToolCountOut(name=n, calls=c) for n, c in x.top_tools]})
+                for x in found.agents],
+        traces=[TraceUsageOut(**{**vars(x), "possible_loop": LoopOut(**vars(x.possible_loop)) if x.possible_loop else None})
+                for x in found.traces],
         tools=[ToolsUsageOut(**vars(x)) for x in found.tools],
+        kinds=UsageKindsOut(**vars(found.kinds)),
+    )
+
+
+@app.get("/v1/insights/prompts", response_model=PromptsOut, tags=["insights"])
+async def get_prompt_insights(
+    days: int = Query(default=30, ge=1, le=365, description="How many days back"),
+    job: str | None = Query(default=None, max_length=200, description="Only this job"),
+    limit: int = Query(default=3, ge=1, le=10, description="How many prompts to return"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> PromptsOut:
+    """Which prompts use the most tokens (largest first), and how much of each prompt is identical in
+    every call, so you can see what to trim or cache. Production runs only; the repeated-text figures
+    use the most recent calls whose text is still stored."""
+    found = await prompt_insights(session, project.project_id, days=days, job=job, limit=limit)
+    return PromptsOut(
+        days=found.days, total_tokens=found.total_tokens, groups=[PromptGroupOut(**vars(g)) for g in found.groups]
     )
 
 

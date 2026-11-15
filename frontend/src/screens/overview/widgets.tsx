@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { useP } from "../../app/project";
+import { newKindView } from "../../features/alerts/newKinds";
 import { useAllRegressions, useDeprecatedModels } from "../../features/alerts/hooks/useAlerts";
 import { useLimits } from "../../features/limits/hooks/useLimits";
 import { RelatedNews } from "../../features/news/components/RelatedNews";
@@ -584,7 +585,12 @@ export function Attention({ shell }: { shell: ShellProps }) {
   const items = [
     ...(regressions.data ?? [])
       .filter((a) => a.resolved_at === null)
-      .map((a) => ({ key: a.alert_id, tone: "bad" as const, icon: <IconAlert size={16} />, title: a.summary, sub: a.job, to: p(`/jobs/${encodeURIComponent(a.job)}?tab=quality`) })),
+      .filter((a) => a.kind !== "MODEL_RETIRING" || !(deprecated.data ?? []).some((m) => m.model === a.detail?.model))
+      .map((a) => {
+        const nk = newKindView(a);
+        if (nk) return { key: a.alert_id, tone: nk.tone, icon: nk.icon, title: nk.title, sub: [a.summary, nk.numbers].filter(Boolean).join(" "), to: p(nk.to) };
+        return { key: a.alert_id, tone: "bad" as const, icon: <IconAlert size={16} />, title: a.summary, sub: a.job, to: p(`/jobs/${encodeURIComponent(a.job)}?tab=quality`) };
+      }),
     ...(deprecated.data ?? []).map((m) => ({
       key: m.model,
       tone: "warn" as const,
@@ -620,7 +626,7 @@ export function Attention({ shell }: { shell: ShellProps }) {
                 <span className={cx("mt-0.5", it.tone === "bad" ? "text-bad" : "text-warn")}>{it.icon}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium leading-snug text-ink">{it.title}</span>
-                  <span className="mt-0.5 block truncate font-mono text-xs text-muted">{it.sub}</span>
+                  <span className="mt-0.5 line-clamp-2 break-words font-mono text-xs text-muted">{it.sub}</span>
                 </span>
                 <IconArrowRight size={15} className="mt-1 shrink-0 text-muted" />
               </Link>

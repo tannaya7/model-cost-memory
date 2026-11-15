@@ -7,6 +7,8 @@ export type WidgetId =
   | "spend-trend"
   | "projection"
   | "tokens"
+  | "tokens-went"
+  | "agents"
   | "wasted-spend"
   | "unit-cost"
   | "pass-gauge"
@@ -27,6 +29,8 @@ export const WIDGETS: Record<WidgetId, { title: string; text: string; tag: strin
   "spend-trend": { title: "This period against the last", text: "What you spent, or how many AI calls were made, each day, with the period before as a dashed line.", tag: "Trends", span: 2, thumb: "line" },
   projection: { title: "Where this month's spending is heading", text: "An estimate of your bill at month end, with an optional monthly budget and a warning as you near it.", tag: "Budget", span: 1, thumb: "gauge" },
   tokens: { title: "Token usage", text: "Tokens are the small pieces of text AI models are billed by. See how many you use each day, who uses the most, and how fast a usage limit is filling.", tag: "Usage", span: 2, thumb: "area" },
+  agents: { title: "What is using your tokens", text: "Which agents use the most tokens, their heaviest tasks, what tools they use, and how big your tool list is. Worked out from your calls.", tag: "Usage", span: 2, thumb: "split" },
+  "tokens-went": { title: "Where your tokens went", text: "Which prompts use the most tokens, how much of each is the same in every call, and plain tips to make them cheaper.", tag: "Usage", span: 2, thumb: "split" },
   "unit-cost": { title: "What 1,000 correct answers cost you", text: "Spending divided by correct answers, for each AI task, so a cheap model that is often wrong cannot hide.", tag: "Unit cost", span: 2, thumb: "table" },
   "wasted-spend": { title: "Money spent on wrong answers", text: "How much of your spending went on answers that were checked and found wrong, and which AI tasks they came from.", tag: "Waste", span: 1, thumb: "split" },
   "pass-gauge": { title: "Correct answers", text: "The share of checked answers that were correct, against a target you set.", tag: "Quality", span: 1, thumb: "gauge" },
@@ -39,7 +43,7 @@ export const WIDGETS: Record<WidgetId, { title: string; text: string; tag: strin
   news: { title: "In the news", text: "Recent stories about the AI models you use.", tag: "News", span: 1, thumb: "list" },
 };
 
-export const DEFAULT_LAYOUT: WidgetId[] = ["kpis", "savings", "spend-trend", "projection", "unit-cost", "wasted-spend", "tokens", "pass-gauge", "spend-split", "busiest-day", "jobs-table", "attention"];
+export const DEFAULT_LAYOUT: WidgetId[] = ["kpis", "savings", "spend-trend", "projection", "unit-cost", "wasted-spend", "tokens", "tokens-went", "agents", "pass-gauge", "spend-split", "busiest-day", "jobs-table", "attention"];
 
 const key = (project: string) => `mcm_layout_${project}`;
 

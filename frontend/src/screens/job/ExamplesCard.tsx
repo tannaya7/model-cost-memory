@@ -104,7 +104,7 @@ export function ExamplesCard({ job }: { job: string }) {
             {!failItem && !nothingChecked && <p className="mt-4 text-sm text-dim">No call has been marked wrong yet.</p>}
             {nothingChecked && (
               <p className="mt-4 text-sm text-dim">
-                Answers are not checked yet, so we cannot show a correct or a wrong call. See "How we decide an answer is correct" in the About this task box above.
+                Answers are not checked yet, so we cannot show a correct or a wrong call. See "How we decide an answer is correct" in the What this task is box above.
               </p>
             )}
           </>

@@ -8,6 +8,8 @@ import { count, shortDate } from "../../ui/format";
 import { DeltaPill } from "../overview/widgets";
 import { TokenBars } from "../overview/TokenUsage";
 import { avgInputPerRun, dailySeries, hasTokens, hints, tokenPeriods, totals, type TokenPoint } from "../overview/tokenMetrics";
+import { TokensWentBody } from "../overview/TokensWent";
+import { ToolListBody } from "../overview/AgentsView";
 import { EmptyState, Panel, Skeleton } from "../../ui/primitives";
 
 const DAYS = 30;
@@ -79,6 +81,18 @@ export function TokensTab({ job }: { job: string }) {
             </ResponsiveContainer>
           </div>
         </ChartFrame>
+      </Panel>
+
+      <Panel className="p-5">
+        <h2 className="text-[15px] font-semibold tracking-tight text-ink">Where this task's tokens went</h2>
+        <p className="mb-3 mt-0.5 text-[13px] text-dim">Tokens are the small pieces of text that AI is billed by. These are this task's prompts that use the most.</p>
+        <TokensWentBody days={DAYS} job={job} limit={5} />
+      </Panel>
+
+      <Panel className="p-5">
+        <h2 className="text-[15px] font-semibold tracking-tight text-ink">Size of this task's tool list</h2>
+        <p className="mb-3 mt-0.5 text-[13px] text-dim">Tools are extra abilities, such as searching or looking something up, that your code offers the AI. Their descriptions are sent with every call.</p>
+        <ToolListBody job={job} days={DAYS} />
       </Panel>
 
       <Panel className="p-5">

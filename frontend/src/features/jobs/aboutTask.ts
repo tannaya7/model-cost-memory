@@ -1,4 +1,4 @@
-import type { DayPoint, Job } from "../../shared/api/types";
+import type { DayPoint, Job, TaskProfile } from "../../shared/api/types";
 import { pct, usd } from "../../ui/format";
 
 const OPENERS: Record<Job["check_kind"], string> = {
@@ -62,3 +62,50 @@ export function monthLine(m: MonthSummary): string {
   const right = m.correct === null ? "no answers checked yet" : `${pct(m.correct, 0)} of checked answers correct`;
   return `${n(m.calls)} AI calls · ${n(m.tokensIn + m.tokensOut)} tokens (${n(m.tokensIn)} in, ${n(m.tokensOut)} out) · ${usd(m.spend)} · ${right}`;
 }
+
+export interface Fact {
+  label: string;
+  value: string;
+  /** "measured" = counted or billed; "estimate" = our best guess from patterns. */
+  kind: "measured" | "estimate";
+}
+
+const ROUND = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v));
+
+/** What the calls prove, in plain words. Only called once there are enough calls. */
+export function profileFacts(p: TaskProfile, job: Pick<Job, "check_kind">): Fact[] {
+  const out: Fact[] = [
+    { label: "How answers are checked", value: CHECK_WORDS[job.check_kind], kind: "measured" },
+    { label: "AI models used", value: p.models.length ? p.models.join(", ") : "None recorded", kind: "measured" },
+    { label: `AI calls in the last ${p.window_days} days`, value: n(p.calls), kind: "measured" },
+  ];
+  if (p.uses_tools) {
+    const via = p.tool_source === "mcp" ? " (through tool servers)" : "";
+    out.push({ label: "Uses tools", value: `Yes${via}. The AI can look things up or take actions.`, kind: "measured" });
+  } else {
+    out.push({ label: "Uses tools", value: "No. It only reads text and answers.", kind: "measured" });
+  }
+  if (p.works_like_agent) {
+    out.push({
+      label: "Works like an agent",
+      value: p.works_like_agent === "yes" ? "Yes. It takes several steps with tools to finish one job." : "Probably. Several calls use tools in a row.",
+      kind: "estimate",
+    });
+  }
+  if (p.multi_agent) out.push({ label: "Several agents", value: "More than one named agent works on the same job.", kind: "measured" });
+  if (p.typical_tokens_in != null && p.typical_tokens_out != null) {
+    out.push({
+      label: "Typical size of one call",
+      value: `About ${ROUND(p.typical_tokens_in)} tokens in and ${ROUND(p.typical_tokens_out)} tokens out`,
+      kind: "measured",
+    });
+  }
+  return out;
+}
+
+const CHECK_WORDS: Record<Job["check_kind"], string> = {
+  ANSWER_KEY: "Compared with the right answer you gave",
+  SCHEMA: "Checked against the format you defined",
+  TEST_COMMAND: "Checked by running your test",
+  LATE_LABEL: "You mark answers right or wrong later",
+};

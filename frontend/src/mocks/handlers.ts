@@ -253,6 +253,9 @@ for (let i = 0; i < 297; i++) {
 // Ensure sorted newest first
 runs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+let summaryConsent = false;
+let summaryDeleted = false;
+
 export const handlers = [
   // GET /v1/jobs
   http.get("/v1/jobs", async ({ request }) => {
@@ -553,6 +556,50 @@ export const handlers = [
     HttpResponse.json({ google: true, dev_login: false, demo_project_id: null } satisfies AuthConfig),
   ),
 
+  // GET /v1/jobs/:job/profile (what the calls prove, plus the optional AI summary)
+  http.get("/v1/jobs/:job/profile", async ({ request, params }) => {
+    await delay(300);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+    const name = decodeURIComponent(String(params.job));
+    const calls = runs.filter((r) => r.job === name).length;
+    const summary = {
+      state: !summaryConsent ? "off" : summaryDeleted ? "deleted" : "ready",
+      text: summaryConsent && !summaryDeleted
+        ? "This task reads an invoice and pulls out the total amount to pay. It is an extraction task: finding facts in text."
+        : null,
+      consent: summaryConsent,
+      service: "generativelanguage.googleapis.com",
+    };
+    if (calls < 25) {
+      return HttpResponse.json({
+        calls, window_days: 30, enough_data: false, models: [], uses_tools: false, works_like_agent: null,
+        tool_source: null, multi_agent: false, typical_tokens_in: null, typical_tokens_out: null, summary,
+      });
+    }
+    return HttpResponse.json({
+      calls, window_days: 30, enough_data: true, models: ["acme-large", "acme-mini"], uses_tools: false,
+      works_like_agent: null, tool_source: null, multi_agent: false, typical_tokens_in: 1840, typical_tokens_out: 96, summary,
+    });
+  }),
+
+  // PUT /v1/task-summary-consent
+  http.put("/v1/task-summary-consent", async ({ request }) => {
+    await delay(250);
+    const body = (await request.json()) as { enabled: boolean };
+    summaryConsent = body.enabled;
+    summaryDeleted = false;
+    return HttpResponse.json({ state: summaryConsent ? "ready" : "off", text: null, consent: summaryConsent, service: "generativelanguage.googleapis.com" });
+  }),
+
+  // DELETE /v1/jobs/:job/summary
+  http.delete("/v1/jobs/:job/summary", async () => {
+    await delay(200);
+    summaryDeleted = true;
+    return new HttpResponse(null, { status: 204 });
+  }),
+
   // GET /v1/jobs/:job/insights
   http.get("/v1/jobs/:job/insights", async ({ request, params }) => {
     await delay(300);
@@ -717,6 +764,54 @@ export const handlers = [
   // GET /healthz and /healthz/scheduler: the API is up and the background jobs keep up.
   http.get("/healthz", () => HttpResponse.json({ status: "ok" })),
   http.get("/healthz/scheduler", () => HttpResponse.json({ status: "ok", overdue: {} })),
+
+  // GET /v1/insights/agents: who uses the tokens, the heaviest runs, tool-list size and plain labels.
+  http.get("/v1/insights/agents", async () => {
+    await delay(250);
+    return HttpResponse.json({
+      agents: [
+        { agent: "researcher", runs: 410, tokens_in: 3_900_000, tokens_out: 420_000, cache_read_tokens: 600_000, spend_usd: 41.2, share: 0.58, models: ["acme-large"], uses_tools: true, works_like_agent: "yes", tool_source: "mcp", tool_servers: ["github", "slack"], top_tools: [{ name: "mcp__github__search_code", calls: 310 }, { name: "mcp__slack__post_message", calls: 44 }], steps_per_task: 8.4 },
+        { agent: "writer", runs: 190, tokens_in: 1_100_000, tokens_out: 380_000, cache_read_tokens: 0, spend_usd: 14.7, share: 0.2, models: ["acme-large", "acme-mini"], uses_tools: true, works_like_agent: "yes", tool_source: "tool_list", tool_servers: [], top_tools: [{ name: "search_docs", calls: 120 }], steps_per_task: 3.1 },
+        { agent: "unlabelled", runs: 900, tokens_in: 1_200_000, tokens_out: 150_000, cache_read_tokens: 0, spend_usd: 9.9, share: 0.22, models: ["acme-mini"], uses_tools: false, works_like_agent: null, tool_source: null, tool_servers: [], top_tools: [], steps_per_task: null },
+      ],
+      traces: [
+        { trace_id: "task-8841", calls: 38, tokens: 912_000, spend_usd: 11.4, agents: 2, repeated_prompts: true, agent_names: ["researcher", "writer"], multi_agent: true, possible_loop: { step: "the mcp__github__search_code tool", repeats: 6, cost_usd: 1.9, uses_arguments: false } },
+        { trace_id: "task-8790", calls: 12, tokens: 240_000, spend_usd: 2.8, agents: 1, repeated_prompts: false, agent_names: ["researcher"], multi_agent: false, possible_loop: null },
+      ],
+      tools: [
+        { job: "invoice-extract", runs: 600, avg_tools_tokens: 12_400, share_of_tokens_in: 0.46 },
+        { job: "receipt-scan", runs: 120, avg_tools_tokens: 900, share_of_tokens_in: 0.05 },
+      ],
+      kinds: { calls: 1500, uses_tools: true, works_like_agent: "yes", tool_source: "mcp", tool_servers: ["github", "slack"], multi_agent: true },
+    });
+  }),
+
+  // GET /v1/insights/prompts: the prompts that use the most tokens, and how much of each is the same every call.
+  http.get("/v1/insights/prompts", async ({ request }) => {
+    await delay(250);
+    const url = new URL(request.url);
+    const job = url.searchParams.get("job");
+    const limit = Math.min(10, Math.max(1, Number(url.searchParams.get("limit") ?? 3)));
+    const days = Number(url.searchParams.get("days") ?? 30);
+    const all = [
+      { job: "invoice-extract", prompt_version: null, calls: 2840, tokens_in: 5_210_000, tokens_out: 690_000, cache_read_tokens: 0, cache_write_tokens: 0, text_samples: 50, repeated_start_share: 0.62, repeated_end_share: 0.05, repeated_start_preview: "You are an accounting assistant. Read the invoice below and return the vendor, invoice number, date and total as JSON…" },
+      { job: "receipt-scan", prompt_version: "v2", calls: 640, tokens_in: 910_000, tokens_out: 210_000, cache_read_tokens: 380_000, cache_write_tokens: 40_000, text_samples: 50, repeated_start_share: 0.18, repeated_end_share: 0.36, repeated_start_preview: null },
+      { job: "ticket-classify", prompt_version: null, calls: 3100, tokens_in: 620_000, tokens_out: 95_000, cache_read_tokens: 0, cache_write_tokens: 0, text_samples: 3, repeated_start_share: null, repeated_end_share: null, repeated_start_preview: null },
+    ].map((g) => ({ ...g, total_tokens: g.tokens_in + g.tokens_out + g.cache_read_tokens + g.cache_write_tokens }));
+    const total = all.reduce((sum, g) => sum + g.total_tokens, 0);
+    const groups = all
+      .filter((g) => !job || g.job === job)
+      .sort((x, y) => y.total_tokens - x.total_tokens)
+      .slice(0, limit)
+      .map((g) => ({
+        ...g,
+        share: total ? Math.round((g.total_tokens / total) * 1000) / 1000 : 0,
+        avg_tokens_in: Math.round((g.tokens_in / g.calls) * 10) / 10,
+        avg_tokens_out: Math.round((g.tokens_out / g.calls) * 10) / 10,
+        cache_read_share: g.cache_read_tokens + g.tokens_in ? Math.round((g.cache_read_tokens / (g.cache_read_tokens + g.tokens_in)) * 1000) / 1000 : null,
+      }));
+    return HttpResponse.json({ days, total_tokens: total, groups });
+  }),
 
   // GET /v1/insights/daily: 60 days per job and model, deterministic. invoice-extract moves from
   // acme-large to acme-mini three weeks ago; acme-large's new version dips for a week.

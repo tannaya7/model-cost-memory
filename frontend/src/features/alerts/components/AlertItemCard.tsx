@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Alert, Model } from "../../../shared/api/types";
 import { resolveAlert } from "../api/alertsApi";
+import { newKindView } from "../newKinds";
 import { deprecated, formatPValue, silentDrop, versionRegression } from "../details";
 import { Badge } from "../../../shared/components/Badge";
 import { Card } from "../../../shared/components/Card";
@@ -138,6 +139,37 @@ function AlertCard({ alert }: { alert: Alert }) {
   const silent = silentDrop(alert);
   const retired = deprecated(alert);
   const alertModel = regression?.model ?? silent?.model ?? retired?.model;
+  const nk = newKindView(alert);
+
+  if (nk) {
+    return (
+      <Card className={`space-y-3 ${isResolved ? "opacity-70" : ""}`}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={nk.tone === "bad" ? "text-bad" : "text-warn"}>{nk.icon}</span>
+            <Badge tone={nk.tone}>{nk.title}</Badge>
+            {isResolved && <Badge tone="ok">Resolved {formatLocalDate(alert.resolved_at!)}</Badge>}
+          </div>
+          <span className="font-mono text-xs text-dim">{formatLocalTimestamp(alert.created_at)}</span>
+        </div>
+        <p className="text-sm text-ink">{alert.summary}</p>
+        {nk.numbers && <p className="text-xs text-dim">{nk.numbers}</p>}
+        <div className="flex shrink-0 items-center gap-3">
+          <Link to={p(nk.to)} className="text-xs font-semibold text-accent hover:underline">{nk.linkLabel}</Link>
+          {!isResolved && (
+            <button
+              type="button"
+              onClick={() => resolve.mutate()}
+              disabled={resolve.isPending}
+              className="rounded-md border border-rule bg-surface px-3 py-1 text-xs font-semibold text-ink hover:bg-bg disabled:opacity-50"
+            >
+              {resolve.isPending ? "Resolving…" : "Mark resolved"}
+            </button>
+          )}
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card className={`space-y-4 ${isResolved ? "opacity-70" : ""}`}>

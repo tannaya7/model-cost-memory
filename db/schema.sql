@@ -33,7 +33,8 @@ CREATE TABLE projects (
     content_retention_days INTEGER NOT NULL DEFAULT 90  -- days runs keep their prompt and answer (0015)
         CONSTRAINT projects_retention_check CHECK (content_retention_days BETWEEN 1 AND 3650),
     monthly_budget_usd NUMERIC(12,2)                -- optional soft budget; alerts only (0018)
-        CONSTRAINT projects_budget_check CHECK (monthly_budget_usd IS NULL OR monthly_budget_usd > 0)
+        CONSTRAINT projects_budget_check CHECK (monthly_budget_usd IS NULL OR monthly_budget_usd > 0),
+    task_summary_consent BOOLEAN NOT NULL DEFAULT false  -- opt in to an AI-written task summary (0019)
 );
 CREATE INDEX idx_projects_owner ON projects(owner_user_id);
 
@@ -227,6 +228,16 @@ CREATE TABLE recommendation_summaries (             -- the optional summary, onc
     attempted_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_summaries_attempted ON recommendation_summaries(attempted_at);
+
+CREATE TABLE task_summaries (                       -- the optional AI summary of what a task does (0019)
+    job_id         UUID PRIMARY KEY REFERENCES jobs(job_id) ON DELETE CASCADE,
+    fingerprint    TEXT NOT NULL,                   -- of the sample calls it was written from
+    summary        TEXT,                            -- null after a failed call
+    prompt_version TEXT NOT NULL,
+    attempts       INTEGER NOT NULL DEFAULT 1,
+    attempted_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_task_summaries_attempted ON task_summaries(attempted_at);
 
 CREATE TABLE usage_limits (                         -- limits the project works under (0013)
     limit_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),

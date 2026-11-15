@@ -19,7 +19,9 @@ function Alerts() {
   const deprecated = useDeprecatedModels();
   const [show, setShow] = useState<"open" | "resolved" | "all">("open");
   const items: AlertListItem[] = [
-    ...(regressions.data ?? []).map((a) => ({ kind: "regression" as const, alert: a, timestamp: a.created_at })),
+    ...(regressions.data ?? [])
+      .filter((a) => !(a.kind === "MODEL_RETIRING" && (deprecated.data ?? []).some((m) => m.model === a.detail?.model)))
+      .map((a) => ({ kind: "regression" as const, alert: a, timestamp: a.created_at })),
     ...(deprecated.data ?? []).map((m) => ({ kind: "deprecation" as const, model: m, timestamp: m.shutdown_date ?? m.first_seen_at })),
   ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   const isOpen = (i: AlertListItem) => i.kind === "deprecation" || i.alert.resolved_at === null;
@@ -30,7 +32,7 @@ function Alerts() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-2xl text-sm text-dim">
-          Every 15 minutes we check each of your AI tasks for a quality drop: a new version of a model that answers worse, or a model that quietly got worse under the same name. We also warn you when a model you use is being shut down. Nothing here needs action unless a card appears.
+          Every 15 minutes we check each of your AI tasks for a quality drop: a new version of a model that answers worse, or a model that quietly got worse under the same name. We also warn you about unusually high AI use, when you near your monthly spending limit or trial budget, and when a model you use is being shut down. Nothing here needs action unless a card appears.
         </p>
         <Segmented
           label="Which alerts"

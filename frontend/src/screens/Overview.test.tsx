@@ -74,7 +74,7 @@ describe("Overview", () => {
     expect(JSON.parse(localStorage.getItem("mcm_layout_acme")!)).not.toContain("kpis");
   });
 
-  it("shows the three money widgets and keeps a budget the person sets", async () => {
+  it("shows the three money widgets and offers to set a monthly budget", async () => {
     const day = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
     const point = (n: number, spend: number, failed: number) => ({ day: day(n), job: "invoice-extract", model: "acme-large", runs: 10, passed: 10 - failed, failed, spend_usd: spend });
     stubApi({
@@ -85,18 +85,12 @@ describe("Overview", () => {
       "/v1/insights/daily": [point(1, 2, 1), point(2, 2, 2), point(3, 2, 0)],
       "/v1/news": { items: [], sources: [], your_models: [], updated_at: null, next_refresh_at: null },
     });
-    const user = userEvent.setup();
     renderWithProviders(<WithProject id="acme"><Overview /></WithProject>);
     expect(await screen.findByRole("heading", { name: /Where this month's spending is heading/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Money spent on wrong answers/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /What 1,000 correct answers cost you/ })).toBeInTheDocument();
     expect(await screen.findByText(/answers that were checked and found wrong/)).toBeInTheDocument();
 
-    await user.type(await screen.findByLabelText("Set a monthly budget"), "500");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(localStorage.getItem("mcm_budget_acme")).toBe("500");
-    expect(await screen.findByText(/Budget \$500 a month/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Remove" }));
-    expect(localStorage.getItem("mcm_budget_acme")).toBeNull();
+    expect(await screen.findByLabelText("Set a monthly budget")).toBeInTheDocument();
   });
 });

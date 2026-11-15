@@ -254,6 +254,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/insights/prompts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Prompt Insights
+         * @description Which prompts use the most tokens (largest first), and how much of each prompt is identical in
+         *     every call, so you can see what to trim or cache. Production runs only; the repeated-text figures
+         *     use the most recent calls whose text is still stored.
+         */
+        get: operations["get_prompt_insights_v1_insights_prompts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/insights/spend": {
         parameters: {
             query?: never;
@@ -363,6 +385,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/jobs/{job}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Task Profile
+         * @description What the recorded calls prove about a task: models, tool use, typical size (measured, no AI). With
+         *     fewer than 25 calls only the count is given. Also the optional AI summary's state; the summary is
+         *     written only when the project switched it on.
+         */
+        get: operations["get_task_profile_v1_jobs__job__profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/jobs/{job}/recommendation": {
         parameters: {
             query?: never;
@@ -464,6 +508,26 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Task Summary
+         * @description Delete the stored AI summary of this task. It is not written again unless the sample calls change.
+         */
+        delete: operations["delete_task_summary_v1_jobs__job__summary_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -785,6 +849,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/task-summary-consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Task Summary Consent
+         * @description Switch the AI-written task summaries on or off for this project. Off by default; while off, no
+         *     sample prompt is ever sent to an outside AI service.
+         */
+        put: operations["put_task_summary_consent_v1_task_summary_consent_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -793,6 +878,7 @@ export interface components {
         AgentInsightsOut: {
             /** Agents */
             agents: components["schemas"]["AgentUsageOut"][];
+            kinds: components["schemas"]["UsageKindsOut"];
             /** Tools */
             tools: components["schemas"]["ToolsUsageOut"][];
             /**
@@ -810,6 +896,11 @@ export interface components {
             agent: string;
             /** Cache Read Tokens */
             cache_read_tokens: number;
+            /**
+             * Models
+             * @description Models this agent called
+             */
+            models?: string[];
             /** Runs */
             runs: number;
             /**
@@ -822,10 +913,41 @@ export interface components {
              * @description Priced runs only
              */
             spend_usd: number;
+            /**
+             * Steps Per Task
+             * @description Calls per trace id; null without trace ids
+             */
+            steps_per_task?: number | null;
             /** Tokens In */
             tokens_in: number;
             /** Tokens Out */
             tokens_out: number;
+            /**
+             * Tool Servers
+             * @description Server names read from mcp__server__tool names
+             */
+            tool_servers?: string[];
+            /**
+             * Tool Source
+             * @description 'mcp' only when tool names look like mcp__server__tool; 'tool_list' for other tools; null when none
+             */
+            tool_source?: string | null;
+            /**
+             * Top Tools
+             * @description Most used tools by name
+             */
+            top_tools?: components["schemas"]["ToolCountOut"][];
+            /**
+             * Uses Tools
+             * @description Tool definitions were sent or tool calls made (certain)
+             * @default false
+             */
+            uses_tools: boolean;
+            /**
+             * Works Like Agent
+             * @description 'yes' (calls share a trace id and tool use repeats), 'probably' (no trace id), or null
+             */
+            works_like_agent?: string | null;
         };
         /**
          * AlertOut
@@ -1288,6 +1410,29 @@ export interface components {
              */
             suggested: string | null;
         };
+        /** LoopOut */
+        LoopOut: {
+            /**
+             * Cost Usd
+             * @description Priced cost of the repeated steps
+             */
+            cost_usd: number;
+            /**
+             * Repeats
+             * @description Times it repeated within a window of 7 steps
+             */
+            repeats: number;
+            /**
+             * Step
+             * @description What repeated, in words
+             */
+            step: string;
+            /**
+             * Uses Arguments
+             * @description False: matched on tool name and identical prompt, because arguments are not stored
+             */
+            uses_arguments: boolean;
+        };
         /**
          * ModelEvidenceOut
          * @description What the runs say about one model in this job, and how the tolerance rule judged it.
@@ -1633,6 +1778,74 @@ export interface components {
              * @description Must be https; send null to remove
              */
             webhook_url?: string | null;
+        };
+        /** PromptGroupOut */
+        PromptGroupOut: {
+            /** Avg Tokens In */
+            avg_tokens_in: number;
+            /** Avg Tokens Out */
+            avg_tokens_out: number;
+            /**
+             * Cache Read Share
+             * @description cache_read / (cache_read + tokens_in); null when both are 0
+             */
+            cache_read_share: number | null;
+            /** Cache Read Tokens */
+            cache_read_tokens: number;
+            /** Cache Write Tokens */
+            cache_write_tokens: number;
+            /** Calls */
+            calls: number;
+            /** Job */
+            job: string;
+            /**
+             * Prompt Version
+             * @description Null groups all unversioned calls of the job
+             */
+            prompt_version: string | null;
+            /**
+             * Repeated End Share
+             * @description Share of the prompt that ends identically in every call
+             */
+            repeated_end_share: number | null;
+            /**
+             * Repeated Start Preview
+             * @description First 120 characters of the repeated start
+             */
+            repeated_start_preview: string | null;
+            /**
+             * Repeated Start Share
+             * @description Share of the prompt that starts identically in every call
+             */
+            repeated_start_share: number | null;
+            /**
+             * Share
+             * @description Of the project's total tokens in the window, 0..1
+             */
+            share: number;
+            /**
+             * Text Samples
+             * @description Recent calls with stored prompt text that were compared (at most 50)
+             */
+            text_samples: number;
+            /** Tokens In */
+            tokens_in: number;
+            /** Tokens Out */
+            tokens_out: number;
+            /**
+             * Total Tokens
+             * @description tokens_in + tokens_out + cache_read_tokens + cache_write_tokens
+             */
+            total_tokens: number;
+        };
+        /** PromptsOut */
+        PromptsOut: {
+            /** Days */
+            days: number;
+            /** Groups */
+            groups: components["schemas"]["PromptGroupOut"][];
+            /** Total Tokens */
+            total_tokens: number;
         };
         /**
          * ProviderKeyIn
@@ -2250,6 +2463,80 @@ export interface components {
              */
             unpriced_runs: number;
         };
+        /**
+         * TaskProfileOut
+         * @description What the recorded calls prove about a task (measured; no AI). Fewer than 25 calls: only `calls`.
+         */
+        TaskProfileOut: {
+            /**
+             * Calls
+             * @description Production calls in the window
+             */
+            calls: number;
+            /** Enough Data */
+            enough_data: boolean;
+            /** Models */
+            models: string[];
+            /** Multi Agent */
+            multi_agent: boolean;
+            summary: components["schemas"]["TaskSummaryOut"];
+            /** Tool Source */
+            tool_source: string | null;
+            /**
+             * Typical Tokens In
+             * @description Median input tokens per call, as billed
+             */
+            typical_tokens_in: number | null;
+            /**
+             * Typical Tokens Out
+             * @description Median output tokens per call, as billed
+             */
+            typical_tokens_out: number | null;
+            /** Uses Tools */
+            uses_tools: boolean;
+            /** Window Days */
+            window_days: number;
+            /**
+             * Works Like Agent
+             * @description 'yes', 'probably' or null
+             */
+            works_like_agent: string | null;
+        };
+        /** TaskSummaryConsentIn */
+        TaskSummaryConsentIn: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** TaskSummaryOut */
+        TaskSummaryOut: {
+            /**
+             * Consent
+             * @description Whether this project switched the AI summary on
+             */
+            consent: boolean;
+            /**
+             * Service
+             * @description The outside AI service sample prompts are sent to when it is on
+             */
+            service: string;
+            /**
+             * State
+             * @description 'ready', 'pending', 'off' (not switched on), 'unavailable' (no AI service configured, or a limit or failure), 'no_samples' (too little stored text) or 'deleted'
+             */
+            state: string;
+            /**
+             * Text
+             * @description Two sentences written by an AI; may be wrong
+             */
+            text?: string | null;
+        };
+        /** ToolCountOut */
+        ToolCountOut: {
+            /** Calls */
+            calls: number;
+            /** Name */
+            name: string;
+        };
         /** ToolsUsageOut */
         ToolsUsageOut: {
             /**
@@ -2273,12 +2560,25 @@ export interface components {
         /** TraceUsageOut */
         TraceUsageOut: {
             /**
+             * Agent Names
+             * @description Named agents in the trace
+             */
+            agent_names?: string[];
+            /**
              * Agents
              * @description Distinct agents in the trace
              */
             agents: number;
             /** Calls */
             calls: number;
+            /**
+             * Multi Agent
+             * @description More than one distinct named agent shares this trace
+             * @default false
+             */
+            multi_agent: boolean;
+            /** @description Beta: the same step repeated 5 or more times within 7 steps with no sign of progress */
+            possible_loop?: components["schemas"]["LoopOut"] | null;
             /**
              * Repeated Prompts
              * @description The same prompt appears 3 or more times in the trace: a likely retry loop or runaway agent
@@ -2296,6 +2596,30 @@ export interface components {
             tokens: number;
             /** Trace Id */
             trace_id: string;
+        };
+        /** UsageKindsOut */
+        UsageKindsOut: {
+            /**
+             * Calls
+             * @description Recent production calls the labels were worked out from (at most 5000)
+             */
+            calls: number;
+            /** Multi Agent */
+            multi_agent: boolean;
+            /** Tool Servers */
+            tool_servers: string[];
+            /**
+             * Tool Source
+             * @description 'mcp' only for mcp__server__tool names; 'tool_list'; or null
+             */
+            tool_source: string | null;
+            /** Uses Tools */
+            uses_tools: boolean;
+            /**
+             * Works Like Agent
+             * @description 'yes', 'probably' or null
+             */
+            works_like_agent: string | null;
         };
         /**
          * UsageLimitIn
@@ -2836,6 +3160,46 @@ export interface operations {
             };
         };
     };
+    get_prompt_insights_v1_insights_prompts_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back */
+                days?: number;
+                /** @description Only this job */
+                job?: string | null;
+                /** @description How many prompts to return */
+                limit?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_spend_v1_insights_spend_get: {
         parameters: {
             query?: {
@@ -3054,6 +3418,44 @@ export interface operations {
             };
         };
     };
+    get_task_profile_v1_jobs__job__profile_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back */
+                days?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_recommendation_v1_jobs__job__recommendation_get: {
         parameters: {
             query?: never;
@@ -3225,6 +3627,39 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RetestOut"][];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_task_summary_v1_jobs__job__summary_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -3943,6 +4378,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_task_summary_consent_v1_task_summary_consent_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskSummaryConsentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSummaryOut"];
                 };
             };
             /** @description Validation Error */

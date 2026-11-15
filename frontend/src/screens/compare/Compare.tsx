@@ -13,7 +13,7 @@ import { useRecommendation } from "../../features/recommendations/hooks/useRecom
 import type { DayPoint, Model } from "../../shared/api/types";
 import { count, pct, usd } from "../../ui/format";
 import { ButtonLink, cx, EmptyState, Panel, Pill, Skeleton } from "../../ui/primitives";
-import { readBudget, writeBudget } from "../overview/budget";
+import { useProject as useAccountProject } from "../../features/projects/hooks/useProjects";
 import { CompareChart } from "./CompareChart";
 import { SuggestionDisclaimer } from "./profile/Disclaimer";
 import { MIN_CHECKED_ANSWERS, TOO_FEW_LABEL, UNTESTED_LABEL } from "./wilson";
@@ -123,6 +123,7 @@ function SuggestionCard({ s, job }: { s: Suggestion; job: string }) {
 
 export default function Compare() {
   const { id: project } = useProject();
+  const accountProject = useAccountProject(project === "key" || project === "demo" ? undefined : project);
   const p = useP();
   const [params, setParams] = useSearchParams();
   const set = (patch: Record<string, string | null>) =>
@@ -155,7 +156,7 @@ export default function Compare() {
   const preset = PRESETS.find((x) => String(x) === params.get("x")) ?? 1;
   const volumeTokens = customTokens ?? Math.round(actualTokens * preset);
   const factor = customTokens && actualTokens > 0 ? customTokens / actualTokens : customTokens ? 1 : preset;
-  const budget = num(params.get("budget")) ?? readBudget(project);
+  const budget = num(params.get("budget")) ?? accountProject.data?.monthly_budget_usd ?? null;
 
   const rec0 = rec.data ?? null;
   const checkedRuns = rec0?.evidence.n_runs ?? 0;
@@ -232,7 +233,6 @@ export default function Compare() {
               placeholder="No budget set"
               onChange={(e) => {
                 const v = num(e.target.value.replace(/[^\d.]/g, ""));
-                writeBudget(project, v);
                 set({ budget: v === null ? null : String(v) });
               }}
             />

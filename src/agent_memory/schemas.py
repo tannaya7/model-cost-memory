@@ -99,6 +99,35 @@ class JobOut(Model):
     )
 
 
+class TaskSummaryOut(Model):
+    state: str = Field(description="'ready', 'pending', 'off' (not switched on), 'unavailable' (no AI service "
+                                   "configured, or a limit or failure), 'no_samples' (too little stored text) "
+                                   "or 'deleted'")
+    text: str | None = Field(default=None, description="Two sentences written by an AI; may be wrong")
+    consent: bool = Field(description="Whether this project switched the AI summary on")
+    service: str = Field(description="The outside AI service sample prompts are sent to when it is on")
+
+
+class TaskProfileOut(Model):
+    """What the recorded calls prove about a task (measured; no AI). Fewer than 25 calls: only `calls`."""
+
+    calls: int = Field(description="Production calls in the window")
+    window_days: int
+    enough_data: bool
+    models: list[str]
+    uses_tools: bool
+    works_like_agent: str | None = Field(description="'yes', 'probably' or null")
+    tool_source: str | None
+    multi_agent: bool
+    typical_tokens_in: int | None = Field(description="Median input tokens per call, as billed")
+    typical_tokens_out: int | None = Field(description="Median output tokens per call, as billed")
+    summary: TaskSummaryOut
+
+
+class TaskSummaryConsentIn(Model):
+    enabled: bool
+
+
 class RunOut(Model):
     """One recorded run, as a table row. Full prompt and output come from the run detail."""
 
@@ -673,6 +702,19 @@ class DayPointOut(Model):
 
 
 
+class ToolCountOut(Model):
+    name: str
+    calls: int
+
+
+class LoopOut(Model):
+    step: str = Field(description="What repeated, in words")
+    repeats: int = Field(description="Times it repeated within a window of 7 steps")
+    cost_usd: float = Field(description="Priced cost of the repeated steps")
+    uses_arguments: bool = Field(description="False: matched on tool name and identical prompt, because "
+                                             "arguments are not stored")
+
+
 class AgentUsageOut(Model):
     agent: str = Field(description="The agent or role; runs that named none are 'unlabelled'")
     runs: int
@@ -681,6 +723,15 @@ class AgentUsageOut(Model):
     cache_read_tokens: int
     spend_usd: float = Field(description="Priced runs only")
     share: float = Field(description="Share of the project's total tokens in the window, 0..1")
+    models: list[str] = Field(default_factory=list, description="Models this agent called")
+    uses_tools: bool = Field(default=False, description="Tool definitions were sent or tool calls made (certain)")
+    works_like_agent: str | None = Field(default=None, description="'yes' (calls share a trace id and tool use "
+                                         "repeats), 'probably' (no trace id), or null")
+    tool_source: str | None = Field(default=None, description="'mcp' only when tool names look like "
+                                    "mcp__server__tool; 'tool_list' for other tools; null when none")
+    tool_servers: list[str] = Field(default_factory=list, description="Server names read from mcp__server__tool names")
+    top_tools: list[ToolCountOut] = Field(default_factory=list, description="Most used tools by name")
+    steps_per_task: float | None = Field(default=None, description="Calls per trace id; null without trace ids")
 
 
 class TraceUsageOut(Model):
@@ -691,6 +742,10 @@ class TraceUsageOut(Model):
     agents: int = Field(description="Distinct agents in the trace")
     repeated_prompts: bool = Field(description="The same prompt appears 3 or more times in the trace: a likely "
                                                "retry loop or runaway agent")
+    agent_names: list[str] = Field(default_factory=list, description="Named agents in the trace")
+    multi_agent: bool = Field(default=False, description="More than one distinct named agent shares this trace")
+    possible_loop: LoopOut | None = Field(default=None, description="Beta: the same step repeated 5 or more times "
+                                          "within 7 steps with no sign of progress")
 
 
 class ToolsUsageOut(Model):
@@ -700,7 +755,42 @@ class ToolsUsageOut(Model):
     share_of_tokens_in: float = Field(description="Of those runs' input tokens (cache included), 0..1")
 
 
+class UsageKindsOut(Model):
+    calls: int = Field(description="Recent production calls the labels were worked out from (at most 5000)")
+    uses_tools: bool
+    works_like_agent: str | None = Field(description="'yes', 'probably' or null")
+    tool_source: str | None = Field(description="'mcp' only for mcp__server__tool names; 'tool_list'; or null")
+    tool_servers: list[str]
+    multi_agent: bool
+
+
 class AgentInsightsOut(Model):
     agents: list[AgentUsageOut]
     traces: list[TraceUsageOut] = Field(description="Top 10 traces by total tokens")
     tools: list[ToolsUsageOut]
+    kinds: UsageKindsOut
+
+
+class PromptGroupOut(Model):
+    job: str
+    prompt_version: str | None = Field(description="Null groups all unversioned calls of the job")
+    calls: int
+    tokens_in: int
+    tokens_out: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    total_tokens: int = Field(description="tokens_in + tokens_out + cache_read_tokens + cache_write_tokens")
+    share: float = Field(description="Of the project's total tokens in the window, 0..1")
+    avg_tokens_in: float
+    avg_tokens_out: float
+    cache_read_share: float | None = Field(description="cache_read / (cache_read + tokens_in); null when both are 0")
+    text_samples: int = Field(description="Recent calls with stored prompt text that were compared (at most 50)")
+    repeated_start_share: float | None = Field(description="Share of the prompt that starts identically in every call")
+    repeated_end_share: float | None = Field(description="Share of the prompt that ends identically in every call")
+    repeated_start_preview: str | None = Field(description="First 120 characters of the repeated start")
+
+
+class PromptsOut(Model):
+    days: int
+    total_tokens: int
+    groups: list[PromptGroupOut]

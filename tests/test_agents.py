@@ -80,7 +80,7 @@ async def test_an_empty_project_and_a_missing_key(client, session):
     session.add(Project(project_id="empty", api_key_hash=hash_key(key)))
     await session.commit()
     body = (await client.get("/v1/insights/agents", headers={"X-API-Key": key})).json()
-    assert body == {"agents": [], "traces": [], "tools": []}
+    assert body["agents"] == [] and body["traces"] == [] and body["tools"] == [] and not body["kinds"]["uses_tools"]
     assert (await client.get("/v1/insights/agents")).status_code in (401, 403)
 
 
@@ -115,3 +115,36 @@ async def test_overlong_agent_is_rejected(client, session):
         "run_id": str(uuid.uuid4()), "job": "support", "prompt": "hi", "model": "m", "model_version": "m-1",
         "agent": "a" * 101})
     assert sent.status_code == 422
+
+
+async def test_labels_and_possible_loop_on_the_endpoint(client, session):
+    key = generate_key()
+    session.add(Project(project_id="lab", api_key_hash=hash_key(key)))
+    await session.flush()
+    job = Job(project_id="lab", name="bot", check_kind="LATE_LABEL", check_config={})
+    session.add(job)
+    await session.flush()
+    now = datetime.now(UTC)
+
+    def run(i, agent, trace, tool, prompt, tools_tokens=None):
+        return Run(run_id=uuid.uuid4(), job_id=job.job_id, project_id="lab", prompt=prompt, prompt_hash=prompt,
+                   model="m", model_version="m-1", agent=agent, trace_id=trace, tokens_in=10, tokens_out=5,
+                   cache_read_tokens=0, cost_usd=Decimal("0.01"), run_kind="PRODUCTION", tools_tokens=tools_tokens,
+                   tool_calls=[{"name": tool, "id": str(i)}] if tool else None, tool_call_count=1 if tool else None,
+                   created_at=now - timedelta(minutes=60 - i))
+
+    session.add_all(
+        [run(i, "planner" if i % 2 else "coder", "spin", "mcp__github__search", "same", 400) for i in range(6)]
+        + [run(10 + i, "coder", "ok", "search", f"q{i}") for i in range(3)])
+    await session.commit()
+    body = (await client.get("/v1/insights/agents", headers={"X-API-Key": key})).json()
+    kinds = body["kinds"]
+    assert kinds["uses_tools"] and kinds["works_like_agent"] == "yes" and kinds["multi_agent"]
+    assert kinds["tool_source"] == "mcp" and kinds["tool_servers"] == ["github"]
+    by = {t["trace_id"]: t for t in body["traces"]}
+    assert by["spin"]["possible_loop"]["repeats"] == 6 and by["spin"]["multi_agent"]
+    assert by["spin"]["possible_loop"]["uses_arguments"] is False
+    assert by["ok"]["possible_loop"] is None and not by["ok"]["multi_agent"]
+    coder = next(a for a in body["agents"] if a["agent"] == "coder")
+    assert coder["models"] == ["m"] and coder["steps_per_task"] == 3.0
+    assert {"name": "search", "calls": 3} in coder["top_tools"]

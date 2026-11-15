@@ -13,6 +13,8 @@ import { useLayout, WIDGETS, type WidgetId } from "./overview/layout";
 import { periods, rangeLabel, toCsv } from "./overview/metrics";
 import { MonthProjection, UnitCost, WastedSpend } from "./overview/moneyWidgets";
 import { TokenUsage } from "./overview/TokenUsage";
+import { TokensWent } from "./overview/TokensWent";
+import { AgentsView } from "./overview/AgentsView";
 import { WidgetDrawer } from "./overview/WidgetDrawer";
 import { Attention, BusiestDay, JobsTable, KpiCards, News, PassGauge, Pipeline, Savings, SpendByJob, SpendSplit, SpendTrend, type Ctx, type ShellProps } from "./overview/widgets";
 
@@ -29,6 +31,10 @@ function Widget({ id, ctx, shell }: { id: WidgetId; ctx: Ctx; shell: ShellProps 
       return <SpendTrend ctx={ctx} shell={shell} />;
     case "tokens":
       return <TokenUsage ctx={ctx} shell={shell} />;
+    case "agents":
+      return <AgentsView ctx={ctx} shell={shell} />;
+    case "tokens-went":
+      return <TokensWent ctx={ctx} shell={shell} />;
     case "projection":
       return <MonthProjection shell={shell} />;
     case "unit-cost":
