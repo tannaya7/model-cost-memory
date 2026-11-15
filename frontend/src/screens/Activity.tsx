@@ -44,8 +44,8 @@ function Alerts() {
       ) : shown.length === 0 ? (
         <EmptyState
           icon={<IconShield size={18} />}
-          title={show === "open" ? "Nothing needs attention" : "No alerts here"}
-          hint="When a model's answers get worse, or a model you use is being shut down, a card appears here and is sent to your alert webhook if you set one."
+          title={show === "open" ? "Nothing needs your attention" : "No alerts here"}
+          hint="We will tell you here if something goes wrong, like a model giving worse answers or being shut down."
         />
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">

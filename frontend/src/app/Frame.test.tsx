@@ -29,6 +29,10 @@ describe("Frame", () => {
     const search = await screen.findByRole("textbox", { name: "Search" });
     await user.type(search, "invoice");
     expect(await screen.findByText("invoice-extract")).toBeInTheDocument();
+    expect(screen.getByText("Invoice extract")).toBeInTheDocument();
+    await user.clear(search);
+    await user.type(search, "Invoice ext");
+    expect(await screen.findByText("Invoice extract")).toBeInTheDocument();
     await user.clear(search);
     await user.type(search, "retention");
     expect(within(screen.getByRole("dialog", { name: "Go to" })).getByText("Settings")).toBeInTheDocument();

@@ -1,6 +1,7 @@
 import { useP } from "../../../app/project";
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { Help } from "../../../ui/Help";
 import type { UsageLimit } from "../../../shared/api/types";
 import { Badge } from "../../../shared/components/Badge";
 import { Card } from "../../../shared/components/Card";
@@ -62,7 +63,7 @@ export function LimitCard({ limit }: { limit: UsageLimit }) {
           />
         </div>
         <div className="flex justify-between font-mono text-xs text-dim">
-          <span>{usedLabel(limit)}</span>
+          <span className="flex items-center gap-1.5">{usedLabel(limit)}<Help label="How to read this bar">The bar shows how much of this cap you have used. The paler part shows where it will be when the cap resets, if you keep going at this pace.</Help></span>
           {limit.hours_to_full !== null && limit.state !== "EXHAUSTED" && (
             <span>full in {hoursLabel(limit.hours_to_full)}</span>
           )}
@@ -70,6 +71,7 @@ export function LimitCard({ limit }: { limit: UsageLimit }) {
       </div>
 
       <p className={`text-sm ${urgent ? "font-semibold text-ink" : "text-dim"}`}>{limit.message}.</p>
+      <p className="text-xs text-muted">Used so far in this window, and when it starts again.</p>
 
       {limit.suggestions.length > 0 && (
         <div className="space-y-2">

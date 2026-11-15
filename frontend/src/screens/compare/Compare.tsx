@@ -6,6 +6,7 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useP, useProject } from "../../app/project";
 import { useDaily } from "../../features/insights/api/dailyApi";
+import { jobTitle } from "../../features/jobs/jobTitle";
 import { useJobs } from "../../features/jobs/hooks/useJobs";
 import { fetchModels } from "../../features/models/api/modelsApi";
 import { useRecommendation } from "../../features/recommendations/hooks/useRecommendation";
@@ -15,7 +16,9 @@ import { ButtonLink, cx, EmptyState, Panel, Pill, Skeleton } from "../../ui/prim
 import { readBudget, writeBudget } from "../overview/budget";
 import { CompareChart } from "./CompareChart";
 import { SuggestionDisclaimer } from "./profile/Disclaimer";
-import { TOO_FEW_LABEL, UNTESTED_LABEL } from "./wilson";
+import { MIN_CHECKED_ANSWERS, TOO_FEW_LABEL, UNTESTED_LABEL } from "./wilson";
+import { Help } from "../../ui/Help";
+import { NotEnoughData } from "../../ui/NotEnoughData";
 import { modelLink } from "./profile/modelLinks";
 import { ProfileSuggestPanel } from "./profile/ProfileSuggestPanel";
 import type { ProfileUsage } from "./profile/types";
@@ -191,7 +194,7 @@ export default function Compare() {
             AI task
             <select className={field} value={jobName} onChange={(e) => set({ job: e.target.value })}>
               {(jobs.data ?? []).map((j) => (
-                <option key={j.name} value={j.name}>{j.name}</option>
+                <option key={j.name} value={j.name}>{jobTitle(j.name)} ({j.name})</option>
               ))}
             </select>
           </label>
@@ -256,9 +259,10 @@ export default function Compare() {
       ) : (
         <p className="flex flex-wrap items-center gap-2 text-sm text-dim" data-testid="evidence-line">
           <span>
-            Based on {account.span} days of use: {count(account.runs)} AI calls, about {count(actualTokens)} tokens a month (tokens are the small pieces of text AI models are billed by).
+            Based on {account.span} days of use: {count(account.runs)} AI calls, about {count(actualTokens)} tokens a month (tokens are the small pieces of text AI is billed by).
           </span>
-          <Pill tone={early ? "warn" : "good"}>{early ? "Too early to be sure" : "Enough history to compare"}</Pill>
+          <Pill tone={early ? "warn" : "good"}>{early ? "Not enough history yet" : "Enough history to compare"}</Pill>
+          <Help label="How to read the numbers on this page">Costs are what each model would charge for the same amount of text you use now. Correct answers come from answers we checked: we need at least {MIN_CHECKED_ANSWERS} per model before we show a range. Models you have not used are estimates.</Help>
         </p>
       )}
 
@@ -279,9 +283,14 @@ export default function Compare() {
       ) : rec.isPending ? (
         <Skeleton className="h-72" />
       ) : !rec0 ? (
-        <EmptyState title="Not enough checked answers yet" hint="A comparison appears once this AI task has some checked answers from at least one model." />
+        <EmptyState title="Not enough checked answers yet" hint={`We need at least ${MIN_CHECKED_ANSWERS} checked answers from a model to compare quality. Until then, the costs on this page are only estimates. Check more of this task's answers to see the real comparison.`} />
       ) : (
         <>
+          {checkedRuns < rec0.rules.evidence_floor && (
+            <NotEnoughData n={checkedRuns} min={rec0.rules.evidence_floor}>
+              Next step: check more of this task's answers. The costs below are still real or estimated prices.
+            </NotEnoughData>
+          )}
           <Panel className="p-5">
             <CompareChart rec={rec0} catalog={catalog} avgTokens={avgTokens} providers={providers} />
             {!avgTokens && <p className="mt-2 text-xs text-muted">Token counts are not recorded for this AI task yet, so models it has not used cannot be priced.</p>}

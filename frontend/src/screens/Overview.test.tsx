@@ -87,9 +87,9 @@ describe("Overview", () => {
     });
     const user = userEvent.setup();
     renderWithProviders(<WithProject id="acme"><Overview /></WithProject>);
-    expect(await screen.findByRole("heading", { name: "Where this month's spending is heading" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Money spent on wrong answers" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "What 1,000 correct answers cost you" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Where this month's spending is heading/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Money spent on wrong answers/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /What 1,000 correct answers cost you/ })).toBeInTheDocument();
     expect(await screen.findByText(/answers that were checked and found wrong/)).toBeInTheDocument();
 
     await user.type(await screen.findByLabelText("Set a monthly budget"), "500");

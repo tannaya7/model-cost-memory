@@ -135,7 +135,7 @@ export default function Jobs() {
                     <p className="mt-1 text-[11px] text-muted">{CHECK_KIND_LABELS[job.check_kind]}</p>
                   </div>
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    {rec ? <VerdictPill verdict={rec.verdict as Verdict} /> : <Pill tone="neutral">No recommendation yet</Pill>}
+                    {rec ? <VerdictPill verdict={rec.verdict as Verdict} rec={rec} /> : <Pill tone="neutral">No recommendation yet</Pill>}
                     {rec?.current && (
                       <span className="flex min-w-0 items-center gap-1.5 text-sm">
                         <ModelName className="truncate text-dim">{rec.current.model}</ModelName>

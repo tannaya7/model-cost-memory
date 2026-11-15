@@ -21,7 +21,7 @@ export interface Suggestion {
   nChecked: number | null;
   /** 95% Wilson interval for passRate; null when there is no measurement. */
   interval: { low: number; high: number } | null;
-  /** Under about 30 checked answers: show "Too few answers to be sure" instead of a verdict. */
+  /** Under the product floor (25) of checked answers: show "Not enough checked answers yet" instead of a verdict. */
   tooFew: boolean;
 }
 

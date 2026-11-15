@@ -50,11 +50,11 @@ export function MonthProjection({ shell }: { shell: ShellProps }) {
   const used80 = p.usedShare !== null && p.usedShare >= 0.8;
 
   return (
-    <Shell shell={shell} title="Where this month's spending is heading" hint={`${p.monthLabel}. An estimate of what you will have spent by month end if the pace holds, so a surprise bill does not catch you out.`}>
+    <Shell shell={shell} help="We take what you have spent this month and add your average daily spending of the last 7 days for each day left. The range uses your cheapest and dearest of those 7 days. It is an estimate, not a bill." title="Where this month's spending is heading" hint={`${p.monthLabel}. If the pace holds, you will have spent about this much by month end.`}>
       {daily.isPending ? (
         <Skeleton className="h-48" />
       ) : p.mtd === 0 && p.dailyRate === 0 ? (
-        <EmptyState title="No spend this month yet" hint="The estimate appears once your app has made AI calls to models with a known price." />
+        <EmptyState title="No spend this month yet" hint="The estimate appears after your app sends AI calls to a model with a known price. Start by creating an AI task and sending a call." />
       ) : (
         <div className="flex flex-1 flex-col gap-4">
           <div>
@@ -106,6 +106,7 @@ export function MonthProjection({ shell }: { shell: ShellProps }) {
             {editing || !budget ? (
               <form onSubmit={save} className="flex flex-wrap items-center gap-2">
                 <label htmlFor={`budget-${shell.id}`} className="text-xs text-dim">{budget ? "Monthly budget" : "Set a monthly budget"}</label>
+                <span className="basis-full text-[11px] text-muted">Optional. We show how close you are. We never stop your spending.</span>
                 <span className="flex items-center rounded-[9px] border border-rule bg-surface-2 px-2 focus-within:border-accent">
                   <span className="text-sm text-muted">$</span>
                   <input id={`budget-${shell.id}`} inputMode="decimal" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={budget ? String(budget) : "e.g. 500"} className="w-24 bg-transparent px-1.5 py-1.5 text-sm text-ink outline-none placeholder:text-muted" />
@@ -137,11 +138,11 @@ export function WastedSpend({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
   const w = wastedSpend(ctx.cur);
   const worst = w.byJob[0]?.wasted ?? 0;
   return (
-    <Shell shell={shell} title="Money spent on wrong answers" hint={`Last ${ctx.days} days${w.estimated ? ", estimated" : ""}. An AI call still costs money when its answer turns out wrong, so this is money that bought you nothing.`}>
+    <Shell shell={shell} help="When an AI gives a wrong answer you still pay for the call. We add up those costs. Some are estimated from each day's average." title="Money spent on wrong answers" hint={`Last ${ctx.days} days${w.estimated ? ", estimated" : ""}. You pay even when an answer is wrong.`}>
       {ctx.dailyPending ? (
         <Skeleton className="h-44" />
       ) : w.spend === 0 ? (
-        <EmptyState title="No spend in this period" hint="It appears here as soon as AI calls to models with a known price are recorded." />
+        <EmptyState title="No spend yet" hint="This fills in when your app sends AI calls to a model with a known price. Start by creating an AI task and sending a call from your code." />
       ) : (
         <div className="flex flex-1 flex-col gap-4">
           <div>
@@ -189,11 +190,11 @@ export function UnitCost({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
   const { all, jobs } = unitCosts(ctx.cur, ctx.prev);
   const max = Math.max(...jobs.map((j) => j.per1k ?? 0), 0.0001);
   return (
-    <Shell shell={shell} title="What 1,000 correct answers cost you" hint={`Spending divided by correct answers, last ${ctx.days} days. A cheap model that is often wrong can cost more per correct answer, so this is the fair way to compare.`}>
+    <Shell shell={shell} help="We divide what you spent by the number of correct answers. A cheap model that is often wrong can cost more per correct answer. This is the fair way to compare." title="What 1,000 correct answers cost you" hint={`What it costs to get 1,000 right answers, last ${ctx.days} days.`}>
       {ctx.dailyPending ? (
         <Skeleton className="h-44" />
       ) : jobs.length === 0 ? (
-        <EmptyState title="No AI calls in this period" hint="The cost of each AI task appears once its AI calls are recorded and their answers checked." />
+        <EmptyState title="No AI calls yet" hint="When your app sends its first call, this fills in. Start by creating an AI task and sending a call from your code." />
       ) : (
         <div className="flex flex-1 flex-col gap-4">
           <div className="flex flex-wrap items-end justify-between gap-3">

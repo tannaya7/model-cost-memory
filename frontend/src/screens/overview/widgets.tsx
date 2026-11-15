@@ -16,10 +16,19 @@ import { pivot } from "../../ui/charts/data";
 import { colorMap, SERIES } from "../../ui/charts/series";
 import { count, pct, usd, type Verdict } from "../../ui/format";
 import { IconAlert, IconArrowRight, IconBolt, IconCheck, IconClock, IconDollar, IconJobs, IconMore, IconShield, IconSpark } from "../../ui/icons";
+import { Help } from "../../ui/Help";
+import { NoCallsYet, NoneChecked, NotEnoughData } from "../../ui/NotEnoughData";
+import { MIN_CHECKED_ANSWERS } from "../compare/wilson";
 import { ButtonLink, cx, EmptyState, ModelName, Panel, Pill, Skeleton } from "../../ui/primitives";
 import { monthlySaving, VerdictPill } from "../shared";
 import { WIDGETS, type WidgetId } from "./layout";
 import { byWeekday, compareSeries, delta, passRate, splitBy, sum, unpricedRuns, WEEKDAYS } from "./metrics";
+
+/** The one product floor, from the recommendation rules when we have them. */
+export function floorOf(byJob: Map<string, Recommendation | null>): number {
+  for (const r of byJob.values()) if (r?.rules?.evidence_floor) return r.rules.evidence_floor;
+  return MIN_CHECKED_ANSWERS;
+}
 
 export interface Ctx {
   days: number;
@@ -41,7 +50,7 @@ export function UnpricedChip({ count: n }: { count: number }) {
   if (n <= 0) return null;
   return (
     <span className="inline-flex rounded-full bg-surface-3 px-2 py-0.5 text-[11px] font-medium text-muted" title="These AI calls are on models with no known price, so their cost is not in the total.">
-      {n.toLocaleString("en")} unpriced {n === 1 ? "run" : "runs"} not counted
+      {n.toLocaleString("en")} {n === 1 ? "AI call" : "AI calls"} not counted: no known price
     </span>
   );
 }
@@ -127,12 +136,12 @@ export interface ShellProps {
 }
 
 /** A widget's card: title, controls, the ••• menu, then the content. */
-export function Shell({ shell, title, hint, controls, children, className }: { shell: ShellProps; title?: ReactNode; hint?: ReactNode; controls?: ReactNode; children: ReactNode; className?: string }) {
+export function Shell({ shell, title, hint, help, controls, children, className }: { shell: ShellProps; title?: ReactNode; hint?: ReactNode; help?: ReactNode; controls?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <Panel className={cx("flex h-full flex-col p-5", className)}>
       <header className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold tracking-tight text-ink">{title ?? WIDGETS[shell.id].title}</h2>
+          <h2 className="flex items-center gap-1.5 text-[15px] font-semibold tracking-tight text-ink">{title ?? WIDGETS[shell.id].title}{help && <Help>{help}</Help>}</h2>
           {hint && <p className="mt-0.5 text-[13px] text-dim">{hint}</p>}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
@@ -150,7 +159,8 @@ const periodWord = (days: number) => `${days} days`;
 /* ----------------------------------------------------------------------------------------------- */
 /* Key numbers                                                                                      */
 
-function Kpi({ label, icon, tint, value, render, change, upIsGood, note, index }: {
+function Kpi({ label, icon, tint, value, render, change, upIsGood, note, index, help }: {
+  help?: ReactNode;
   label: string;
   icon: ReactNode;
   tint: string;
@@ -170,7 +180,7 @@ function Kpi({ label, icon, tint, value, render, change, upIsGood, note, index }
       className="panel flex min-w-0 flex-col gap-3 p-5"
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[14px] font-semibold text-ink">{label}</p>
+        <p className="flex items-center gap-1.5 text-[14px] font-semibold text-ink">{label}{help && <Help>{help}</Help>}</p>
         <span className="grid h-8 w-8 place-items-center rounded-[10px]" style={{ background: `color-mix(in srgb, ${tint} 14%, transparent)`, color: tint }}>{icon}</span>
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -197,10 +207,10 @@ export function KpiCards({ ctx }: { ctx: Ctx }) {
   if (dailyPending) return <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[132px]" />)}</div>;
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <Kpi index={0} label="Spend" icon={<IconDollar size={16} />} tint="var(--series-1)" value={spend} render={(v) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} />} change={delta(spend, spendPrev)} upIsGood={false} note={<>{`What you paid for AI, vs. ${usd(spendPrev)} the ${periodWord(days)} before`}{unpriced > 0 && <><br /><UnpricedChip count={unpriced} /></>}</>} />
-      <Kpi index={1} label="Correct answers" icon={<IconCheck size={16} />} tint="var(--series-3)" value={rate} render={(v) => <CountUp value={v * 100} suffix="%" decimals={1} />} change={rate !== null && ratePrev !== null ? rate - ratePrev : null} upIsGood note={ratePrev !== null ? `vs. ${pct(ratePrev)} the ${periodWord(days)} before` : "Share of checked answers that were correct. Nothing was checked in the period before"} />
+      <Kpi index={0} label="Spend" icon={<IconDollar size={16} />} tint="var(--series-1)" value={spend} render={(v) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} />} change={delta(spend, spendPrev)} upIsGood={false} help="This is what your AI calls cost, added up from the list price of each model. Calls to a model with no known price are left out, and we tell you how many." note={<>{`What you paid for AI, vs. ${usd(spendPrev)} the ${periodWord(days)} before`}{unpriced > 0 && <><br /><UnpricedChip count={unpriced} /></>}</>} />
+      <Kpi index={1} label="Correct answers" icon={<IconCheck size={16} />} tint="var(--series-3)" value={rate} render={(v) => <CountUp value={v * 100} suffix="%" decimals={1} />} change={rate !== null && ratePrev !== null ? rate - ratePrev : null} upIsGood help="We check an answer against the right answer or a rule you set. Out of every 100 answers we checked, this is how many were right. Answers nobody checked are not counted." note={rate === null ? (runs === 0 ? "No AI calls yet. They will show here once your app sends one." : "None of your AI calls are checked yet, so we cannot say how many are correct.") : <>{`Out of every 100 answers we checked, about ${Math.round(rate * 100)} were right`}{ratePrev !== null ? `, vs. ${pct(ratePrev)} the ${periodWord(days)} before` : ""}</>} />
       <Kpi index={2} label="AI calls recorded" icon={<IconJobs size={16} />} tint="var(--series-7)" value={runs} render={(v) => <CountUp value={v} />} change={delta(runs, runsPrev)} upIsGood note={`Times your app asked an AI, vs. ${count(runsPrev)} the ${periodWord(days)} before`} />
-      <Kpi index={3} label="Saving available" icon={<IconSpark size={16} />} tint="var(--color-ok)" value={ctx.recsPending ? null : saving} render={(v) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} suffix="/mo" />} change={undefined} upIsGood note={movable ? `Each month, if ${movable} ${movable === 1 ? "AI task moves" : "AI tasks move"} to a cheaper model` : "Every AI task is on the right model"} />
+      <Kpi index={3} label="Saving available" icon={<IconSpark size={16} />} tint="var(--color-ok)" value={ctx.recsPending ? null : saving} render={(v) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} suffix="/mo" />} change={undefined} upIsGood help="This is what you would save each month by moving an AI task to a cheaper AI model that still gives about as many correct answers. It is an estimate from your own past calls. Nothing changes unless you decide." note={movable ? `Each month, if ${movable} ${movable === 1 ? "AI task moves" : "AI tasks move"} to a cheaper AI model` : ctx.recsPending ? "Working it out..." : "No cheaper AI model is proven yet, or we need more checked answers"} />
     </div>
   );
 }
@@ -348,6 +358,8 @@ export function PassGauge({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
   const [target, setTarget] = useState(readTarget);
   const rate = passRate(ctx.cur);
   const checked = sum(ctx.cur, "passed") + sum(ctx.cur, "failed");
+  const calls = sum(ctx.cur, "runs");
+  const floor = floorOf(ctx.byJob);
   const choose = (v: number) => {
     setTarget(v);
     try {
@@ -359,7 +371,7 @@ export function PassGauge({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
   return (
     <Shell
       shell={shell}
-      hint={`How many answers were correct, based on ${count(checked)} checked answers in the last ${ctx.days} days. The target is your own goal.`}
+      hint={`Out of every 100 answers we checked, about ${rate === null ? "..." : Math.round(rate * 100)} were right (${count(checked)} checked in the last ${ctx.days} days). The target is your own goal.`}
       controls={
         <label className="flex items-center gap-1 text-xs text-muted">
           <span className="sr-only">Target</span>
@@ -371,8 +383,12 @@ export function PassGauge({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
     >
       {ctx.dailyPending ? (
         <Skeleton className="h-52" />
-      ) : rate === null ? (
-        <EmptyState title="Nothing checked yet" hint="The gauge fills once some answers in this period have been checked as correct or wrong." />
+      ) : calls === 0 ? (
+        <NoCallsYet to={p("/jobs")} />
+      ) : checked === 0 ? (
+        <NoneChecked to={p("/jobs")} />
+      ) : rate === null || checked < floor ? (
+        <NotEnoughData n={checked} min={floor} />
       ) : (
         <div className="relative flex flex-1 flex-col items-center justify-center">
           <Gauge rate={rate} target={target} />
@@ -545,7 +561,7 @@ export function JobsTable({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
                       </span>
                     </td>
                     <td className="py-3 text-right text-dim tabular">{pct(r.rate)}</td>
-                    <td className="px-5 py-3 text-right">{r.rec ? <VerdictPill verdict={r.rec.verdict as Verdict} /> : <Pill tone="neutral">Still learning</Pill>}</td>
+                    <td className="px-5 py-3 text-right">{r.rec ? <VerdictPill verdict={r.rec.verdict as Verdict} rec={r.rec} /> : <Pill tone="neutral">Still learning</Pill>}</td>
                   </motion.tr>
                 );
               })}

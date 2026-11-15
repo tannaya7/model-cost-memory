@@ -36,8 +36,8 @@ export function buildWhy(rec: Recommendation): WhySection[] {
     const ci = wilsonFromRate(focus.weighted_pass_rate, focus.n_runs);
     out.push({
       title: "How sure are we",
-      text: isTooFew(focus.n_runs) || !ci
-        ? `${TOO_FEW_LABEL}. ${focus.model} has only ${n(focus.n_runs)} checked ${focus.n_runs === 1 ? "answer" : "answers"} (${pct(focus.weighted_pass_rate, 0)} correct), so treat everything below as a guess.`
+      text: isTooFew(focus.n_runs, rec.rules.evidence_floor) || !ci
+        ? `${TOO_FEW_LABEL}. ${focus.model} has ${n(focus.n_runs)} checked ${focus.n_runs === 1 ? "answer" : "answers"} and we need ${n(rec.rules.evidence_floor)}. Treat the ${pct(focus.weighted_pass_rate, 0)} correct as a guess.`
         : `${focus.model}: ${pct(focus.weighted_pass_rate, 0)} of answers correct, from ${n(focus.n_runs)} checked answers. Allowing for chance, the true rate is probably between ${pct(ci.low, 0)} and ${pct(ci.high, 0)} (95% range).${
             ci.high - ci.low > 0.2 ? " That range is wide; more checked answers would narrow it." : ""
           }`,
@@ -47,7 +47,7 @@ export function buildWhy(rec: Recommendation): WhySection[] {
   if (rec.verdict === "INSUFFICIENT_EVIDENCE") {
     out.push({
       title: "What is missing",
-      text: `We need about ${n(rec.rules.evidence_floor)} recent checked answers on a model before we advise anything. We are ${Math.round(rec.progress * 100)}% of the way there. Checking more of your AI calls is what helps.`,
+      text: `We need at least ${n(rec.rules.evidence_floor)} recent checked answers on a model before we advise anything. We are ${Math.round(rec.progress * 100)}% of the way there. Checking more of your AI calls will get us there.`,
     });
     out.push({ title: "Nothing changes until you decide", text: "We are not advising a change yet, and we never change your model for you." });
     out.push({ title: "Check it yourself", text: CHECK_YOURSELF });

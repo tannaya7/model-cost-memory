@@ -20,7 +20,7 @@ export function TokensTab({ job }: { job: string }) {
   if (daily.isPending) return <Skeleton className="h-72 w-full" />;
   const points = (daily.data ?? []) as TokenPoint[];
   if (!hasTokens(points)) {
-    return <EmptyState title="No token counts yet" hint="Token figures appear once this job's recorded runs report how many tokens they used." />;
+    return <EmptyState title="No token counts yet" hint="Token figures appear once this AI task's recorded calls report how many tokens they used." />;
   }
 
   const { cur, prev } = tokenPeriods(points, DAYS);
@@ -85,7 +85,7 @@ export function TokensTab({ job }: { job: string }) {
         <h2 className="text-[15px] font-semibold tracking-tight text-ink">Ways to use fewer tokens</h2>
         <p className="mt-0.5 text-[13px] text-dim">Rule-based suggestions from the last {DAYS} days. They are estimates, not promises.</p>
         {found.length === 0 ? (
-          <p className="mt-3 text-sm text-dim">Nothing stands out. Token use looks in proportion for this job.</p>
+          <p className="mt-3 text-sm text-dim">Nothing stands out. Token use looks in proportion for this AI task.</p>
         ) : (
           <ul className="mt-3 space-y-3">
             {found.map((h) => (

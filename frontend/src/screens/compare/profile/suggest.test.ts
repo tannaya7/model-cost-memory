@@ -104,7 +104,7 @@ describe("suggestFromProfile", () => {
 
 describe("modelLink", () => {
   it("links known families to the provider's overview page", () => {
-    expect(modelLink("claude-sonnet-4-6")).toEqual({ url: "https://platform.claude.com/docs/en/models/overview", label: "Read about it on Anthropic's site" });
+    expect(modelLink("claude-sonnet-4-6")).toEqual({ url: "https://platform.claude.com/docs/en/models/sonnet-4-6/overview", label: "Read about it on Anthropic's site" });
     expect(modelLink("gemini-2.5-flash")?.label).toBe("Read about it on Google's site");
     expect(modelLink("gpt-4o")?.url).toBe("https://developers.openai.com/api/docs/models");
   });

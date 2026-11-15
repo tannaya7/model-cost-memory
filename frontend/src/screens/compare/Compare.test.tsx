@@ -33,9 +33,24 @@ describe("Compare", () => {
     });
     renderWithProviders(<WithProject id="acme"><Compare /></WithProject>);
     expect(await screen.findByText(/Based on 3 days of use: 30 AI calls/)).toBeInTheDocument();
-    expect(screen.getByText("Too early to be sure")).toBeInTheDocument();
+    expect(screen.getByText("Not enough history yet")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Suggestions" })).toBeInTheDocument();
     expect(screen.getAllByText(/disclaimer/).length).toBeGreaterThan(0);
+  });
+
+  it("shows the not-enough-answers message with progress when few answers are checked", async () => {
+    const thin = { ...rec, evidence: { ...rec.evidence, n_runs: 10 } } as Recommendation;
+    stubApi({
+      "/v1/jobs/invoice-extract/recommendation": thin,
+      "/v1/jobs": jobs,
+      "/v1/models": modelsSample,
+      "/v1/insights/daily": [point(3), point(2), point(1)],
+    });
+    renderWithProviders(<WithProject id="acme"><Compare /></WithProject>);
+    const bar = await screen.findByRole("progressbar");
+    expect(bar).toHaveAttribute("aria-valuenow", "10");
+    expect(bar).toHaveAttribute("aria-valuemax", String(rec.rules.evidence_floor));
+    expect(screen.getByText(/You have 10 so far/)).toBeInTheDocument();
   });
 
   it("explains an unchecked job and shows the profile panel instead of a quality comparison", async () => {

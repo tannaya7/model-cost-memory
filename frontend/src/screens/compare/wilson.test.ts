@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evidenceLine, isTooFew, TOO_FEW_LABEL, UNTESTED_LABEL, wilsonInterval } from "./wilson";
+import { evidenceLine, isTooFew, MIN_CHECKED_ANSWERS, TOO_FEW_LABEL, UNTESTED_LABEL, wilsonInterval } from "./wilson";
 
 describe("wilsonInterval", () => {
   it("matches the values in the research notes", () => {
@@ -21,12 +21,19 @@ describe("wilsonInterval", () => {
 });
 
 describe("labels", () => {
-  it("refuses a confident line under 30 answers", () => {
-    expect(isTooFew(29)).toBe(true);
+  it("uses the one product floor of 25 checked answers", () => {
+    expect(MIN_CHECKED_ANSWERS).toBe(25);
+    expect(isTooFew(24)).toBe(true);
+    expect(isTooFew(25)).toBe(false);
+    expect(isTooFew(40, 50)).toBe(true);
+    expect(evidenceLine(0.9, 12)).toContain("we need 25");
+  });
+  it("refuses a confident line under the floor", () => {
+    expect(isTooFew(24)).toBe(true);
     expect(evidenceLine(0.9, 12)).toContain(TOO_FEW_LABEL);
     expect(evidenceLine(0.9, 12)).not.toMatch(/probably/);
   });
-  it("shows n and the range from 30 up", () => {
+  it("shows n and the range from the floor up", () => {
     expect(evidenceLine(0.8, 100)).toMatch(/80% correct, probably 71% to 87% .*100 checked answers/);
   });
   it("labels untested models without a score", () => {

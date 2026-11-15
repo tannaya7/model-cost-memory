@@ -2,8 +2,9 @@
  * Wilson is the interval recommended for small samples (Brown, Cai and DasGupta 2001); the plain
  * "p plus or minus 1.96 standard errors" interval is unreliable when n is small or the rate is near 0 or 1. */
 
-/** Under this many checked answers we do not give a confident-sounding verdict. */
-export const MIN_CHECKED_ANSWERS = 30;
+/** The one product floor: under this many checked answers we give no recommendation and no range.
+ * Matches the recommendation rule (`rules.evidence_floor`); screens that have the rule should pass it in. */
+export const MIN_CHECKED_ANSWERS = 25;
 
 const Z95 = 1.959964;
 
@@ -24,18 +25,18 @@ export function wilsonFromRate(rate: number | null | undefined, n: number | null
   return wilsonInterval(rate * n, n);
 }
 
-export const TOO_FEW_LABEL = "Too few answers to be sure";
+export const TOO_FEW_LABEL = "Not enough checked answers yet";
 export const UNTESTED_LABEL = "Not tested on your work yet";
 
-export const isTooFew = (n: number | null | undefined) => n == null || n < MIN_CHECKED_ANSWERS;
+export const isTooFew = (n: number | null | undefined, floor: number = MIN_CHECKED_ANSWERS) => n == null || n < floor;
 
 const pc = (v: number) => `${Math.round(v * 100)}%`;
 
 /** "93% correct, 86% to 97% (95% range), from 100 checked answers", or the too-few label. */
-export function evidenceLine(rate: number | null | undefined, n: number | null | undefined): string {
+export function evidenceLine(rate: number | null | undefined, n: number | null | undefined, floor: number = MIN_CHECKED_ANSWERS): string {
   if (rate == null || n == null || n <= 0) return UNTESTED_LABEL;
   const ci = wilsonFromRate(rate, n);
   const count = `${Math.round(n).toLocaleString("en")} checked ${Math.round(n) === 1 ? "answer" : "answers"}`;
-  if (isTooFew(n) || !ci) return `${TOO_FEW_LABEL} (${count})`;
+  if (isTooFew(n, floor) || !ci) return `${TOO_FEW_LABEL}: ${count} so far, we need ${floor}`;
   return `${pc(rate)} correct, probably ${pc(ci.low)} to ${pc(ci.high)} (95% range), from ${count}`;
 }

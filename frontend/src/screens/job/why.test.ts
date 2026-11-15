@@ -26,16 +26,16 @@ describe("buildWhy", () => {
     expect(text(rec)).toMatch(/95% range/);
   });
 
-  it("says too few answers instead of a confident range under 30 checked answers", () => {
+  it("says too few answers instead of a confident range under the floor of checked answers", () => {
     const thin = { ...rec, models: rec.models.map((m) => ({ ...m, n_runs: 12 })) };
     const out = text(thin);
-    expect(out).toMatch(/Too few answers to be sure/);
+    expect(out).toMatch(/Not enough checked answers yet/);
     expect(out).not.toMatch(/95% range/);
   });
 
   it("says what is missing instead of advising when evidence is thin", () => {
     const out = text({ ...rec, verdict: "INSUFFICIENT_EVIDENCE", recommended: null, forecast: null, progress: 0.4 });
-    expect(out).toMatch(/What is missing: We need about 25 recent checked answers/);
+    expect(out).toMatch(/What is missing: We need at least 25 recent checked answers/);
     expect(out).toMatch(/40% of the way/);
     expect(out).not.toMatch(/Why this model/);
   });

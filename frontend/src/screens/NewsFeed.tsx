@@ -139,7 +139,7 @@ export default function NewsFeed() {
         emptyHint={
           mine
             ? "That is good news: nothing recent affects you. Switch to All stories to see everything."
-            : "Press Fetch latest to load the news. It also refreshes by itself every hour."
+            : "There are no stories yet. Press Fetch latest to load them. They also refresh by themselves every hour."
         }
       >
         {(data) => (

@@ -84,9 +84,17 @@ function AlertsSection({ project }: { project: Project }) {
       <label htmlFor="webhook" className="mt-4 block text-xs font-semibold text-dim">Webhook URL</label>
       <input id="webhook" type="url" className={cx(field, "mt-1.5")} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://hooks.slack.com/services/…" />
       {project.webhook_secret && (
-        <p className="mt-2 text-xs text-muted">
-          Each message is signed: check the <span className="font-mono">X-MCM-Signature</span> header with the secret <span className="font-mono text-dim">{project.webhook_secret.slice(0, 6)}…</span>
-        </p>
+        <div className="mt-2 space-y-1 text-xs text-muted">
+          <p>
+            If you send alerts to your own program, you can check a message really came from us. Each one carries a time in <span className="font-mono">X-MCM-Timestamp</span> and a signature in <span className="font-mono">X-MCM-Signature-V2</span>.
+          </p>
+          <p>
+            Work the signature out with your secret <span className="font-mono text-dim">{project.webhook_secret.slice(0, 6)}…</span> (HMAC-SHA256 over the timestamp, a dot, then the message body), and ignore messages older than 5 minutes.
+          </p>
+          <p>
+            For now we also still send the older <span className="font-mono">X-MCM-Signature</span>, which signs the body only.
+          </p>
+        </div>
       )}
       <SaveRow
         saving={s.saving}
@@ -248,7 +256,7 @@ function LimitsSection() {
         {limits.isPending ? (
           <Skeleton className="h-24" />
         ) : (limits.data ?? []).length === 0 ? (
-          !adding && <EmptyState title="No usage limits yet" hint="Add the caps your plan or budget sets, and we will tell you ahead of time when one is about to run out." />
+          !adding && <EmptyState title="No usage limits yet" hint="A limit is a cap on how much AI you may use, set by your plan or your budget. Add one and we will warn you before it runs out." />
         ) : (
           (limits.data ?? []).map((l) => <LimitCard key={l.limit_id} limit={l} />)
         )}

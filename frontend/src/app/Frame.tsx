@@ -7,6 +7,7 @@ import { useP, useProject } from "./project";
 import { RouteErrorBoundary } from "../shared/components/RouteErrorBoundary";
 import { useAlertsCount } from "../features/alerts/hooks/useAlertsCount";
 import { useLogout, useMe } from "../features/auth/hooks/useAuth";
+import { jobTitle } from "../features/jobs/jobTitle";
 import { useJobs } from "../features/jobs/hooks/useJobs";
 import { useProjects } from "../features/projects/hooks/useProjects";
 import {
@@ -197,6 +198,8 @@ function AccountMenu() {
 
 interface Command {
   label: string;
+  /** The name used in code, shown as a chip and matched by search. */
+  code?: string;
   hint: string;
   to: string;
 }
@@ -219,9 +222,9 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
       { label: "Settings", hint: "Project name, keys, alert webhook and data retention (how long data is kept)", to: p("/settings") },
       { label: "Usage limits", hint: "Caps that stop a mistake running up a huge bill", to: p("/settings#limits") },
     ];
-    const jobItems = (jobs.data ?? []).map((j) => ({ label: j.name, hint: "AI task", to: p(`/jobs/${encodeURIComponent(j.name)}`) }));
+    const jobItems = (jobs.data ?? []).map((j) => ({ label: jobTitle(j.name), code: j.name, hint: "AI task", to: p(`/jobs/${encodeURIComponent(j.name)}`) }));
     const q = query.trim().toLowerCase();
-    return [...jobItems, ...pages].filter((c) => !q || c.label.toLowerCase().includes(q) || c.hint.toLowerCase().includes(q)).slice(0, 9);
+    return [...jobItems, ...pages].filter((c) => !q || c.label.toLowerCase().includes(q) || (c.code ?? "").toLowerCase().includes(q) || c.hint.toLowerCase().includes(q)).slice(0, 9);
   }, [jobs.data, query]);
 
   useEffect(() => {
@@ -291,7 +294,10 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
                     )}
                   >
                     <span className="min-w-0">
-                      <span className={cx("block truncate text-sm font-medium", c.hint === "AI task" && "font-mono")}>{c.label}</span>
+                      <span className="block truncate text-sm font-medium">
+                        {c.label}
+                        {c.code && <span className="ml-2 rounded-md border border-rule bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] font-normal text-dim">{c.code}</span>}
+                      </span>
                       <span className="block truncate text-xs text-muted">{c.hint}</span>
                     </span>
                     {i === index && <IconArrowRight size={15} className="shrink-0 text-accent" />}

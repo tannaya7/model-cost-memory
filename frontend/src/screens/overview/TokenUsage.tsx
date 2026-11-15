@@ -1,6 +1,7 @@
 /** Overview widget: how many tokens the runs used, how they split, who used most and what that means for a token limit. */
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useReducedMotion } from "framer-motion";
+import { jobTitle } from "../../features/jobs/jobTitle";
 import { useLimits } from "../../features/limits/hooks/useLimits";
 import { hoursLabel } from "../../features/limits/format";
 import { ChartFrame, TooltipCard } from "../../ui/charts/ChartFrame";
@@ -64,7 +65,7 @@ export function TokenUsage({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
   if (!hasTokens(cur) && !hasTokens(points)) {
     return (
       <Shell shell={shell} title="Token usage" hint="Tokens are the small pieces of text AI models are billed by. Longer prompts and answers use more tokens.">
-        <EmptyState title="No token counts yet" hint="Token figures appear once your recorded AI calls report how many tokens they used." />
+        <EmptyState title="No token counts yet" hint="When your app sends AI calls, we count the tokens they use here. Start by creating an AI task and sending a call from your code." />
       </Shell>
     );
   }
@@ -76,7 +77,7 @@ export function TokenUsage({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
   const risk = limitRisk(points, limits.data ?? []);
 
   return (
-    <Shell shell={shell} title="Token usage" hint={`Tokens are the small pieces of text AI models are billed by. Longer prompts and answers use more tokens. Last ${ctx.days} days.`}>
+    <Shell shell={shell} title="Token usage" help="AI is billed by tokens, the small pieces of text it reads and writes. A long question or a long answer uses more tokens, so it costs more. Here we show how many tokens each call uses." hint={`Longer questions and answers use more tokens, so they cost more. Last ${ctx.days} days.`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[28px] font-semibold leading-none tracking-tight text-ink tabular">{count(t.all)}</span>
         <span className="text-sm text-dim">tokens</span>
@@ -119,7 +120,9 @@ export function TokenUsage({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
             <ul className="mt-1 space-y-1">
               {jobs.map((j) => (
                 <li key={j.name} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="truncate font-mono text-ink">{j.name}</span>
+                  <span className="min-w-0 truncate text-ink" title={`Name in your code: ${j.name}`}>
+                    {jobTitle(j.name)} <span className="ml-1 rounded-md border border-rule bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-dim">{j.name}</span>
+                  </span>
                   <span className="shrink-0 text-dim tabular">
                     {count(j.tokens)} · {pct(j.share, 0)}
                   </span>

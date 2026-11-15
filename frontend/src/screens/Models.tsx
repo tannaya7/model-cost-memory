@@ -26,7 +26,7 @@ function PriceBars({ models }: { models: Model[] }) {
   const priced = models.filter((m) => m.price_out_per_mtok !== null).sort((a, b) => (b.price_out_per_mtok ?? 0) - (a.price_out_per_mtok ?? 0));
   const max = Math.max(...priced.map((m) => Math.max(m.price_out_per_mtok ?? 0, m.price_in_per_mtok ?? 0)), 0.0001);
   const colors = colorMap(models.map((m) => m.model));
-  if (priced.length === 0) return <EmptyState title="No priced model in use yet" />;
+  if (priced.length === 0) return <EmptyState title="No model used yet" hint="When your app sends its first AI call, the AI models it uses and their prices show here. Start by creating an AI task and sending a call from your code." />;
   return (
     <div className="flex flex-col gap-4">
       <ul className="flex flex-wrap gap-4 text-xs text-dim" aria-label="Legend">
