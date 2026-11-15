@@ -2,6 +2,8 @@
 import { useAgentInsights, type AgentInsights, type AgentUsage, type ToolsUsage, type TraceUsage } from "../../features/insights/api/agentsApi";
 import { jobTitle } from "../../features/jobs/jobTitle";
 import { count, pct, usd } from "../../ui/format";
+import { Link } from "react-router-dom";
+import { useToolInputsSwitch } from "../../features/projects/hooks/useToolInputs";
 import { Help } from "../../ui/Help";
 import { NotEnoughData, NoCallsYet } from "../../ui/NotEnoughData";
 import { ErrorState, Skeleton } from "../../ui/primitives";
@@ -48,6 +50,17 @@ function AgentCard({ a }: { a: AgentUsage }) {
   );
 }
 
+/** One soft line under a possible loop found without tool inputs, pointing at the Settings switch while it is off. */
+function LoopInputsHint() {
+  const sw = useToolInputsSwitch();
+  if (!sw.canEdit || !sw.ready || sw.on) return null;
+  return (
+    <span className="mt-1 block text-xs text-dim">
+      Loops where the question changes each step are easy to miss. You can <Link className="underline" to="/settings#tool-inputs">turn on keeping tool inputs</Link> to catch more of them.
+    </span>
+  );
+}
+
 function TraceRow({ t }: { t: TraceUsage }) {
   const loop = loopText(t);
   return (
@@ -63,6 +76,7 @@ function TraceRow({ t }: { t: TraceUsage }) {
       {loop && (
         <p className="mt-2 rounded-md border border-warn/40 bg-warn/10 p-2 text-[13px] text-ink">
           {loop} <span className="ml-1 rounded border border-rule px-1 text-[10px] uppercase tracking-wider text-muted">Beta</span>
+          {t.possible_loop && !t.possible_loop.uses_arguments && <LoopInputsHint />}
         </p>
       )}
       {!loop && t.repeated_prompts && <p className="mt-2 text-[13px] text-dim">The same question was sent several times, which may be a retry.</p>}

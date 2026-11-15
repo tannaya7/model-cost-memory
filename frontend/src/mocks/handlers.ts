@@ -55,6 +55,14 @@ function generateApiKey(): string {
   return `mcm_live_${suffix}`;
 }
 
+/** The "staging" project is brand new: it has no jobs, runs or alerts, so the first-visit tour shows there. */
+const EMPTY_PROJECT_ID = "00000000-0000-0000-0000-000000000002";
+function isEmptyProject(request: Request): boolean {
+  return request.headers.get("x-project-id") === EMPTY_PROJECT_ID;
+}
+/** What the mock "account" has saved about which first-visit guides it has seen (nothing else is kept). */
+const mockUiFlags: { tour_seen?: boolean; first_results_seen?: boolean } = {};
+
 const projects: Project[] = [
   {
     project_id: "00000000-0000-0000-0000-000000000001",
@@ -64,6 +72,7 @@ const projects: Project[] = [
     retest_monthly_cap_usd: 10,
     retest_allowed: true,
     content_retention_days: 90,
+    store_tool_arguments: false,
     key_prefix: "mcm_live_prod",
     created_at: "2026-09-01T00:00:00Z",
   },
@@ -75,6 +84,7 @@ const projects: Project[] = [
     retest_monthly_cap_usd: 50,
     retest_allowed: false,
     content_retention_days: 90,
+    store_tool_arguments: false,
     key_prefix: "mcm_live_stag",
     created_at: "2026-09-15T00:00:00Z",
   },
@@ -263,7 +273,7 @@ export const handlers = [
     if (!isAuthorized(request)) {
       return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
     }
-    return HttpResponse.json(jobs);
+    return HttpResponse.json(isEmptyProject(request) ? [] : jobs);
   }),
 
   // POST /v1/jobs
@@ -659,7 +669,7 @@ export const handlers = [
       return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
     }
     const all = new URL(request.url).searchParams.get("include_resolved") === "true";
-    return HttpResponse.json(mockAlerts.filter((a) => all || a.resolved_at === null));
+    return HttpResponse.json(isEmptyProject(request) ? [] : mockAlerts.filter((a) => all || a.resolved_at === null));
   }),
 
   // POST /v1/alerts/:alert_id/resolve
@@ -870,7 +880,7 @@ export const handlers = [
         out.push({ day, job, model, ...v });
       }
     }
-    return HttpResponse.json(out);
+    return HttpResponse.json(isEmptyProject(request) ? [] : out);
   }),
 
   // GET /v1/news: a few stories, one naming a model the demo project runs
@@ -1163,8 +1173,24 @@ export const handlers = [
       email: "demo@example.com",
       name: "Demo user (sample data)",
       picture_url: null,
+      ui_flags: { ...mockUiFlags },
     };
     return HttpResponse.json(user);
+  }),
+
+  // PATCH /v1/me/ui-flags: only the two first-visit flags, only true or false
+  http.patch("/v1/me/ui-flags", async ({ request }) => {
+    if (!isMockSignedIn(request)) {
+      return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
+    }
+    const body = (await request.json()) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(body)) {
+      if ((k !== "tour_seen" && k !== "first_results_seen") || typeof v !== "boolean") {
+        return HttpResponse.json({ detail: "Unknown flag or not true/false" }, { status: 422 });
+      }
+      mockUiFlags[k] = v;
+    }
+    return HttpResponse.json({ ...mockUiFlags });
   }),
 
   // POST /auth/logout
@@ -1232,6 +1258,7 @@ export const handlers = [
       retest_monthly_cap_usd: 10,
       retest_allowed: true,
       content_retention_days: 90,
+      store_tool_arguments: false,
       key_prefix: keyPrefix,
       created_at: new Date().toISOString(),
     };
@@ -1256,6 +1283,7 @@ export const handlers = [
       retest_monthly_cap_usd?: number;
       retest_allowed?: boolean;
       content_retention_days?: number;
+      store_tool_arguments?: boolean;
     };
     if (body.name !== undefined) {
       const name = body.name.trim();
@@ -1300,7 +1328,25 @@ export const handlers = [
       }
       project.content_retention_days = days;
     }
+    if (body.store_tool_arguments !== undefined) {
+      if (typeof body.store_tool_arguments !== "boolean") {
+        return HttpResponse.json({ detail: "store_tool_arguments must be true or false" }, { status: 422 });
+      }
+      project.store_tool_arguments = body.store_tool_arguments;
+    }
     return HttpResponse.json(project);
+  }),
+
+  // DELETE /v1/projects/:project_id/tool-inputs
+  http.delete("/v1/projects/:project_id/tool-inputs", async ({ request, params }) => {
+    await delay(350);
+    if (!isMockSignedIn(request)) {
+      return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
+    }
+    if (!projects.some((p) => p.project_id === String(params.project_id))) {
+      return HttpResponse.json({ detail: "Project not found" }, { status: 404 });
+    }
+    return HttpResponse.json({ runs_cleared: 12 });
   }),
 
   // DELETE /v1/projects/:project_id?confirm=<project_id>

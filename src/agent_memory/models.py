@@ -51,6 +51,8 @@ class User(Base):
     name: Mapped[str | None] = mapped_column(Text)
     picture_url: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+    # Which first-visit guides this person has seen: only tour_seen and first_results_seen, as booleans.
+    ui_flags: Mapped[dict[str, bool]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
 
 
 class Project(Base):

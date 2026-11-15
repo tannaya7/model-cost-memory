@@ -609,6 +609,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/ui-flags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Ui Flags
+         * @description Remember which first-visit guides this person has seen. Only tour_seen and first_results_seen, as
+         *     true or false; any other key or value is refused. Only the flags sent change.
+         */
+        patch: operations["patch_ui_flags_v1_me_ui_flags_patch"];
+        trace?: never;
+    };
     "/v1/models": {
         parameters: {
             query?: never;
@@ -734,6 +755,27 @@ export interface paths {
         /** New Project Key */
         post: operations["new_project_key_v1_projects__project_id__key_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/tool-inputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Tool Inputs
+         * @description Remove the stored inputs of tool calls from every run of this project. Tool names, ids, counts, costs
+         *     and everything else stay. It does not change the switch: new inputs are kept again if it is on.
+         */
+        delete: operations["delete_tool_inputs_v1_projects__project_id__tool_inputs_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1748,6 +1790,12 @@ export interface components {
             /** Retest Monthly Cap Usd */
             retest_monthly_cap_usd: number;
             /**
+             * Store Tool Arguments
+             * @description Whether this project keeps the inputs of tool calls (off by default; they can hold private data). Used only to notice an agent repeating the same step
+             * @default false
+             */
+            store_tool_arguments: boolean;
+            /**
              * Webhook Secret
              * @description Verify X-MCM-Signature on webhook payloads with it
              */
@@ -1773,6 +1821,11 @@ export interface components {
             retest_allowed?: boolean | null;
             /** Retest Monthly Cap Usd */
             retest_monthly_cap_usd?: number | null;
+            /**
+             * Store Tool Arguments
+             * @description Keep the inputs of tool calls from now on (true) or stop storing new ones (false). Already-stored inputs stay until deleted or the retention period ends
+             */
+            store_tool_arguments?: boolean | null;
             /**
              * Webhook Url
              * @description Must be https; send null to remove
@@ -2537,6 +2590,14 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** ToolInputsDeleted */
+        ToolInputsDeleted: {
+            /**
+             * Runs Cleared
+             * @description Runs whose stored tool-call inputs were removed
+             */
+            runs_cleared: number;
+        };
         /** ToolsUsageOut */
         ToolsUsageOut: {
             /**
@@ -2596,6 +2657,16 @@ export interface components {
             tokens: number;
             /** Trace Id */
             trace_id: string;
+        };
+        /**
+         * UiFlagsPatch
+         * @description Only these two true/false flags can be saved; anything else is refused.
+         */
+        UiFlagsPatch: {
+            /** First Results Seen */
+            first_results_seen?: boolean | null;
+            /** Tour Seen */
+            tour_seen?: boolean | null;
         };
         /** UsageKindsOut */
         UsageKindsOut: {
@@ -2748,6 +2819,13 @@ export interface components {
             name: string | null;
             /** Picture Url */
             picture_url: string | null;
+            /**
+             * Ui Flags
+             * @description First-visit guides this person has seen
+             */
+            ui_flags?: {
+                [key: string]: boolean;
+            };
             /**
              * User Id
              * Format: uuid
@@ -3834,6 +3912,39 @@ export interface operations {
             };
         };
     };
+    patch_ui_flags_v1_me_ui_flags_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UiFlagsPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_models_v1_models_get: {
         parameters: {
             query?: {
@@ -4124,6 +4235,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectKey"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_tool_inputs_v1_projects__project_id__tool_inputs_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolInputsDeleted"];
                 };
             };
             /** @description Validation Error */

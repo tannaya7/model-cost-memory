@@ -1,4 +1,5 @@
 /** Creating a project: name it, take its key once, put the recorder in your code, open the dashboard. */
+import { FIRST_CALL_SNIPPET } from "../features/guide/snippet";
 import { useState, type FormEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
@@ -80,12 +81,7 @@ export default function NewProject() {
     }
   };
 
-  const snippet = `from agent_memory.recorder import RunRecorder, provider_for
-
-with RunRecorder(job="invoice-extract", provider=provider_for(client.base_url)) as rec:
-    response = client.chat.completions.create(model="my-model", messages=[...])
-    rec.capture(response, prompt=prompt, model="my-model")`;
-
+  const snippet = FIRST_CALL_SNIPPET;
   return (
     <div className="min-h-screen">
       <header className="border-b border-rule">

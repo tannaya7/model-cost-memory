@@ -1755,6 +1755,12 @@
             "title": "Retest Monthly Cap Usd",
             "type": "number"
           },
+          "store_tool_arguments": {
+            "default": false,
+            "description": "Whether this project keeps the inputs of tool calls (off by default; they can hold private data). Used only to notice an agent repeating the same step",
+            "title": "Store Tool Arguments",
+            "type": "boolean"
+          },
           "webhook_secret": {
             "anyOf": [
               {
@@ -1858,6 +1864,18 @@
               }
             ],
             "title": "Retest Monthly Cap Usd"
+          },
+          "store_tool_arguments": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Keep the inputs of tool calls from now on (true) or stop storing new ones (false). Already-stored inputs stay until deleted or the retention period ends",
+            "title": "Store Tool Arguments"
           },
           "webhook_url": {
             "anyOf": [
@@ -3615,6 +3633,20 @@
         "title": "ToolCountOut",
         "type": "object"
       },
+      "ToolInputsDeleted": {
+        "properties": {
+          "runs_cleared": {
+            "description": "Runs whose stored tool-call inputs were removed",
+            "title": "Runs Cleared",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "runs_cleared"
+        ],
+        "title": "ToolInputsDeleted",
+        "type": "object"
+      },
       "ToolsUsageOut": {
         "properties": {
           "avg_tools_tokens": {
@@ -3711,6 +3743,36 @@
           "repeated_prompts"
         ],
         "title": "TraceUsageOut",
+        "type": "object"
+      },
+      "UiFlagsPatch": {
+        "additionalProperties": false,
+        "description": "Only these two true/false flags can be saved; anything else is refused.",
+        "properties": {
+          "first_results_seen": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Results Seen"
+          },
+          "tour_seen": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tour Seen"
+          }
+        },
+        "title": "UiFlagsPatch",
         "type": "object"
       },
       "UsageKindsOut": {
@@ -4068,6 +4130,14 @@
               }
             ],
             "title": "Picture Url"
+          },
+          "ui_flags": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "description": "First-visit guides this person has seen",
+            "title": "Ui Flags",
+            "type": "object"
           },
           "user_id": {
             "format": "uuid",
@@ -6701,6 +6771,48 @@
         ]
       }
     },
+    "/v1/me/ui-flags": {
+      "patch": {
+        "description": "Remember which first-visit guides this person has seen. Only tour_seen and first_results_seen, as\ntrue or false; any other key or value is refused. Only the flags sent change.",
+        "operationId": "patch_ui_flags_v1_me_ui_flags_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UiFlagsPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Ui Flags",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/v1/models": {
       "get": {
         "description": "The model catalog: price, status and shutdown date, so a retirement is seen before it bites.",
@@ -7382,6 +7494,49 @@
           }
         },
         "summary": "New Project Key",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/tool-inputs": {
+      "delete": {
+        "description": "Remove the stored inputs of tool calls from every run of this project. Tool names, ids, counts, costs\nand everything else stay. It does not change the switch: new inputs are kept again if it is on.",
+        "operationId": "delete_tool_inputs_v1_projects__project_id__tool_inputs_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolInputsDeleted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Tool Inputs",
         "tags": [
           "projects"
         ]

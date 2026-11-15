@@ -16,6 +16,8 @@ import { useProject as useProjectScope } from "../app/project";
 import { useNavigate } from "react-router-dom";
 import type { Project } from "../shared/api/types";
 import { useHealth } from "../features/health/api";
+import { useDeleteToolInputs } from "../features/projects/hooks/useToolInputs";
+import { Help } from "../ui/Help";
 import { usd } from "../ui/format";
 import { IconCheck } from "../ui/icons";
 import { Button, cx, EmptyState, Panel, PanelHeader, Pill, Skeleton } from "../ui/primitives";
@@ -27,6 +29,7 @@ const SECTIONS = [
   { id: "retests", label: "Model trials" },
   { id: "keys", label: "API keys" },
   { id: "budget", label: "Spending limit" },
+  { id: "tool-inputs", label: "Tool inputs" },
   { id: "limits", label: "Usage limits" },
   { id: "status", label: "System status" },
   { id: "danger", label: "Delete" },
@@ -259,7 +262,7 @@ export function BudgetSection({ project }: { project: Project }) {
   return (
     <Panel id="budget" className="scroll-mt-24 p-5 md:p-6">
       <PanelHeader title="Monthly spending limit" hint="Set the most you want your app's AI calls to cost each month. We warn you at 85% and 95%, and if the month looks like it will go over. We only warn: nothing is ever blocked." />
-      <p className="mt-3 text-sm text-ink">Current limit: <span className="font-semibold">{current === null ? "Not set" : `$${current.toLocaleString()} a month`}</span></p>
+      <p className="mt-3 text-sm text-ink">Current limit: <span className="font-semibold">{current === null ? "Not set" : `$${current.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(current) ? 0 : 2 })} a month`}</span></p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="flex items-center rounded-[10px] border border-rule bg-surface-2 px-3 focus-within:border-accent">
           <span className="text-sm text-muted">$</span>
@@ -272,6 +275,66 @@ export function BudgetSection({ project }: { project: Project }) {
       </div>
       {(problem || s.error) && <p role="alert" className="mt-2 text-xs text-bad">{problem ?? s.error}</p>}
       <p className="mt-3 text-xs text-muted">The spend is an estimate from your recorded calls at list prices.</p>
+    </Panel>
+  );
+}
+
+/** Off by default. When on, the project keeps the inputs of tool calls, only to spot an agent repeating a step. */
+export function ToolInputsSection({ project }: { project: Project }) {
+  const on = project.store_tool_arguments === true;
+  const patch = usePatchProject();
+  const wipe = useDeleteToolInputs();
+  const [error, setError] = useState<string | null>(null);
+  const [cleared, setCleared] = useState<number | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const toggle = async (next: boolean) => {
+    setError(null);
+    try {
+      await patch.mutateAsync({ id: project.project_id, input: { store_tool_arguments: next } });
+    } catch (e) {
+      setError(e instanceof ApiError || e instanceof Error ? e.message : "Could not save");
+    }
+  };
+  const remove = async () => {
+    setError(null);
+    setConfirming(false);
+    try {
+      setCleared((await wipe.mutateAsync(project.project_id)).runs_cleared);
+    } catch (e) {
+      setError(e instanceof ApiError || e instanceof Error ? e.message : "Could not delete");
+    }
+  };
+  return (
+    <Panel id="tool-inputs" className="scroll-mt-24 p-5 md:p-6">
+      <PanelHeader
+        title={<span className="inline-flex items-center gap-1.5">Keep the inputs of tool calls so loops are easier to spot <Help label="About tool inputs">When your agent calls a tool, the call has inputs, like the search words it used. With this on, your app can send them to us. We compare them only to notice when an agent repeats the same step. They are never used to train anything, and they are deleted with the rest of the run text after your retention period.</Help></span>}
+        hint="Your app can send the inputs of each tool call. We use them only to notice when an agent repeats the same step. This helps catch loops that the default check misses."
+      />
+      <p role="note" className="mt-3 rounded-md border border-warn/40 bg-warn/10 p-2.5 text-[13px] text-ink">
+        <span className="font-semibold">Warning:</span> tool inputs may contain private data, such as customer names, file contents or secrets. Leave this off unless you are comfortable with that being stored.
+      </p>
+      <label className="mt-3 flex items-center gap-3 text-sm text-ink">
+        <input type="checkbox" role="switch" className="h-4 w-4" checked={on} disabled={patch.isPending} onChange={(e) => void toggle(e.target.checked)} aria-label="Keep the inputs of tool calls so loops are easier to spot" />
+        <span>{patch.isPending ? "Saving…" : on ? "On: new tool inputs are stored" : "Off: tool inputs are not stored"}</span>
+      </label>
+      <p className="mt-2 text-xs text-muted">
+        {on
+          ? "Your app also has to send them (the recorder option send_tool_arguments). Turning this off stops storing new inputs; ones already stored stay until you delete them below or your retention period ends."
+          : "Turning this off stops storing new inputs. Any stored earlier stay until you delete them below or your retention period ends."}
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {confirming ? (
+          <>
+            <span className="text-sm text-ink">Delete every stored tool input for this project?</span>
+            <Button variant="danger" size="sm" onClick={() => void remove()} disabled={wipe.isPending}>Yes, delete them</Button>
+            <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>Cancel</Button>
+          </>
+        ) : (
+          <Button variant="secondary" size="sm" onClick={() => { setCleared(null); setConfirming(true); }} disabled={wipe.isPending}>{wipe.isPending ? "Deleting…" : "Delete stored tool inputs"}</Button>
+        )}
+        {cleared !== null && <span className="flex items-center gap-1 text-xs text-ok"><IconCheck size={14} /> {cleared === 0 ? "None were stored" : `Removed from ${cleared} calls`}. Tool names and counts are kept.</span>}
+      </div>
+      {error && <p role="alert" className="mt-2 text-xs text-bad">{error}</p>}
     </Panel>
   );
 }
@@ -407,6 +470,7 @@ export default function Settings() {
               <AlertsSection project={project} />
               <PrivacySection project={project} />
               <BudgetSection project={project} />
+              <ToolInputsSection project={project} />
             </>
           ) : (
             <Panel className="p-5">

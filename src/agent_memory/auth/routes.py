@@ -18,16 +18,16 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, Response
-from sqlalchemy import select
+from sqlalchemy import Text, cast, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..db import get_session
-from ..models import Project, User
+from ..models import Project, Run, User
 from ..projects import ProjectExists, create_project, rotate_key, slug_for
 from ..retention import delete_project
-from ..schemas import AuthConfig, DevLogin, ProjectCreate, ProjectCreated, ProjectKey, ProjectOut, ProjectPatch, UserOut
+from ..schemas import AuthConfig, DevLogin, ProjectCreate, ProjectCreated, ProjectKey, ProjectOut, ProjectPatch, ToolInputsDeleted, UiFlagsPatch, UserOut
 from ..alerts.notifier import retry_given_up_alerts
 from ..security import generate_webhook_secret
 from ..urls import UnsafeUrl, check_outbound
@@ -128,6 +128,17 @@ async def me(user: User = Depends(current_user)) -> UserOut:
     return UserOut.model_validate(user)
 
 
+@router.patch("/v1/me/ui-flags", response_model=UserOut, tags=["auth"])
+async def patch_ui_flags(
+    body: UiFlagsPatch, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)
+) -> UserOut:
+    """Remember which first-visit guides this person has seen. Only tour_seen and first_results_seen, as
+    true or false; any other key or value is refused. Only the flags sent change."""
+    user.ui_flags = {**(user.ui_flags or {}), **body.model_dump(exclude_none=True)}
+    await session.commit()
+    return UserOut.model_validate(user)
+
+
 def _project_out(p: Project) -> ProjectOut:
     return ProjectOut(
         project_id=p.project_id, name=p.name or p.project_id, webhook_url=p.webhook_url,
@@ -135,6 +146,7 @@ def _project_out(p: Project) -> ProjectOut:
         retest_allowed=p.retest_allowed, key_prefix=p.key_prefix, created_at=p.created_at,
         content_retention_days=p.content_retention_days,
         monthly_budget_usd=float(p.monthly_budget_usd) if p.monthly_budget_usd is not None else None,
+        store_tool_arguments=bool(p.store_tool_arguments),
     )
 
 
@@ -196,8 +208,26 @@ async def patch_project(
         project.retest_allowed = body.retest_allowed
     if "content_retention_days" in sent and body.content_retention_days is not None:
         project.content_retention_days = body.content_retention_days
+    if "store_tool_arguments" in sent and body.store_tool_arguments is not None:
+        project.store_tool_arguments = body.store_tool_arguments
     await session.commit()
     return _project_out(project)
+
+
+@router.delete("/v1/projects/{project_id}/tool-inputs", response_model=ToolInputsDeleted, tags=["projects"])
+async def delete_tool_inputs(
+    project: Project = Depends(owned_project), session: AsyncSession = Depends(get_session)
+) -> ToolInputsDeleted:
+    """Remove the stored inputs of tool calls from every run of this project. Tool names, ids, counts, costs
+    and everything else stay. It does not change the switch: new inputs are kept again if it is on."""
+    rows = (await session.execute(
+        select(Run).where(Run.project_id == project.project_id, Run.tool_calls.is_not(None),
+                          cast(Run.tool_calls, Text).like('%"arguments"%')))).scalars().all()
+    for run in rows:
+        run.tool_calls = [{k: v for k, v in c.items() if k != "arguments"} if isinstance(c, dict) else c
+                          for c in run.tool_calls]
+    await session.commit()
+    return ToolInputsDeleted(runs_cleared=len(rows))
 
 
 @router.delete("/v1/projects/{project_id}", status_code=204, tags=["projects"])

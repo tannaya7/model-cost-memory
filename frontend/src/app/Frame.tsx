@@ -27,7 +27,11 @@ import {
   IconSidebar,
 } from "../ui/icons";
 import { ThemeToggle } from "../ui/ThemeToggle";
+import { TourHost } from "../features/guide/TourHost";
 import { cx, Skeleton } from "../ui/primitives";
+
+/** Which part of the tour points at which item (the tour looks for data-tour="..."). */
+const TOUR_TARGET: Record<string, string> = { Overview: "overview", "AI tasks": "tasks", Compare: "compare", Activity: "activity", Settings: "settings" };
 
 const NAV = [
   { to: "/", label: "Overview", icon: IconOverview, end: true },
@@ -125,7 +129,7 @@ function ProjectSwitcher() {
   );
 }
 
-function AccountMenu() {
+function AccountMenu({ onTour }: { onTour: () => void }) {
   const p = useP();
   const { mode } = useProject();
   const { data: user } = useMe();
@@ -170,6 +174,18 @@ function AccountMenu() {
                 {item.label}
               </Link>
             ))}
+            {user && mode === "owned" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onTour();
+                }}
+                className="block w-full rounded-[10px] px-3 py-2 text-left text-sm text-dim hover:bg-surface-3 hover:text-ink"
+              >
+                Take the tour again
+              </button>
+            )}
             {user && (
               <>
                 <div className="my-1 h-px bg-rule" />
@@ -389,7 +405,7 @@ function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle
 
         <nav aria-label="Main" className="flex flex-col gap-1">
           {nav.map(({ to, label, icon: Icon, end }) => (
-            <NavLink key={to} to={to} end={end} title={collapsed ? label : undefined} className={({ isActive }) => item(isActive)}>
+            <NavLink key={to} to={to} end={end} data-tour={TOUR_TARGET[label]} title={collapsed ? label : undefined} className={({ isActive }) => item(isActive)}>
               {({ isActive }) => (
                 <>
                   {isActive && <ActiveMark />}
@@ -411,7 +427,7 @@ function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle
         {!collapsed && <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">This project</p>}
         <nav aria-label="Project" className="flex flex-col gap-1">
           {project.map(({ to, label, icon: Icon, match }) => (
-            <NavLink key={to} to={to} title={collapsed ? label : undefined} className={({ isActive }) => item(match(isActive))}>
+            <NavLink key={to} to={to} data-tour={TOUR_TARGET[label]} title={collapsed ? label : undefined} className={({ isActive }) => item(match(isActive))}>
               {({ isActive }) => (
                 <>
                   {match(isActive) && <ActiveMark />}
@@ -460,6 +476,7 @@ export function Frame() {
   const { count: alerts } = useAlertsCount();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [tour, setTour] = useState(false);
   const toggle = () => {
     const next = !collapsed;
     setCollapsed(next);
@@ -529,7 +546,7 @@ export function Frame() {
                   <IconBell size={17} />
                   {alerts > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-bad ring-2 ring-surface" />}
                 </Link>
-                <AccountMenu />
+                <AccountMenu onTour={() => setTour(true)} />
               </div>
             </div>
           </header>
@@ -561,6 +578,7 @@ export function Frame() {
                 <NavLink
                   to={to}
                   end={end}
+                  data-tour={TOUR_TARGET[label]}
                   className={({ isActive }) => cx("flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium", isActive ? "text-accent" : "text-muted")}
                 >
                   <span className="relative">
@@ -575,6 +593,7 @@ export function Frame() {
         </nav>
 
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+        <TourHost replay={tour} onReplayDone={() => setTour(false)} />
       </div>
     </MotionConfig>
   );

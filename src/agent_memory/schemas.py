@@ -13,7 +13,7 @@ from typing import Literal
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 CheckKind = Literal["ANSWER_KEY", "TEST_COMMAND", "SCHEMA", "LATE_LABEL"]
 Outcome = Literal["PASS", "FAIL", "UNKNOWN"]
@@ -498,6 +498,16 @@ class UserOut(Model):
     email: str
     name: str | None
     picture_url: str | None
+    ui_flags: dict[str, bool] = Field(default_factory=dict, description="First-visit guides this person has seen")
+
+
+class UiFlagsPatch(Model):
+    """Only these two true/false flags can be saved; anything else is refused."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tour_seen: StrictBool | None = None
+    first_results_seen: StrictBool | None = None
 
 
 class AuthConfig(Model):
@@ -524,6 +534,9 @@ class ProjectOut(Model):
     monthly_budget_usd: float | None = Field(
         default=None, description="Optional monthly AI spend budget in USD. Soft: alerts at 85% and 95% of actual "
                                   "spend and when the month is projected to go over; nothing is ever blocked")
+    store_tool_arguments: bool = Field(
+        default=False, description="Whether this project keeps the inputs of tool calls (off by default; they can "
+                                   "hold private data). Used only to notice an agent repeating the same step")
     created_at: datetime
 
 
@@ -548,6 +561,13 @@ class ProjectPatch(Model):
     content_retention_days: int | None = Field(
         default=None, ge=1, le=3650,
         description="Days a run keeps its prompt, output, tool calls and answer key (1 to 3650)")
+    store_tool_arguments: bool | None = Field(
+        default=None, description="Keep the inputs of tool calls from now on (true) or stop storing new ones (false). "
+                                  "Already-stored inputs stay until deleted or the retention period ends")
+
+
+class ToolInputsDeleted(Model):
+    runs_cleared: int = Field(description="Runs whose stored tool-call inputs were removed")
 
 
 class ProjectKey(Model):

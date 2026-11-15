@@ -6,6 +6,7 @@ import { useSearchParams } from "react-router-dom";
 import { useProject } from "../app/project";
 import { useDaily } from "../features/insights/api/dailyApi";
 import { useJobs } from "../features/jobs/hooks/useJobs";
+import { FirstResults } from "../features/guide/FirstResults";
 import { IconCalendar, IconDownload, IconWidgets } from "../ui/icons";
 import { Button, cx, EmptyState, ErrorState } from "../ui/primitives";
 import { useAllRecommendations } from "./shared";
@@ -16,7 +17,7 @@ import { TokenUsage } from "./overview/TokenUsage";
 import { TokensWent } from "./overview/TokensWent";
 import { AgentsView } from "./overview/AgentsView";
 import { WidgetDrawer } from "./overview/WidgetDrawer";
-import { Attention, BusiestDay, JobsTable, KpiCards, News, PassGauge, Pipeline, Savings, SpendByJob, SpendSplit, SpendTrend, type Ctx, type ShellProps } from "./overview/widgets";
+import { floorOf, Attention, BusiestDay, JobsTable, KpiCards, News, PassGauge, Pipeline, Savings, SpendByJob, SpendSplit, SpendTrend, type Ctx, type ShellProps } from "./overview/widgets";
 
 const PERIODS = [7, 30, 90] as const;
 const SPAN = { 1: "lg:col-span-1", 2: "lg:col-span-2", 3: "lg:col-span-3" } as const;
@@ -116,6 +117,8 @@ export default function Overview() {
           </Button>
         </div>
       </motion.div>
+
+      <FirstResults floor={floorOf(byJob)} />
 
       {layout.ids.length === 0 ? (
         <EmptyState icon={<IconWidgets size={18} />} title="Your overview is empty" hint="Widgets are the cards that show your spending and answer quality. Choose Add widget to pick the ones you want." action={<Button variant="primary" onClick={() => setDrawer(true)}>Add widget</Button>} />

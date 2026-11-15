@@ -26,7 +26,7 @@ const str = (v: unknown) => (typeof v === "string" && v ? v : null);
 const money = (v: unknown) => {
   const n = num(v);
   if (n === null) return null;
-  return `$${n.toLocaleString("en-US", { maximumFractionDigits: n < 100 ? 2 : 0 })}`;
+  return `$${n.toLocaleString("en-US", { minimumFractionDigits: n < 100 && !Number.isInteger(n) ? 2 : 0, maximumFractionDigits: n < 100 ? 2 : 0 })}`;
 };
 const tokens = (v: unknown) => {
   const n = num(v);

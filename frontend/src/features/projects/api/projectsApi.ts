@@ -50,3 +50,11 @@ export function deleteProject(id: string): Promise<null> {
     { method: "DELETE" },
   );
 }
+
+/** Removes the stored inputs of tool calls from every run. Resolves to how many runs were cleared. */
+export function deleteToolInputs(id: string): Promise<{ runs_cleared: number }> {
+  return apiFetch<{ runs_cleared: number }>(
+    `/v1/projects/${encodeURIComponent(id)}/tool-inputs`,
+    { method: "DELETE" },
+  );
+}

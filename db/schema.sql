@@ -15,7 +15,8 @@ CREATE TABLE users (                                -- Google sign-in; no passwo
     email       TEXT NOT NULL,
     name        TEXT,
     picture_url TEXT,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ui_flags    JSONB NOT NULL DEFAULT '{}'::jsonb      -- first-visit guides seen: only tour_seen, first_results_seen
 );
 
 CREATE TABLE projects (

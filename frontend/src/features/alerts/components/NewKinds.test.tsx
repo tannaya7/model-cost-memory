@@ -56,6 +56,12 @@ describe("alerts about use and spending", () => {
     expect(screen.getByRole("button", { name: "Mark resolved" })).toBeInTheDocument();
   });
 
+  it("writes a small budget with two decimals, not $1.1 or $0.8", () => {
+    const a = alert("BUDGET", { level: "85", spent_usd: 0.95, budget_usd: 1.1, projected_usd: 1.9 }, "You have used 86% of your limit.");
+    renderWithProviders(<WithProject id="acme"><AlertItemCard item={{ kind: "regression", alert: a, timestamp: a.created_at }} /></WithProject>);
+    expect(screen.getByText("Spent $0.95 of your $1.10 limit.")).toBeInTheDocument();
+  });
+
   it("lists an open new-kind alert under Needs your attention on the Overview", async () => {
     stubApi({
       "/v1/alerts": [cases[1].a],
