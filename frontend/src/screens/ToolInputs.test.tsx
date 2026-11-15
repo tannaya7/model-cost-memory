@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/render";
 import { WithProject } from "../app/project";
 import type { Project } from "../shared/api/types";
-import { ToolInputsSection } from "./Settings";
+import { KeysSection, ToolInputsSection } from "./Settings";
 import { AgentsView } from "./overview/AgentsView";
 import type { Ctx, ShellProps } from "./overview/widgets";
 
@@ -122,5 +122,21 @@ describe("possible-loop hint", () => {
     show();
     await screen.findByText(/Possible loop:/);
     expect(screen.queryByRole("link", { name: /turn on keeping/ })).toBeNull();
+  });
+});
+
+describe("Settings: API keys box", () => {
+  const proj = { project_id: "acme", name: "Acme", key_prefix: "mcm_live_ab" } as unknown as Project;
+  it("hides the paste-a-key box for a signed-in owner", () => {
+    renderWithProviders(<WithProject id="acme"><KeysSection project={proj} mode="owned" /></WithProject>);
+    expect(screen.getByText(/Live key/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reset to demo key" })).not.toBeInTheDocument();
+  });
+  it("keeps it for a project-key visitor and the public demo", () => {
+    for (const mode of ["key", "demo"] as const) {
+      const { unmount } = renderWithProviders(<WithProject id={mode}><KeysSection project={null} mode={mode} /></WithProject>);
+      expect(screen.getByRole("button", { name: "Reset to demo key" })).toBeInTheDocument();
+      unmount();
+    }
   });
 });

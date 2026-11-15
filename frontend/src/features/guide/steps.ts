@@ -53,7 +53,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: "settings",
     title: "Settings",
-    body: "Set a monthly spending limit here, so a mistake in your code cannot run up a big bill. You can also change your alerts and keys.",
+    body: "Set your limits here, so a mistake in your code cannot use up more than you planned. You can also change your alerts and keys.",
     later: "Nothing is limited until you set one.",
     target: "settings",
   },

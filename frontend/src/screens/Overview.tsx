@@ -10,6 +10,7 @@ import { FirstResults } from "../features/guide/FirstResults";
 import { IconCalendar, IconDownload, IconWidgets } from "../ui/icons";
 import { Button, cx, EmptyState, ErrorState } from "../ui/primitives";
 import { useAllRecommendations } from "./shared";
+import { useBillingMode } from "../features/projects/hooks/useBillingMode";
 import { useLayout, WIDGETS, type WidgetId } from "./overview/layout";
 import { periods, rangeLabel, toCsv } from "./overview/metrics";
 import { MonthProjection, UnitCost, WastedSpend } from "./overview/moneyWidgets";
@@ -20,6 +21,8 @@ import { WidgetDrawer } from "./overview/WidgetDrawer";
 import { floorOf, Attention, BusiestDay, JobsTable, KpiCards, News, PassGauge, Pipeline, Savings, SpendByJob, SpendSplit, SpendTrend, type Ctx, type ShellProps } from "./overview/widgets";
 
 const PERIODS = [7, 30, 90] as const;
+/** A flat fee has no bill to project, no money wasted and no unit price, so these are left out for a subscription. */
+const BILL_WIDGETS: WidgetId[] = ["projection", "wasted-spend", "unit-cost", "spend-by-job"];
 const SPAN = { 1: "lg:col-span-1", 2: "lg:col-span-2", 3: "lg:col-span-3" } as const;
 
 function Widget({ id, ctx, shell }: { id: WidgetId; ctx: Ctx; shell: ShellProps }) {
@@ -68,6 +71,7 @@ export default function Overview() {
   const days = (PERIODS as readonly number[]).includes(asked) ? asked : 30;
   const [drawer, setDrawer] = useState(false);
   const layout = useLayout(project);
+  const { mode: billing } = useBillingMode();
 
   const jobsQuery = useJobs();
   const { byJob, isPending: recsPending } = useAllRecommendations(jobsQuery.data);
@@ -77,7 +81,7 @@ export default function Overview() {
 
   if (jobsQuery.isError && !jobsQuery.data) return <ErrorState error={jobsQuery.error} onRetry={() => jobsQuery.refetch()} />;
 
-  const ctx: Ctx = { days, points, cur, prev, dailyPending: daily.isPending, jobs: jobsQuery.data, jobsPending: jobsQuery.isPending, byJob, recsPending };
+  const ctx: Ctx = { days, points, cur, prev, dailyPending: daily.isPending, jobs: jobsQuery.data, jobsPending: jobsQuery.isPending, byJob, recsPending, billing };
 
   const exportCsv = () => {
     const url = URL.createObjectURL(new Blob([toCsv(cur)], { type: "text/csv" }));
@@ -93,7 +97,7 @@ export default function Overview() {
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[28px] font-semibold tracking-tight text-ink">Overview</h1>
-          <p className="mt-0.5 text-sm text-dim">What your app spends on AI, how often the answers are correct, and what you could change to save money. Each card below explains itself.</p>
+          <p className="mt-0.5 text-sm text-dim">{billing === "subscription" ? "How much AI your app uses, how often the answers are correct, and what you could change to make your allowance last longer. Each card below explains itself." : "What your app spends on AI, how often the answers are correct, and what you could change to save money. Each card below explains itself."}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-stretch overflow-hidden rounded-[11px] border border-rule bg-surface text-sm shadow-sm">
@@ -125,7 +129,7 @@ export default function Overview() {
       ) : (
         <div className="grid grid-flow-row-dense grid-cols-1 gap-4 lg:grid-cols-3">
           <AnimatePresence initial={false}>
-            {layout.ids.map((id, i) => (
+            {layout.ids.filter((id) => billing !== "subscription" || !BILL_WIDGETS.includes(id)).map((id, i, shown) => (
               <motion.div
                 key={id}
                 layout
@@ -138,7 +142,7 @@ export default function Overview() {
                 <Widget
                   id={id}
                   ctx={ctx}
-                  shell={{ id, first: i === 0, last: i === layout.ids.length - 1, onMove: (by) => layout.move(id, by), onRemove: () => layout.remove(id) }}
+                  shell={{ id, first: i === 0, last: i === shown.length - 1, onMove: (by) => layout.move(id, by), onRemove: () => layout.remove(id) }}
                 />
               </motion.div>
             ))}

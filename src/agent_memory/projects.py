@@ -42,6 +42,7 @@ async def create_project(
     webhook_url: str | None = None,
     retest_monthly_cap_usd: Decimal | float = 10,
     store_tool_arguments: bool = False,
+    billing_mode: str = "per_use",
     name: str | None = None,
     owner_user_id=None,
 ) -> tuple[Project, str]:
@@ -51,6 +52,7 @@ async def create_project(
     project = Project(
         project_id=project_id, webhook_url=webhook_url, name=name or project_id, owner_user_id=owner_user_id,
         retest_monthly_cap_usd=Decimal(str(retest_monthly_cap_usd)), store_tool_arguments=store_tool_arguments,
+        billing_mode=billing_mode,
         webhook_secret=generate_webhook_secret(),
     )
     key = rotate_key(project)

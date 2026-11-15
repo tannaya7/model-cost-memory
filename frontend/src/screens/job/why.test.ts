@@ -12,7 +12,7 @@ describe("buildWhy", () => {
     expect(out).toMatch(/What we looked at: 1,?084 checked answers/);
     expect(out).toMatch(/acme-mini got .* of answers correct.* per correct answer instead of/);
     expect(out).toMatch(/save about \$300/);
-    expect(out).toMatch(/between 1\.0 and 9\.0/);
+    expect(out).toMatch(/could be 1 to 9 more/);
     expect(out).toMatch(/Nothing changes until you decide/);
   });
 

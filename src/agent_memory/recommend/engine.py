@@ -468,13 +468,19 @@ async def recommend(
         switch_confidence=settings.switch_confidence, advised=advised,
     )
 
-    runs_per_month = (
+    # The monthly volume is the calls that ran on the model in use, not every call of the job: calls on
+    # the cheaper candidate itself are not spend the switch would change.
+    per_model = (
         await session.execute(
-            select(func.count()).select_from(Run)
+            select(Run.model, Run.model_version, Run.effort, func.count())
             .where(Run.job_id == job.job_id, Run.run_kind == "PRODUCTION", Run.created_at > now - timedelta(days=30),
                    Run.created_at <= now)
+            .group_by(Run.model, Run.model_version, Run.effort)
         )
-    ).scalar_one()
+    ).all()
+    runs_per_month = sum(
+        int(n) for m, v, e, n in per_model if option_name(family_key(m, v), e) == current_model
+    )
 
     shown = {m.model for m in (decision.recommended, decision.current) if m is not None}
     shown_versions = [v for name in shown for v in families[name].versions] if shown else []

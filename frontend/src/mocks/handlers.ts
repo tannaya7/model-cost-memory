@@ -73,6 +73,7 @@ const projects: Project[] = [
     retest_allowed: true,
     content_retention_days: 90,
     store_tool_arguments: false,
+    billing_mode: "per_use",
     key_prefix: "mcm_live_prod",
     created_at: "2026-09-01T00:00:00Z",
   },
@@ -85,8 +86,35 @@ const projects: Project[] = [
     retest_allowed: false,
     content_retention_days: 90,
     store_tool_arguments: false,
+    billing_mode: "subscription",
     key_prefix: "mcm_live_stag",
     created_at: "2026-09-15T00:00:00Z",
+  },
+  {
+    project_id: "00000000-0000-0000-0000-000000000003",
+    name: "research",
+    webhook_url: null,
+    webhook_secret: "whsec_mock_secret",
+    retest_monthly_cap_usd: 10,
+    retest_allowed: true,
+    content_retention_days: 90,
+    store_tool_arguments: false,
+    billing_mode: "both",
+    key_prefix: "mcm_live_rese",
+    created_at: "2026-10-01T00:00:00Z",
+  },
+  {
+    project_id: "00000000-0000-0000-0000-000000000004",
+    name: "assistant",
+    webhook_url: null,
+    webhook_secret: "whsec_mock_secret",
+    retest_monthly_cap_usd: 10,
+    retest_allowed: true,
+    content_retention_days: 90,
+    store_tool_arguments: false,
+    billing_mode: "subscription",
+    key_prefix: "mcm_live_assi",
+    created_at: "2026-10-05T00:00:00Z",
   },
 ];
 
@@ -796,6 +824,46 @@ export const handlers = [
     });
   }),
 
+  // GET /v1/insights/prompt-versions: one task's prompt versions side by side.
+  http.get("/v1/insights/prompt-versions", async ({ request }) => {
+    await delay(250);
+    const url = new URL(request.url);
+    const job = url.searchParams.get("job") ?? "";
+    const days = Number(url.searchParams.get("days") ?? 30);
+    const v = (label: string, kind: "tagged" | "detected", from: number, to: number, o: Record<string, unknown>) => ({
+      label, kind, first_seen: new Date(Date.now() - from * 86_400_000).toISOString(), last_seen: new Date(Date.now() - to * 86_400_000).toISOString(),
+      calls: 0, typical_tokens_in: 0, typical_tokens_out: 0, cache_read_share: null, priced_calls: 0, unpriced_calls: 0, cost_per_call: null,
+      checked: 0, correct_rate: null, rate_low: null, rate_high: null, start_preview: null, ...o,
+    });
+    if (job === "receipt-scan") {
+      return HttpResponse.json({
+        job, days, source: "tagged", reason: null,
+        versions: [
+          v("Version v1", "tagged", 28, 1, { calls: 410, typical_tokens_in: 1840, typical_tokens_out: 210, cache_read_share: 0.41, priced_calls: 410, cost_per_call: 0.0123, checked: 120, correct_rate: 0.93, rate_low: 0.87, rate_high: 0.96 }),
+          v("Version v2", "tagged", 20, 0, { calls: 230, typical_tokens_in: 1250, typical_tokens_out: 205, cache_read_share: 0.12, priced_calls: 190, unpriced_calls: 40, cost_per_call: 0.0118, checked: 75, correct_rate: 0.92, rate_low: 0.84, rate_high: 0.96 }),
+        ],
+        comparison: {
+          older: "Version v1", newer: "Version v2", side_by_side: true,
+          summary: "Version v2 sends about 32% fewer input tokens than Version v1. It gets back about the same output tokens. The cached share went down from 41% to 12%. The list-price cost per call is about the same. Correct answers look about the same, but only 75 were checked.",
+        },
+      });
+    }
+    if (job === "invoice-extract") {
+      return HttpResponse.json({
+        job, days, source: "detected", reason: null,
+        versions: [
+          v("Detected version 1", "detected", 29, 12, { calls: 1500, typical_tokens_in: 1900, typical_tokens_out: 140, cache_read_share: 0, priced_calls: 1500, cost_per_call: 0.0061, checked: 18, start_preview: "You are an accounting assistant. Read the invoice below and return the vendor, invoice number, date and total as JSON." }),
+          v("Detected version 2", "detected", 12, 0, { calls: 1340, typical_tokens_in: 2350, typical_tokens_out: 190, cache_read_share: 0, priced_calls: 1340, cost_per_call: 0.0079, checked: 14, start_preview: "You are an accounting assistant. Read the invoice carefully, think step by step, then return the vendor, invoice number, date and total as JSON." }),
+        ],
+        comparison: {
+          older: "Detected version 1", newer: "Detected version 2", side_by_side: false,
+          summary: "Detected version 2 sends about 24% more input tokens than Detected version 1. It gets back about 36% more output tokens. The list-price cost per call is about 30% higher. There are not enough checked answers yet to compare correct answers.",
+        },
+      });
+    }
+    return HttpResponse.json({ job, days, source: "none", reason: "no_change", versions: [], comparison: null });
+  }),
+
   // GET /v1/insights/prompts: the prompts that use the most tokens, and how much of each is the same every call.
   http.get("/v1/insights/prompts", async ({ request }) => {
     await delay(250);
@@ -1240,8 +1308,11 @@ export const handlers = [
     if (!isMockSignedIn(request)) {
       return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
     }
-    const body = (await request.json().catch(() => ({}))) as { name?: string };
+    const body = (await request.json().catch(() => ({}))) as { name?: string; billing_mode?: string };
     const name = (body.name || "").trim();
+    if (body.billing_mode !== undefined && !["per_use", "subscription", "both"].includes(body.billing_mode)) {
+      return HttpResponse.json({ detail: "billing_mode must be per_use, subscription or both" }, { status: 422 });
+    }
     if (name.length < 1 || name.length > 60) {
       return HttpResponse.json(
         { detail: "Name must be between 1 and 60 characters" },
@@ -1259,6 +1330,7 @@ export const handlers = [
       retest_allowed: true,
       content_retention_days: 90,
       store_tool_arguments: false,
+      billing_mode: (body.billing_mode as Project["billing_mode"]) ?? "per_use",
       key_prefix: keyPrefix,
       created_at: new Date().toISOString(),
     };
@@ -1284,6 +1356,7 @@ export const handlers = [
       retest_allowed?: boolean;
       content_retention_days?: number;
       store_tool_arguments?: boolean;
+      billing_mode?: string | null;
     };
     if (body.name !== undefined) {
       const name = body.name.trim();
@@ -1333,6 +1406,12 @@ export const handlers = [
         return HttpResponse.json({ detail: "store_tool_arguments must be true or false" }, { status: 422 });
       }
       project.store_tool_arguments = body.store_tool_arguments;
+    }
+    if (body.billing_mode !== undefined && body.billing_mode !== null) {
+      if (!["per_use", "subscription", "both"].includes(body.billing_mode)) {
+        return HttpResponse.json({ detail: "billing_mode must be per_use, subscription or both" }, { status: 422 });
+      }
+      project.billing_mode = body.billing_mode as Project["billing_mode"];
     }
     return HttpResponse.json(project);
   }),

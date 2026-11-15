@@ -60,12 +60,14 @@ class Project(Base):
     __table_args__ = (
         Index("idx_projects_owner", "owner_user_id"),
         CheckConstraint("content_retention_days BETWEEN 1 AND 3650", name="projects_retention_check"),
+        CheckConstraint("billing_mode IN ('per_use','subscription','both')", name="projects_billing_mode_check"),
         CheckConstraint("monthly_budget_usd IS NULL OR monthly_budget_usd > 0", name="projects_budget_check"),
     )
 
     project_id: Mapped[str] = mapped_column(Text, primary_key=True)
     api_key_hash: Mapped[str] = mapped_column(Text)  # the key itself is shown once, never stored
     webhook_url: Mapped[str | None] = mapped_column(Text)
+    billing_mode: Mapped[str] = mapped_column(Text, server_default=text("'per_use'"))  # (0021)
     store_tool_arguments: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))  # opt-in
     retest_monthly_cap_usd: Mapped[Decimal] = mapped_column(
         Numeric(8, 2), server_default=text("10")

@@ -23,6 +23,8 @@ CREATE TABLE projects (
     project_id    TEXT PRIMARY KEY,
     api_key_hash  TEXT NOT NULL,                    -- the key itself is shown once, never stored
     webhook_url   TEXT,                             -- regression alerts; optional
+    billing_mode  TEXT NOT NULL DEFAULT 'per_use'   -- how the project pays for AI (0021)
+        CONSTRAINT projects_billing_mode_check CHECK (billing_mode IN ('per_use','subscription','both')),
     store_tool_arguments BOOLEAN NOT NULL DEFAULT false,  -- opt in to keeping tool-call arguments
     retest_monthly_cap_usd NUMERIC(8,2) NOT NULL DEFAULT 10,
     webhook_secret TEXT,                            -- signs webhook payloads (HMAC-SHA256)

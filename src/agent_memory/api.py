@@ -30,6 +30,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from . import __version__, ingest
 from .db import dispose_engine, get_session
 from .insights.agents import agent_insights
+from .insights.prompt_versions import prompt_versions
 from .insights.prompts import prompt_insights
 from .insights.service import daily as insights_daily
 from .insights.service import job_insights, spend_by_job
@@ -78,8 +79,11 @@ from .schemas import (
     ModelPage,
     ModelRef,
     ModelVersionSeen,
+    PromptComparisonOut,
     PromptGroupOut,
     PromptsOut,
+    PromptVersionOut,
+    PromptVersionsOut,
     ProviderKeyIn,
     ProviderKeyOut,
     RecommendationEvidence,
@@ -653,6 +657,26 @@ async def get_prompt_insights(
     found = await prompt_insights(session, project.project_id, days=days, job=job, limit=limit)
     return PromptsOut(
         days=found.days, total_tokens=found.total_tokens, groups=[PromptGroupOut(**vars(g)) for g in found.groups]
+    )
+
+
+@app.get("/v1/insights/prompt-versions", response_model=PromptVersionsOut, tags=["insights"])
+async def get_prompt_versions(
+    job: str = Query(max_length=200, description="The job to compare prompt versions for"),
+    days: int = Query(default=30, ge=1, le=365, description="How many days back"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> PromptVersionsOut:
+    """One job's prompt versions side by side: calls, tokens, cached share, list-price cost and checked answers.
+    Versions are the `prompt_version` values you sent, or, when you sent none, detected from where the start of
+    the stored prompt text changed and stayed changed. Production runs only. Shows what changed, not why."""
+    found = await prompt_versions(session, project.project_id, job, days=days)
+    if found is None:
+        raise HTTPException(404, f"No job named '{job}'")
+    return PromptVersionsOut(
+        job=job, days=days, source=found.source, reason=found.reason,
+        versions=[PromptVersionOut(**vars(v)) for v in found.versions],
+        comparison=PromptComparisonOut(**vars(found.comparison)) if found.comparison else None,
     )
 
 

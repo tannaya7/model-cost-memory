@@ -18,6 +18,8 @@ import type { Project } from "../shared/api/types";
 import { useHealth } from "../features/health/api";
 import { useDeleteToolInputs } from "../features/projects/hooks/useToolInputs";
 import { Help } from "../ui/Help";
+import { BillingChoice } from "../features/projects/components/BillingChoice";
+import type { BillingMode } from "../features/projects/hooks/useBillingMode";
 import { usd } from "../ui/format";
 import { IconCheck } from "../ui/icons";
 import { Button, cx, EmptyState, Panel, PanelHeader, Pill, Skeleton } from "../ui/primitives";
@@ -28,6 +30,7 @@ const SECTIONS = [
   { id: "privacy", label: "Data kept" },
   { id: "retests", label: "Model trials" },
   { id: "keys", label: "API keys" },
+  { id: "billing", label: "How you pay" },
   { id: "budget", label: "Spending limit" },
   { id: "tool-inputs", label: "Tool inputs" },
   { id: "limits", label: "Usage limits" },
@@ -209,7 +212,8 @@ function RetestsSection({ project }: { project: Project | null }) {
   );
 }
 
-function KeysSection({ project }: { project: Project | null }) {
+/** The paste-a-key box is only for people working without sign-in (a project key or the public demo). */
+export function KeysSection({ project, mode }: { project: Project | null; mode: "owned" | "key" | "demo" }) {
   const regenerate = useRegenerateProjectKey();
   const [fresh, setFresh] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -235,9 +239,51 @@ function KeysSection({ project }: { project: Project | null }) {
           )}
         </div>
       )}
-      <div className="mt-5 border-t border-rule pt-5">
-        <ProjectKeySettings />
+      {mode !== "owned" && (
+        <div className="mt-5 border-t border-rule pt-5">
+          <ProjectKeySettings />
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/** How the project pays for AI. Changes only wording and which alerts fire, never a stored figure. */
+export function BillingSection({ project }: { project: Project }) {
+  const patch = usePatchProject();
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const choose = async (next: BillingMode) => {
+    setError(null);
+    setSaved(false);
+    try {
+      await patch.mutateAsync({ id: project.project_id, input: { billing_mode: next } });
+      setSaved(true);
+    } catch (e) {
+      setError(e instanceof ApiError || e instanceof Error ? e.message : "Could not save");
+    }
+  };
+  return (
+    <Panel id="billing" className="scroll-mt-24 p-5 md:p-6">
+      <PanelHeader
+        title={<span className="inline-flex items-center gap-1.5">How you pay for AI <Help label="About how you pay for AI">If you pay a flat monthly fee, a dollar figure is not your bill, so we talk about your usage allowance and how to make it last longer instead of money saved. Your recorded calls and our recommendations stay the same; only the wording and which alerts we send change.</Help></span>}
+        hint="Pick what is closest. You can change it any time."
+      />
+      <div className="mt-3">
+        <BillingChoice value={(project.billing_mode ?? "per_use") as BillingMode} onChange={(v) => void choose(v)} disabled={patch.isPending} name="settings-billing-mode" />
       </div>
+      <p className="mt-2 text-xs text-muted">{patch.isPending ? "Saving…" : saved ? "Saved." : "Nothing is recomputed when you change this."}</p>
+      {error && <p role="alert" className="mt-2 text-xs text-bad">{error}</p>}
+    </Panel>
+  );
+}
+
+/** For a subscription there is no dollar limit; the allowance windows live on the usage-limits card below. */
+function SubscriptionLimitPointer() {
+  return (
+    <Panel id="budget" className="scroll-mt-24 p-5 md:p-6">
+      <PanelHeader title="Your allowance" hint="You pay a flat fee, so there is no monthly dollar limit to set. What matters is your plan's usage allowance, for example a 5-hour session or a week, that resets." />
+      <p className="mt-3 text-sm text-dim">Add your allowance in <a href="#limits" onClick={(e) => { e.preventDefault(); document.getElementById("limits")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className="text-accent underline">Usage limits</a>, further down this page. We then estimate whether you will run out before it resets.</p>
     </Panel>
   );
 }
@@ -469,7 +515,8 @@ export default function Settings() {
               <ProjectSection project={project} />
               <AlertsSection project={project} />
               <PrivacySection project={project} />
-              <BudgetSection project={project} />
+              <BillingSection project={project} />
+              {project.billing_mode === "subscription" ? <SubscriptionLimitPointer /> : <BudgetSection project={project} />}
               <ToolInputsSection project={project} />
             </>
           ) : (
@@ -484,7 +531,7 @@ export default function Settings() {
             </Panel>
           )}
           <RetestsSection key={project?.project_id ?? "none"} project={project} />
-          <KeysSection project={project} />
+          <KeysSection project={project} mode={scope.mode} />
           <LimitsSection />
           <StatusSection />
           {project && (

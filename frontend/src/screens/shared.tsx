@@ -30,10 +30,17 @@ export function monthlySaving(rec: Recommendation | null | undefined): number {
   return Math.max(0, rec.forecast?.monthly_saving_usd ?? 0);
 }
 
-export function VerdictPill({ verdict, rec }: { verdict: Verdict; rec?: { evidence: { n_runs: number }; rules: { evidence_floor: number } } | null }) {
+/** Checked answers "so far" toward the floor. The floor applies to ONE model, so this is the best-covered
+ * model's share (progress x floor), not the total across models: two models with 12 each is 12 of 25, not 24. */
+export function evidenceSoFar(rec: { progress?: number | null; evidence: { n_runs: number }; rules: { evidence_floor: number } }): number {
+  const raw = typeof rec.progress === "number" ? rec.progress * rec.rules.evidence_floor : rec.evidence.n_runs;
+  return Math.min(Math.round(raw), rec.rules.evidence_floor);
+}
+
+export function VerdictPill({ verdict, rec }: { verdict: Verdict; rec?: { progress?: number | null; evidence: { n_runs: number }; rules: { evidence_floor: number } } | null }) {
   const v = VERDICT[verdict];
   if (verdict === "INSUFFICIENT_EVIDENCE" && rec) {
-    return <Pill tone={v.tone}>Still learning: {Math.min(Math.round(rec.evidence.n_runs), rec.rules.evidence_floor)} of {rec.rules.evidence_floor}</Pill>;
+    return <Pill tone={v.tone}>Still learning: {evidenceSoFar(rec)} of {rec.rules.evidence_floor}</Pill>;
   }
   return <Pill tone={v.tone}>{v.label}</Pill>;
 }

@@ -11,6 +11,7 @@ import { avgInputPerRun, dailySeries, hasTokens, hints, tokenPeriods, totals, ty
 import { TokensWentBody } from "../overview/TokensWent";
 import { ToolListBody } from "../overview/AgentsView";
 import { EmptyState, Panel, Skeleton } from "../../ui/primitives";
+import { PromptVersions } from "./PromptVersions";
 
 const DAYS = 30;
 const tickDay = (d: string) => shortDate(`${d}T00:00:00Z`);
@@ -87,6 +88,10 @@ export function TokensTab({ job }: { job: string }) {
         <h2 className="text-[15px] font-semibold tracking-tight text-ink">Where this task's tokens went</h2>
         <p className="mb-3 mt-0.5 text-[13px] text-dim">Tokens are the small pieces of text that AI is billed by. These are this task's prompts that use the most.</p>
         <TokensWentBody days={DAYS} job={job} limit={5} />
+      </Panel>
+
+      <Panel className="p-5">
+        <PromptVersions job={job} days={DAYS} />
       </Panel>
 
       <Panel className="p-5">

@@ -144,7 +144,9 @@ async def check_budgets(session: AsyncSession, *, now: datetime | None = None) -
     start, end = month_bounds(now)
     month = f"{now:%Y-%m}"
     raised: list[Alert] = []
-    projects = (await session.execute(select(Project).where(Project.monthly_budget_usd.is_not(None)))).scalars().all()
+    projects = (await session.execute(select(Project).where(
+        Project.monthly_budget_usd.is_not(None), Project.billing_mode != "subscription"))).scalars().all()
+    # A subscription pays a flat fee, so a dollar spending limit means nothing there: the limit is kept, no alert fires.
     for project in projects:
         budget = Decimal(project.monthly_budget_usd)
         spent = await _spend(session, project.project_id, start, now + timedelta(microseconds=1))

@@ -115,6 +115,19 @@ async def test_spend_jumping_past_95_raises_only_the_95_alert(session):
     assert [a.detail["level"] for a in await check_budgets(session, now=NOW)] == ["95"]
 
 
+async def test_a_subscription_project_gets_no_spending_limit_alerts_but_keeps_the_limit(session):
+    job = await make_job(session, budget=Decimal("100"))
+    await spend(session, job, [0], cost="99")
+    project = await session.get(Project, "acme")
+    project.billing_mode = "subscription"
+    await session.commit()
+    assert await check_budgets(session, now=NOW) == []
+    assert project.monthly_budget_usd == Decimal("100.00")  # kept, just not fired
+    project.billing_mode = "both"
+    await session.commit()
+    assert [a.detail["level"] for a in await check_budgets(session, now=NOW)] == ["95"]
+
+
 async def test_no_budget_no_alert(session):
     job = await make_job(session)
     await spend(session, job, [0], cost="9999")

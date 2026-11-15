@@ -3,6 +3,7 @@ import { useProject } from "../../app/project";
 import { MIN_CHECKED_ANSWERS } from "../../screens/compare/wilson";
 import { Button } from "../../ui/primitives";
 import { useDaily } from "../insights/api/dailyApi";
+import { useBillingMode } from "../projects/hooks/useBillingMode";
 import type { GuideFlags } from "./steps";
 import { useGuideFlags } from "./useGuideFlags";
 
@@ -13,6 +14,7 @@ export function firstResultsReady(a: { owned: boolean; flagsLoaded: boolean; fla
 
 export function FirstResults({ floor }: { floor?: number }) {
   const { mode } = useProject();
+  const { mode: billing } = useBillingMode();
   const { loaded, flags, set } = useGuideFlags();
   const daily = useDaily({ days: 90 });
   const checked = (daily.data ?? []).reduce((s, d) => s + (d.passed ?? 0) + (d.failed ?? 0), 0);
@@ -22,8 +24,8 @@ export function FirstResults({ floor }: { floor?: number }) {
       <h2 id="first-results-title" className="text-base font-semibold text-ink">Your first results are in</h2>
       <p className="mt-1 text-sm text-dim">Start here:</p>
       <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-sm text-dim">
-        <li>The Spend card is what you spent.</li>
-        <li>The Saving available card, and each AI task page, show the model we would suggest. It is a suggestion from your own checked answers. Nothing changes unless you decide.</li>
+        <li>{billing === "subscription" ? "The Usage card is how much your app used. Its list-price figure is not your bill." : "The Spend card is what you spent."}</li>
+        <li>{billing === "subscription" ? "The ways to make your allowance last longer, and each AI task page, show what we measured and the model we would suggest." : "The Saving available card, and each AI task page, show the model we would suggest."} It is a suggestion from your own checked answers. Nothing changes unless you decide.</li>
         <li>On an AI task, the range shows how sure we are. With only a few checked answers it is wide, and it narrows as more are checked.</li>
       </ul>
       <div className="mt-3">

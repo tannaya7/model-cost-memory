@@ -29,7 +29,9 @@ describe("VerdictTab", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Still learning" })).toBeInTheDocument();
     const bar = screen.getByRole("progressbar");
     expect(bar).toHaveAttribute("aria-valuemax", String(downgrade.rules.evidence_floor));
-    expect(bar).toHaveAttribute("aria-valuenow", String(Math.min(downgrade.evidence.n_runs, downgrade.rules.evidence_floor)));
+    expect(bar).toHaveAttribute("aria-valuenow", String(Math.round(0.4 * downgrade.rules.evidence_floor)));
+    // The floor is per model: the count is the best-covered model's (0.4 x 25 = 10), not the total over models.
+    expect(screen.getByText(/You have 10 so far on your best-covered model/)).toBeInTheDocument();
     expect(screen.getByText(/Not enough checked answers yet. We need at least/)).toBeInTheDocument();
   });
 

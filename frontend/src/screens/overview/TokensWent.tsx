@@ -1,4 +1,5 @@
 /** "Where your tokens went": which prompts use the most tokens, why, and what to try. Also used on each AI task's Tokens tab. */
+import { Link } from "react-router-dom";
 import { jobTitle } from "../../features/jobs/jobTitle";
 import { usePromptGroups, type PromptGroup } from "../../features/insights/api/promptsApi";
 import { count, pct } from "../../ui/format";
@@ -87,6 +88,12 @@ function GroupCard({ g }: { g: PromptGroup }) {
           We need at least {MIN_TEXT_SAMPLES} stored calls to show the split. This prompt has {g.text_samples} so far.
         </p>
       )}
+
+      <p className="mt-3 text-[13px]">
+        <Link to={`/jobs/${encodeURIComponent(g.job)}?tab=tokens#prompt-versions`} className="font-semibold text-accent-ink hover:underline">
+          Compare prompt versions of this task
+        </Link>
+      </p>
 
       {tips.length > 0 && (
         <div className="mt-3">

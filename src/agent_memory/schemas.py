@@ -367,7 +367,7 @@ class SpendOut(Model):
 class ForecastOut(Model):
     """What switching would change per month, if next month looks like the last 30 days."""
 
-    runs_per_month: int = Field(description="Production runs in the last 30 days")
+    runs_per_month: int = Field(description="Production runs in the last 30 days on the model in use (not the candidate), the volume the saving is priced on")
     monthly_saving_usd: float = Field(description="Negative means switching costs more")
     extra_failures_per_month: float = Field(description="Negative means fewer failures")
     extra_failures_low: float = Field(description="Lower end of the interval, in failures per month")
@@ -521,6 +521,9 @@ class DevLogin(Model):
     name: str | None = Field(default=None, max_length=100)
 
 
+BillingMode = Literal["per_use", "subscription", "both"]
+
+
 class ProjectOut(Model):
     project_id: str
     name: str
@@ -537,11 +540,15 @@ class ProjectOut(Model):
     store_tool_arguments: bool = Field(
         default=False, description="Whether this project keeps the inputs of tool calls (off by default; they can "
                                    "hold private data). Used only to notice an agent repeating the same step")
+    billing_mode: BillingMode = Field(
+        default="per_use", description="How this project pays for AI: per_use (each call costs money), "
+                                       "subscription (a flat fee with a usage allowance) or both")
     created_at: datetime
 
 
 class ProjectCreate(Model):
     name: str = Field(min_length=1, max_length=100)
+    billing_mode: BillingMode | None = Field(default=None, description="Optional; defaults to per_use")
 
 
 class ProjectCreated(Model):
@@ -561,6 +568,9 @@ class ProjectPatch(Model):
     content_retention_days: int | None = Field(
         default=None, ge=1, le=3650,
         description="Days a run keeps its prompt, output, tool calls and answer key (1 to 3650)")
+    billing_mode: BillingMode | None = Field(
+        default=None, description="How you pay for AI: per_use, subscription or both. Changes wording and which "
+                                  "alerts fire; no stored figure changes")
     store_tool_arguments: bool | None = Field(
         default=None, description="Keep the inputs of tool calls from now on (true) or stop storing new ones (false). "
                                   "Already-stored inputs stay until deleted or the retention period ends")
@@ -814,3 +824,38 @@ class PromptsOut(Model):
     days: int
     total_tokens: int
     groups: list[PromptGroupOut]
+
+
+class PromptVersionOut(Model):
+    label: str
+    kind: Literal["tagged", "detected", "untagged"]
+    first_seen: datetime
+    last_seen: datetime
+    calls: int
+    typical_tokens_in: float = Field(description="Median input tokens per call")
+    typical_tokens_out: float = Field(description="Median output tokens per call")
+    cache_read_share: float | None = Field(description="cache_read / (cache_read + tokens_in); null when both are 0")
+    priced_calls: int
+    unpriced_calls: int
+    cost_per_call: float | None = Field(description="List-price cost, priced calls only; null when none were priced")
+    checked: int = Field(description="Calls whose answer was checked (correct or wrong)")
+    correct_rate: float | None = Field(description="Null below 25 checked answers")
+    rate_low: float | None
+    rate_high: float | None
+    start_preview: str | None = Field(description="Detected versions only: the start of the prompt (120 characters)")
+
+
+class PromptComparisonOut(Model):
+    older: str
+    newer: str
+    side_by_side: bool = Field(description="True when the two versions' time ranges overlap")
+    summary: str = Field(description="Facts only; no verdict and no cause")
+
+
+class PromptVersionsOut(Model):
+    job: str
+    days: int
+    source: Literal["tagged", "detected", "none"]
+    reason: Literal["no_calls", "text_not_kept", "no_change", "unstable"] | None
+    versions: list[PromptVersionOut]
+    comparison: PromptComparisonOut | None

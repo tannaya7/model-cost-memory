@@ -8,6 +8,9 @@ import { ApiError } from "../shared/api/apiFetch";
 import { IconArrowRight, IconCheck, IconLogo } from "../ui/icons";
 import { Button, cx, Panel } from "../ui/primitives";
 import { ThemeToggle } from "../ui/ThemeToggle";
+import { Help } from "../ui/Help";
+import { BillingChoice } from "../features/projects/components/BillingChoice";
+import type { BillingMode } from "../features/projects/hooks/useBillingMode";
 
 const STEPS = ["Name it", "Save the key", "Record AI calls"];
 
@@ -63,6 +66,7 @@ export default function NewProject() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
+  const [billing, setBilling] = useState<BillingMode>("per_use");
   const [error, setError] = useState<string | null>(null);
   const [made, setMade] = useState<{ id: string; key: string; name: string } | null>(null);
   const [saved, setSaved] = useState(false);
@@ -73,7 +77,7 @@ export default function NewProject() {
     setError(null);
     if (!name.trim()) return setError("Give the project a name");
     try {
-      const result = await create.mutateAsync({ name: name.trim() });
+      const result = await create.mutateAsync({ name: name.trim(), billing_mode: billing });
       setMade({ id: result.project.project_id, key: result.api_key, name: result.project.name });
       setStep(1);
     } catch (err) {
@@ -112,6 +116,12 @@ export default function NewProject() {
                     placeholder="e.g. Invoice assistant"
                     className="rounded-[10px] border border-rule bg-surface-2 px-3.5 py-3 text-[15px] text-ink outline-none placeholder:text-muted focus:border-accent"
                   />
+                  <div className="mt-3 flex items-center gap-1.5 text-sm font-semibold text-dim">
+                    How do you pay for AI?
+                    <Help label="About how you pay for AI">This only changes the wording and the alerts we show. With a subscription you pay a flat fee, so we talk about your usage allowance instead of money saved. You can change it later in Settings.</Help>
+                  </div>
+                  <BillingChoice value={billing} onChange={setBilling} />
+                  <p className="text-xs text-muted">You can change this later in Settings.</p>
                   {error && <p className="text-sm text-bad">{error}</p>}
                   <div className="mt-2 flex justify-end">
                     <Button type="submit" variant="primary" disabled={create.isPending}>

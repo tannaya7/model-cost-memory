@@ -1,4 +1,5 @@
 import type { Forecast, ModelEvidence, Recommendation, Verdict } from "../../../shared/api/types";
+import { volumeWords, wrongAnswerWords } from "../../../screens/forecastText";
 import { Badge } from "../../../shared/components/Badge";
 import { Card } from "../../../shared/components/Card";
 import { CountUp } from "../../../shared/motion/CountUp";
@@ -51,14 +52,9 @@ function ModelNumbers({ label, model }: { label: string; model: ModelEvidence })
   );
 }
 
-function failuresText(n: number): string {
-  const rounded = Math.round(Math.abs(n) * 10) / 10;
-  return `${rounded} ${rounded === 1 ? "wrong answer" : "wrong answers"}`;
-}
-
-function ForecastPanel({ forecast }: { forecast: Forecast }) {
+function ForecastPanel({ forecast, model }: { forecast: Forecast; model?: string | null }) {
   const saving = forecast.monthly_saving_usd;
-  const extra = forecast.extra_failures_per_month;
+  const words = wrongAnswerWords(forecast);
   return (
     <div className="space-y-3 rounded-card border border-rule bg-bg p-4">
       <div>
@@ -67,22 +63,11 @@ function ForecastPanel({ forecast }: { forecast: Forecast }) {
           <CountUp value={Math.abs(saving)} decimals={2} prefix="$" />
           {saving >= 0 ? " a month" : " more a month"}
         </div>
-        <p className="mt-0.5 text-xs text-dim">
-          Based on {forecast.runs_per_month.toLocaleString()} AI calls in the last 30 days
-        </p>
+        <p className="mt-0.5 text-xs text-dim">{volumeWords(forecast, model).replace(/^b/, "B")}</p>
       </div>
       <div className="text-xs font-medium">
-        {Math.abs(extra) < 0.05 ? (
-          <span className="text-dim">No change in wrong answers expected</span>
-        ) : extra > 0 ? (
-          <span className="text-warn">About {failuresText(extra)} more a month</span>
-        ) : (
-          <span className="text-ok">About {failuresText(extra)} fewer a month</span>
-        )}
-        <span className="text-dim">
-          {" "}
-          (likely between {forecast.extra_failures_low.toFixed(1)} and {forecast.extra_failures_high.toFixed(1)})
-        </span>
+        <span className={forecast.extra_failures_per_month > 0 ? "text-warn" : "text-ok"}>{words.headline.replace(/^a/, "A")}</span>
+        <span className="text-dim">{" "}({words.range})</span>
       </div>
       <p className="text-xs text-dim">Estimate, not a promise. It assumes next month looks like the last 30 days.</p>
     </div>
@@ -150,7 +135,7 @@ export function RecommendationCard({ recommendation }: { recommendation: Recomme
 
       {/* Savings Forecast Panel */}
       {recommendation.forecast && (
-        <ForecastPanel forecast={recommendation.forecast} />
+        <ForecastPanel forecast={recommendation.forecast} model={recommendation.current?.model} />
       )}
 
       {/* Progress Bar for INSUFFICIENT_EVIDENCE */}

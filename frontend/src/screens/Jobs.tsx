@@ -12,14 +12,17 @@ import { useJobs } from "../features/jobs/hooks/useJobs";
 import { Sparkline } from "../ui/charts/charts";
 import { pivot } from "../ui/charts/data";
 import { count, pct, usd, type Verdict } from "../ui/format";
+import { passRateInUse, volumeWords } from "./forecastText";
 import { IconArrowRight, IconJobs, IconPlus, IconSearch } from "../ui/icons";
 import { Button, EmptyState, ErrorState, ModelName, Pill, Reveal, Segmented, Skeleton } from "../ui/primitives";
 import { monthlySaving, useAllRecommendations, VerdictPill } from "./shared";
+import { useBillingMode } from "../features/projects/hooks/useBillingMode";
 
 type Filter = "all" | "save" | "attention" | "learning";
 
 export default function Jobs() {
   const p = useP();
+  const { mode: billing } = useBillingMode();
   const jobsQuery = useJobs();
   const jobs = jobsQuery.data;
   const { byJob } = useAllRecommendations(jobs);
@@ -76,7 +79,7 @@ export default function Jobs() {
           onChange={setFilter}
           options={[
             { value: "all", label: "All", count: counts.all },
-            { value: "save", label: "Can save", count: counts.save },
+            { value: "save", label: billing === "subscription" ? "Smaller model may help" : "Can save", count: counts.save },
             { value: "attention", label: "Needs a better model", count: counts.attention },
             { value: "learning", label: "Still learning", count: counts.learning },
           ]}
@@ -110,8 +113,6 @@ export default function Jobs() {
         <ul className="flex flex-col gap-3">
           {shown.map(({ job, rec }, i) => {
             const saving = monthlySaving(rec);
-            const current = rec?.models.find((m) => m.model === rec.current?.model);
-            const target = rec?.models.find((m) => m.model === rec.recommended?.model);
             const moving = rec?.recommended && rec.current && rec.recommended.model !== rec.current.model;
             return (
               <motion.li key={job.job_id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
@@ -148,9 +149,13 @@ export default function Jobs() {
                       </span>
                     )}
                   </div>
-                  <Metric label="Correct answers" value={pct((moving ? target : current)?.weighted_pass_rate)} />
-                  <Metric label={`Spend ${period} d`} value={usd(spendByJob.get(job.name) ?? 0)} />
-                  <Metric label="Saving" value={saving > 0 ? `${usd(saving)}/mo` : "–"} good={saving > 0} />
+                  <Metric label="Correct answers, model in use" value={pct(passRateInUse(rec))} />
+                  <Metric label={billing === "subscription" ? `List price ${period} d` : `Spend ${period} d`} value={usd(spendByJob.get(job.name) ?? 0)} />
+                  {billing === "subscription" ? (
+                    <Metric label="Allowance" value={saving > 0 ? "Smaller model may help" : "–"} good={saving > 0} />
+                  ) : (
+                    <Metric label="Saving" value={saving > 0 ? `${usd(saving)}/mo` : "–"} good={saving > 0} note={saving > 0 && rec?.forecast ? volumeWords(rec.forecast, rec.current?.model) : undefined} />
+                  )}
                   <div className="hidden md:block">
                     <Sparkline values={runsByJob.get(job.name) ?? []} color="var(--series-7)" height={34} />
                   </div>
@@ -171,11 +176,12 @@ export default function Jobs() {
   );
 }
 
-function Metric({ label, value, good = false }: { label: string; value: string; good?: boolean }) {
+function Metric({ label, value, good = false, note }: { label: string; value: string; good?: boolean; note?: string }) {
   return (
     <div>
       <p className="text-[11px] uppercase tracking-wider text-muted">{label}</p>
       <p className={`tabular text-sm font-semibold ${good ? "text-ok" : "text-ink"}`}>{value}</p>
+      {note && <p className="text-[10px] leading-snug text-muted">{note}</p>}
     </div>
   );
 }

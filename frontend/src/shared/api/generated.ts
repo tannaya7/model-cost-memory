@@ -254,6 +254,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/insights/prompt-versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Prompt Versions
+         * @description One job's prompt versions side by side: calls, tokens, cached share, list-price cost and checked answers.
+         *     Versions are the `prompt_version` values you sent, or, when you sent none, detected from where the start of
+         *     the stored prompt text changed and stayed changed. Production runs only. Shows what changed, not why.
+         */
+        get: operations["get_prompt_versions_v1_insights_prompt_versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/insights/prompts": {
         parameters: {
             query?: never;
@@ -1229,7 +1251,7 @@ export interface components {
             monthly_saving_usd: number;
             /**
              * Runs Per Month
-             * @description Production runs in the last 30 days
+             * @description Production runs in the last 30 days on the model in use (not the candidate), the volume the saving is priced on
              */
             runs_per_month: number;
         };
@@ -1738,6 +1760,11 @@ export interface components {
         };
         /** ProjectCreate */
         ProjectCreate: {
+            /**
+             * Billing Mode
+             * @description Optional; defaults to per_use
+             */
+            billing_mode?: ("per_use" | "subscription" | "both") | null;
             /** Name */
             name: string;
         };
@@ -1760,6 +1787,13 @@ export interface components {
         };
         /** ProjectOut */
         ProjectOut: {
+            /**
+             * Billing Mode
+             * @description How this project pays for AI: per_use (each call costs money), subscription (a flat fee with a usage allowance) or both
+             * @default per_use
+             * @enum {string}
+             */
+            billing_mode: "per_use" | "subscription" | "both";
             /**
              * Content Retention Days
              * @description Days a run keeps its prompt, output, tool calls and answer key; the figures stay
@@ -1806,6 +1840,11 @@ export interface components {
         /** ProjectPatch */
         ProjectPatch: {
             /**
+             * Billing Mode
+             * @description How you pay for AI: per_use, subscription or both. Changes wording and which alerts fire; no stored figure changes
+             */
+            billing_mode?: ("per_use" | "subscription" | "both") | null;
+            /**
              * Content Retention Days
              * @description Days a run keeps its prompt, output, tool calls and answer key (1 to 3650)
              */
@@ -1831,6 +1870,23 @@ export interface components {
              * @description Must be https; send null to remove
              */
             webhook_url?: string | null;
+        };
+        /** PromptComparisonOut */
+        PromptComparisonOut: {
+            /** Newer */
+            newer: string;
+            /** Older */
+            older: string;
+            /**
+             * Side By Side
+             * @description True when the two versions' time ranges overlap
+             */
+            side_by_side: boolean;
+            /**
+             * Summary
+             * @description Facts only; no verdict and no cause
+             */
+            summary: string;
         };
         /** PromptGroupOut */
         PromptGroupOut: {
@@ -1890,6 +1946,88 @@ export interface components {
              * @description tokens_in + tokens_out + cache_read_tokens + cache_write_tokens
              */
             total_tokens: number;
+        };
+        /** PromptVersionOut */
+        PromptVersionOut: {
+            /**
+             * Cache Read Share
+             * @description cache_read / (cache_read + tokens_in); null when both are 0
+             */
+            cache_read_share: number | null;
+            /** Calls */
+            calls: number;
+            /**
+             * Checked
+             * @description Calls whose answer was checked (correct or wrong)
+             */
+            checked: number;
+            /**
+             * Correct Rate
+             * @description Null below 25 checked answers
+             */
+            correct_rate: number | null;
+            /**
+             * Cost Per Call
+             * @description List-price cost, priced calls only; null when none were priced
+             */
+            cost_per_call: number | null;
+            /**
+             * First Seen
+             * Format: date-time
+             */
+            first_seen: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tagged" | "detected" | "untagged";
+            /** Label */
+            label: string;
+            /**
+             * Last Seen
+             * Format: date-time
+             */
+            last_seen: string;
+            /** Priced Calls */
+            priced_calls: number;
+            /** Rate High */
+            rate_high: number | null;
+            /** Rate Low */
+            rate_low: number | null;
+            /**
+             * Start Preview
+             * @description Detected versions only: the start of the prompt (120 characters)
+             */
+            start_preview: string | null;
+            /**
+             * Typical Tokens In
+             * @description Median input tokens per call
+             */
+            typical_tokens_in: number;
+            /**
+             * Typical Tokens Out
+             * @description Median output tokens per call
+             */
+            typical_tokens_out: number;
+            /** Unpriced Calls */
+            unpriced_calls: number;
+        };
+        /** PromptVersionsOut */
+        PromptVersionsOut: {
+            comparison: components["schemas"]["PromptComparisonOut"] | null;
+            /** Days */
+            days: number;
+            /** Job */
+            job: string;
+            /** Reason */
+            reason: ("no_calls" | "text_not_kept" | "no_change" | "unstable") | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "tagged" | "detected" | "none";
+            /** Versions */
+            versions: components["schemas"]["PromptVersionOut"][];
         };
         /** PromptsOut */
         PromptsOut: {
@@ -3225,6 +3363,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DayPointOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_prompt_versions_v1_insights_prompt_versions_get: {
+        parameters: {
+            query: {
+                /** @description The job to compare prompt versions for */
+                job: string;
+                /** @description How many days back */
+                days?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptVersionsOut"];
                 };
             };
             /** @description Validation Error */

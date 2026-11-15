@@ -37,7 +37,7 @@ describe("Overview", () => {
     renderWithProviders(<Overview />);
     const hero = await screen.findByRole("heading", { level: 2, name: /You could save/ });
     expect(hero).toHaveTextContent("a month");
-    expect(screen.getByText(/can move to a cheaper model that gives just as many correct answers/)).toBeInTheDocument();
+    expect(screen.getByText(/can move to a cheaper model that gives about as many correct answers/)).toBeInTheDocument();
   });
 
   it("says every job is on the right model when nothing cheaper is proven", async () => {

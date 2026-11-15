@@ -1,6 +1,7 @@
 import type { Recommendation } from "../../shared/api/types";
 import { pct, usd } from "../../ui/format";
 import { isTooFew, TOO_FEW_LABEL, wilsonFromRate } from "../compare/wilson";
+import { volumeWords, wrongAnswerWords } from "../forecastText";
 
 export interface WhySection {
   title: string;
@@ -14,7 +15,7 @@ export const CHECK_YOURSELF = "This is based on your recent AI calls; check it o
 
 /** The reasoning behind a recommendation, in plain words. Evidence and uncertainty come first, reasons after:
  * explanations alone make people accept wrong advice, so the numbers lead. */
-export function buildWhy(rec: Recommendation): WhySection[] {
+export function buildWhy(rec: Recommendation, billing: "per_use" | "subscription" | "both" = "per_use"): WhySection[] {
   const find = (name?: string | null) => rec.models.find((m) => m.model === name);
   const cur = find(rec.current?.model);
   const to = find(rec.recommended?.model);
@@ -86,13 +87,11 @@ export function buildWhy(rec: Recommendation): WhySection[] {
   const f = rec.forecast;
   if (f && (rec.verdict === "DOWNGRADE" || rec.verdict === "SWITCH")) {
     const money = f.monthly_saving_usd >= 0 ? `save about ${usd(f.monthly_saving_usd)} a month` : `pay about ${usd(Math.abs(f.monthly_saving_usd))} more a month`;
-    const fails =
-      f.extra_failures_per_month >= 0
-        ? `about ${f.extra_failures_per_month.toFixed(1)} more wrong answers a month`
-        : `about ${Math.abs(f.extra_failures_per_month).toFixed(1)} fewer wrong answers a month`;
+    const smaller = "use a smaller model, which may use less of your allowance (we cannot say how much: providers do not publish exact rates)";
+    const w = wrongAnswerWords(f);
     out.push({
       title: "What would change",
-      text: `If you moved, you would ${money} and get ${fails} (estimated between ${f.extra_failures_low.toFixed(1)} and ${f.extra_failures_high.toFixed(1)}), based on ${n(f.runs_per_month)} AI calls a month.`,
+      text: `If you moved, you would ${billing === "subscription" ? smaller : billing === "both" ? `${money} on calls paid per use (and, on a subscription, ${smaller})` : money} and get ${w.headline} (${w.range}), ${volumeWords(f, rec.current?.model)}.`,
     });
   } else if (rec.verdict === "HOLD") {
     out.push({ title: "What would change", text: "Nothing, for now. If a cheaper or better model is proven later, we will tell you." });

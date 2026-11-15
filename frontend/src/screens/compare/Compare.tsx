@@ -1,6 +1,7 @@
 /** Compare: which model could do a job for less, and which are only worth testing. Filters live in the
  * address, so a link reproduces the view. Measured figures come from checked runs; anything about a model
  * the job has not run is an estimate and says so. */
+import { daysWord, isRoughMonth, MIN_DAYS_FOR_MONTH } from "../forecastText";
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -20,6 +21,7 @@ import { MIN_CHECKED_ANSWERS, TOO_FEW_LABEL, UNTESTED_LABEL } from "./wilson";
 import { Help } from "../../ui/Help";
 import { NotEnoughData } from "../../ui/NotEnoughData";
 import { modelLink } from "./profile/modelLinks";
+import { useBillingMode } from "../../features/projects/hooks/useBillingMode";
 import { ProfileSuggestPanel } from "./profile/ProfileSuggestPanel";
 import type { ProfileUsage } from "./profile/types";
 import { suggestForCheckedJob, type Suggestion } from "./suggest";
@@ -68,8 +70,9 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
   );
 }
 
-function SuggestionCard({ s, job }: { s: Suggestion; job: string }) {
+function SuggestionCard({ s, job, rough }: { s: Suggestion; job: string; rough: boolean }) {
   const p = useP();
+  const { mode: billing } = useBillingMode();
   const link = modelLink(s.model);
   return (
     <li className="panel flex flex-col gap-2 p-4">
@@ -81,7 +84,7 @@ function SuggestionCard({ s, job }: { s: Suggestion; job: string }) {
       <p className="text-sm text-dim">{s.reason}</p>
       <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-dim">
         <div>
-          <dt className="inline text-muted">{s.evidence === "estimate" ? "Estimated a month: " : "A month: "}</dt>
+          <dt className="inline text-muted">{billing === "subscription" ? (s.evidence === "estimate" ? "Estimated worth at list prices a month (not your bill): " : "Worth at list prices a month (not your bill): ") : rough ? "Rough guess for a month (under 7 days of use): " : s.evidence === "estimate" ? "Estimated a month: " : "A month: "}</dt>
           <dd className="inline font-semibold text-ink tabular">{usd(s.monthlyCostUsd)}</dd>
         </div>
         {s.passRate !== null && (
@@ -161,6 +164,7 @@ export default function Compare() {
   const rec0 = rec.data ?? null;
   const checkedRuns = rec0?.evidence.n_runs ?? 0;
   const unchecked = !!job && !rec.isPending && job.check_kind === "LATE_LABEL" && checkedRuns === 0;
+  const rough = isRoughMonth(account.span);
   const early = account.span < 14 || checkedRuns < 100;
   const jobRuns = jobUse.runs;
   const avgTokens = jobRuns > 0 && jobUse.monthlyIn + jobUse.monthlyOut > 0 ? { in: (jobUse.monthlyIn / jobUse.monthlyRuns) || 0, out: (jobUse.monthlyOut / jobUse.monthlyRuns) || 0 } : null;
@@ -222,7 +226,7 @@ export default function Compare() {
                 onChange={(e) => set({ tokens: e.target.value.replace(/[^\d]/g, "") })}
               />
             </div>
-            <span className="font-normal text-muted">{actualTokens ? `${count(volumeTokens)} tokens a month (you use about ${count(actualTokens)} now)` : "No token counts recorded yet. Tokens are the small pieces of text AI models are billed by."}</span>
+            <span className="font-normal text-muted">{actualTokens ? (rough ? `Still learning: ${count(volumeTokens)} tokens a month is a rough guess from ${daysWord(account.span)} of use` : `${count(volumeTokens)} tokens a month (you use about ${count(actualTokens)} now)`) : "No token counts recorded yet. Tokens are the small pieces of text AI models are billed by."}</span>
           </div>
           <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
             Monthly budget (US dollars)
@@ -259,7 +263,9 @@ export default function Compare() {
       ) : (
         <p className="flex flex-wrap items-center gap-2 text-sm text-dim" data-testid="evidence-line">
           <span>
-            Based on {account.span} days of use: {count(account.runs)} AI calls, about {count(actualTokens)} tokens a month (tokens are the small pieces of text AI is billed by).
+            {rough
+              ? `Based on ${daysWord(account.span)} of use: ${count(account.runs)} AI calls. Still learning: we need ${MIN_DAYS_FOR_MONTH} days before we say what a month looks like. If these days were typical it would be a rough guess of ${count(actualTokens)} tokens a month (tokens are the small pieces of text AI is billed by).`
+              : `Based on ${daysWord(account.span)} of use: ${count(account.runs)} AI calls, about ${count(actualTokens)} tokens a month (tokens are the small pieces of text AI is billed by).`}
           </span>
           <Pill tone={early ? "warn" : "good"}>{early ? "Not enough history yet" : "Enough history to compare"}</Pill>
           <Help label="How to read the numbers on this page">Costs are what each model would charge for the same amount of text you use now. Correct answers come from answers we checked: we need at least {MIN_CHECKED_ANSWERS} per model before we show a range. Models you have not used are estimates.</Help>
@@ -302,7 +308,7 @@ export default function Compare() {
             ) : (
               <ul className="grid gap-3 md:grid-cols-3">
                 {suggestions.map((s) => (
-                  <SuggestionCard key={s.label} s={s} job={jobName} />
+                  <SuggestionCard key={s.label} s={s} job={jobName} rough={isRoughMonth(account.span)} />
                 ))}
               </ul>
             )}

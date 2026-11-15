@@ -22,6 +22,11 @@ import { NoCallsYet, NoneChecked, NotEnoughData } from "../../ui/NotEnoughData";
 import { MIN_CHECKED_ANSWERS } from "../compare/wilson";
 import { ButtonLink, cx, EmptyState, ModelName, Panel, Pill, Skeleton } from "../../ui/primitives";
 import { monthlySaving, VerdictPill } from "../shared";
+import { passRateInUse, savingVolume } from "../forecastText";
+import type { BillingMode } from "../../features/projects/hooks/useBillingMode";
+import { totals } from "./tokenMetrics";
+import { useAllowanceWays } from "./useAllowanceWays";
+import { MIN_CALLS } from "./agentView";
 import { WIDGETS, type WidgetId } from "./layout";
 import { byWeekday, compareSeries, delta, passRate, splitBy, sum, unpricedRuns, WEEKDAYS } from "./metrics";
 
@@ -41,6 +46,8 @@ export interface Ctx {
   jobsPending: boolean;
   byJob: Map<string, Recommendation | null>;
   recsPending: boolean;
+  /** How the project pays for AI. Left out means per use, exactly as before. */
+  billing?: BillingMode;
 }
 
 /* ----------------------------------------------------------------------------------------------- */
@@ -206,13 +213,88 @@ export function KpiCards({ ctx }: { ctx: Ctx }) {
   const saving = recs.reduce((s, r) => s + monthlySaving(r), 0);
   const movable = recs.filter((r) => monthlySaving(r) > 0).length;
   if (dailyPending) return <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[132px]" />)}</div>;
+  if (ctx.billing === "subscription" || ctx.billing === "both") return <AllowanceKpis ctx={ctx} />;
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <Kpi index={0} label="Spend" icon={<IconDollar size={16} />} tint="var(--series-1)" value={spend} render={(v) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} />} change={delta(spend, spendPrev)} upIsGood={false} help="This is what your AI calls cost, added up from the list price of each model. Calls to a model with no known price are left out, and we tell you how many." note={<>{`What you paid for AI, vs. ${usd(spendPrev)} the ${periodWord(days)} before`}{unpriced > 0 && <><br /><UnpricedChip count={unpriced} /></>}</>} />
       <Kpi index={1} label="Correct answers" icon={<IconCheck size={16} />} tint="var(--series-3)" value={rate} render={(v) => <CountUp value={v * 100} suffix="%" decimals={1} />} change={rate !== null && ratePrev !== null ? rate - ratePrev : null} upIsGood help="We check an answer against the right answer or a rule you set. Out of every 100 answers we checked, this is how many were right. Answers nobody checked are not counted." note={rate === null ? (runs === 0 ? "No AI calls yet. They will show here once your app sends one." : "None of your AI calls are checked yet, so we cannot say how many are correct.") : <>{`Out of every 100 answers we checked, about ${Math.round(rate * 100)} were right`}{ratePrev !== null ? `, vs. ${pct(ratePrev)} the ${periodWord(days)} before` : ""}</>} />
       <Kpi index={2} label="AI calls recorded" icon={<IconJobs size={16} />} tint="var(--series-7)" value={runs} render={(v) => <CountUp value={v} />} change={delta(runs, runsPrev)} upIsGood note={`Times your app asked an AI, vs. ${count(runsPrev)} the ${periodWord(days)} before`} />
-      <Kpi index={3} label="Saving available" icon={<IconSpark size={16} />} tint="var(--color-ok)" value={ctx.recsPending ? null : saving} render={(v) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} suffix="/mo" />} change={undefined} upIsGood help="This is what you would save each month by moving an AI task to a cheaper AI model that still gives about as many correct answers. It is an estimate from your own past calls. Nothing changes unless you decide." note={movable ? `Each month, if ${movable} ${movable === 1 ? "AI task moves" : "AI tasks move"} to a cheaper AI model` : ctx.recsPending ? "Working it out..." : "No cheaper AI model is proven yet, or we need more checked answers"} />
+      <Kpi index={3} label="Saving available" icon={<IconSpark size={16} />} tint="var(--color-ok)" value={ctx.recsPending ? null : saving} render={(v) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} suffix="/mo" />} change={undefined} upIsGood help="This is what you would save each month by moving an AI task to a cheaper AI model that still gives about as many correct answers. It is an estimate from your own past calls. Nothing changes unless you decide." note={movable ? `Each month, if ${movable} ${movable === 1 ? "AI task moves" : "AI tasks move"} to a cheaper AI model, based on ${savingVolume(recs).toLocaleString("en")} calls a month on the models in use` : ctx.recsPending ? "Working it out..." : "No cheaper AI model is proven yet, or we need more checked answers"} />
     </div>
+  );
+}
+
+/** Subscription and both: the same numbers, but usage instead of a bill and ways to make an allowance last. */
+function AllowanceKpis({ ctx }: { ctx: Ctx }) {
+  const { cur, prev, days } = ctx;
+  const both = ctx.billing === "both";
+  const spend = sum(cur, "spend_usd");
+  const unpriced = unpricedRuns(cur);
+  const t = totals(cur);
+  const tPrev = totals(prev);
+  const runs = sum(cur, "runs");
+  const runsPrev = sum(prev, "runs");
+  const rate = passRate(cur);
+  const ratePrev = passRate(prev);
+  const a = useAllowanceWays(days, cur, ctx.byJob);
+  const recs = [...ctx.byJob.values()];
+  const saving = recs.reduce((s, r) => s + monthlySaving(r), 0);
+  const movable = recs.filter((r) => monthlySaving(r) > 0).length;
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Kpi index={0} label="Usage" icon={<IconDollar size={16} />} tint="var(--series-1)" value={t.all} render={(v) => <CountUp value={v} />} change={delta(t.all, tPrev.all)} upIsGood={false} help="How much AI your app used in this period, counted in tokens (the small pieces of text AI is billed by) and AI calls. This is measured from your recorded calls." note={<>{`tokens in ${count(runs)} AI calls`}<br />{`Worth about ${usd(spend)} at list prices. You pay a flat fee, so this is not your bill.`}{unpriced > 0 && <><br /><UnpricedChip count={unpriced} /></>}</>} />
+        <Kpi index={1} label="Correct answers" icon={<IconCheck size={16} />} tint="var(--series-3)" value={rate} render={(v) => <CountUp value={v * 100} suffix="%" decimals={1} />} change={rate !== null && ratePrev !== null ? rate - ratePrev : null} upIsGood help="We check an answer against the right answer or a rule you set. Out of every 100 answers we checked, this is how many were right. Answers nobody checked are not counted." note={rate === null ? (runs === 0 ? "No AI calls yet. They will show here once your app sends one." : "None of your AI calls are checked yet, so we cannot say how many are correct.") : `Out of every 100 answers we checked, about ${Math.round(rate * 100)} were right`} />
+        <Kpi index={2} label="AI calls recorded" icon={<IconJobs size={16} />} tint="var(--series-7)" value={runs} render={(v) => <CountUp value={v} />} change={delta(runs, runsPrev)} upIsGood note={`Times your app asked an AI, vs. ${count(runsPrev)} the ${days} days before`} />
+        <Kpi index={3} label="Ways to make your allowance last longer" icon={<IconSpark size={16} />} tint="var(--color-ok)" value={a.pending ? null : a.ways.length} render={(v) => <CountUp value={v} />} change={undefined} upIsGood help="Things we measured in your own calls that may use less of your allowance, such as text repeated at the start of every prompt or a large tool list. They are ideas, not promises, and none is a dollar saving." note={a.pending ? "Working it out..." : a.ways.length > 0 ? "Measured in your own calls. See the card below." : a.calls < MIN_CALLS ? "We need more AI calls before we can say" : "Nothing stands out in your calls"} />
+      </div>
+      {both && (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Kpi index={4} label="Spend if paid per use" icon={<IconDollar size={16} />} tint="var(--series-1)" value={spend} render={(v) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} />} change={delta(spend, sum(prev, "spend_usd"))} upIsGood={false} help="What these calls would cost at list prices if every one were paid per use." note="At list prices, for all calls" />
+          <Kpi index={5} label="Saving available if paid per use" icon={<IconSpark size={16} />} tint="var(--color-ok)" value={ctx.recsPending ? null : saving} render={(v) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} suffix="/mo" />} change={undefined} upIsGood help="What you would save each month on calls paid per use by moving an AI task to a cheaper model that still gives about as many correct answers. An estimate from your own past calls." note={movable ? `Each month, if ${movable} ${movable === 1 ? "AI task moves" : "AI tasks move"} to a cheaper AI model, based on ${savingVolume(recs).toLocaleString("en")} calls a month on the models in use` : ctx.recsPending ? "Working it out..." : "No cheaper AI model is proven yet"} />
+          <p className="text-[13px] text-dim sm:col-span-2 xl:col-span-2 xl:self-center">We cannot tell which calls were paid which way, so we show both.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The measured ways, as a list. Never blank: thin data gets a plain explanation. */
+function AllowanceList({ ctx }: { ctx: Ctx }) {
+  const a = useAllowanceWays(ctx.days, ctx.cur, ctx.byJob);
+  if (a.pending) return <Skeleton className="mt-4 h-24 w-full" />;
+  if (a.calls === 0) return <div className="mt-4"><NoCallsYet /></div>;
+  if (a.calls < MIN_CALLS) return <div className="mt-4"><NotEnoughData n={a.calls} min={MIN_CALLS} what="AI calls">Next step: keep using your app. Once there are enough calls we show what is using your allowance.</NotEnoughData></div>;
+  if (a.ways.length === 0) return <p className="mt-4 text-[15px] text-dim">Nothing in your calls stands out as using your allowance without need. We keep measuring as new calls arrive.</p>;
+  return (
+    <ul className="mt-4 grid gap-3 md:grid-cols-2">
+      {a.ways.map((w) => (
+        <li key={w.id} className="rounded-[12px] border border-rule bg-surface-2 p-4 text-[13px]">
+          <p className="font-semibold text-ink">{w.title}</p>
+          <p className="mt-1 text-dim">{w.text}</p>
+          <p className="mt-1.5 text-[11px] text-muted">{w.measured ? "Measured from your calls. An idea, not a promise." : "An idea, not a measured saving."}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Subscription: the recommendation card becomes ways to make the allowance last, built only from measured facts. */
+function AllowancePanel({ ctx, labelled }: { ctx: Ctx; labelled?: string }) {
+  const p = useP();
+  return (
+    <Panel glow className="relative overflow-hidden p-6 md:p-8">
+      <div aria-hidden className="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-accent-2/15 blur-3xl" />
+      <div className="relative flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.18em] text-muted"><IconSpark size={14} className="text-accent" /> {labelled ?? "Our ideas"}</p>
+          <h2 className="mt-3 text-[26px] font-semibold leading-[1.1] tracking-tight md:text-[34px]">Ways to make your <span className="text-gradient">allowance last longer</span></h2>
+          <p className="mt-2.5 max-w-2xl text-[15px] text-dim">You pay a flat fee, so these are about using less of your allowance, not about saving money. Each one is measured in your own calls and shown as a share or a number of tokens.</p>
+        </div>
+        <ButtonLink to={p("/jobs")} variant="primary" className="shrink-0">See every AI task <IconArrowRight size={16} /></ButtonLink>
+      </div>
+      <AllowanceList ctx={ctx} />
+    </Panel>
   );
 }
 
@@ -220,18 +302,36 @@ export function KpiCards({ ctx }: { ctx: Ctx }) {
 /* What you could save                                                                              */
 
 export function Savings({ ctx }: { ctx: Ctx }) {
+  if (ctx.billing === "subscription") return <AllowancePanel ctx={ctx} />;
+  if (ctx.billing === "both") {
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="text-[13px] text-dim">We cannot tell which calls were paid which way, so we show both.</p>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <SavingsPanel ctx={ctx} label="If you pay per use" />
+          <AllowancePanel ctx={ctx} labelled="If you pay a subscription" />
+        </div>
+      </div>
+    );
+  }
+  return <SavingsPanel ctx={ctx} />;
+}
+
+function SavingsPanel({ ctx, label }: { ctx: Ctx; label?: string }) {
   const p = useP();
+
   const recs = [...ctx.byJob.values()];
   const saving = recs.reduce((s, r) => s + monthlySaving(r), 0);
   const movable = recs.filter((r) => r && (r.verdict === "DOWNGRADE" || r.verdict === "SWITCH")).length;
   const jobs = ctx.jobs?.length ?? 0;
+  const volume = savingVolume(recs);
   const someone = movable === 1 ? "One AI task" : `${movable} AI tasks`;
   return (
     <Panel glow className="relative overflow-hidden p-6 md:p-8">
       <div aria-hidden className="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-accent-2/15 blur-3xl" />
       <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <p className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.18em] text-muted"><IconSpark size={14} className="text-accent" /> Our recommendation</p>
+          <p className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.18em] text-muted"><IconSpark size={14} className="text-accent" /> {label ?? "Our recommendation"}</p>
           {ctx.jobsPending || ctx.recsPending ? (
             <Skeleton className="mt-4 h-12 w-80" />
           ) : (
@@ -249,7 +349,7 @@ export function Savings({ ctx }: { ctx: Ctx }) {
               </h2>
               <p className="mt-2.5 max-w-2xl text-[15px] text-dim">
                 {movable > 0
-                  ? `${someone} can move to a cheaper model that gives just as many correct answers, checked on your own past AI calls. Nothing changes until you decide. (An AI task is one kind of work your app asks an AI to do, like reading invoices or sorting support tickets.)`
+                  ? `${someone} can move to a cheaper model that gives about as many correct answers (within 3 points), checked on your own past AI calls. Nothing changes until you decide.${saving > 0 ? ` The saving is worked out from ${volume.toLocaleString("en")} calls a month on the models in use now.` : ""} (An AI task is one kind of work your app asks an AI to do, like reading invoices or sorting support tickets.)`
                   : jobs === 0
                     ? "Send each AI call through our SDK. We check every answer, remember the results, and tell you the cheapest model that still does the job."
                     : "No cheaper model has been shown to do these AI tasks as well yet. We keep checking as new AI calls arrive and models change."}
@@ -267,7 +367,8 @@ export function Savings({ ctx }: { ctx: Ctx }) {
 /* This period against the last                                                                     */
 
 export function SpendTrend({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
-  const [metric, setMetric] = useState<"spend_usd" | "runs">("spend_usd");
+  const sub = ctx.billing === "subscription";
+  const [metric, setMetric] = useState<"spend_usd" | "runs">(sub ? "runs" : "spend_usd");
   const rows = compareSeries(ctx.points, ctx.days, metric);
   const total = sum(ctx.cur, metric);
   const before = sum(ctx.prev, metric);
@@ -275,9 +376,9 @@ export function SpendTrend({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
   return (
     <Shell
       shell={shell}
-      title={metric === "spend_usd" ? "Spend" : "AI calls"}
-      hint={`${metric === "spend_usd" ? "What you paid each day" : "How many times your app asked an AI each day"}, last ${ctx.days} days. The dashed line is the ${ctx.days} days before.`}
-      controls={<Toggle label="Measure" value={metric} onChange={setMetric} options={[["spend_usd", "Spend"], ["runs", "AI calls"]]} />}
+      title={metric === "spend_usd" ? (sub ? "Worth at list prices" : "Spend") : "AI calls"}
+      hint={`${metric === "spend_usd" ? (sub ? "What your calls are worth at list prices each day. You pay a flat fee, so this is not your bill" : "What you paid each day") : "How many times your app asked an AI each day"}, last ${ctx.days} days. The dashed line is the ${ctx.days} days before.`}
+      controls={<Toggle label="Measure" value={metric} onChange={setMetric} options={[["spend_usd", sub ? "List price" : "Spend"], ["runs", "AI calls"]]} />}
     >
       {ctx.dailyPending ? (
         <Skeleton className="h-60" />
@@ -411,7 +512,8 @@ export function PassGauge({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
 
 export function SpendSplit({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
   const [by, setBy] = useState<"job" | "model">("job");
-  const [metric, setMetric] = useState<"spend_usd" | "runs">("spend_usd");
+  const sub = ctx.billing === "subscription";
+  const [metric, setMetric] = useState<"spend_usd" | "runs">(sub ? "runs" : "spend_usd");
   const all = splitBy(ctx.cur, by, metric).filter((x) => x.value > 0);
   const colors = colorMap(splitBy(ctx.points, by, "runs").map((x) => x.name));
   const top = all.slice(0, 3);
@@ -422,7 +524,7 @@ export function SpendSplit({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
   return (
     <Shell
       shell={shell}
-      hint={`Which ${by === "job" ? "AI task" : "model"} takes the biggest share of your ${metric === "spend_usd" ? "spending" : "AI calls"}, last ${ctx.days} days`}
+      hint={`Which ${by === "job" ? "AI task" : "model"} takes the biggest share of your ${metric === "spend_usd" ? (sub ? "usage at list prices (not your bill)" : "spending") : "AI calls"}, last ${ctx.days} days`}
       controls={
         <>
           <Toggle label="Split by" value={by} onChange={setBy} options={[["job", "AI task"], ["model", "Model"]]} />
@@ -520,8 +622,9 @@ export function JobsTable({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
       const mine = ctx.cur.filter((x) => x.job === job.name);
       const before = ctx.prev.filter((x) => x.job === job.name);
       const spend = sum(mine, "spend_usd");
-      return { job, runs: sum(mine, "runs"), spend, change: delta(spend, sum(before, "spend_usd")), rate: passRate(mine), rec: ctx.byJob.get(job.name) ?? null };
+      return { job, runs: sum(mine, "runs"), spend, change: delta(spend, sum(before, "spend_usd")), rec: ctx.byJob.get(job.name) ?? null };
     })
+    .map((r) => ({ ...r, rate: passRateInUse(r.rec) }))
     .sort((a, b) => b.spend - a.spend || b.runs - a.runs);
   return (
     <Shell shell={shell} hint={`Each AI task (one kind of work your app asks an AI to do) with what it cost and our recommendation, last ${ctx.days} days`} controls={<Link to={p("/jobs")} className="text-xs font-semibold text-accent-ink hover:underline">All AI tasks →</Link>}>
@@ -536,9 +639,9 @@ export function JobsTable({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
               <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted">
                 <th className="px-5 pb-2 font-semibold">AI task</th>
                 <th className="pb-2 text-right font-semibold">AI calls</th>
-                <th className="pb-2 text-right font-semibold">Spend</th>
-                <th className="pb-2 pl-4 font-semibold">Spend change</th>
-                <th className="pb-2 text-right font-semibold">Correct answers</th>
+                <th className="pb-2 text-right font-semibold">{ctx.billing === "subscription" ? "List price" : "Spend"}</th>
+                <th className="pb-2 pl-4 font-semibold">{ctx.billing === "subscription" ? "List price change" : "Spend change"}</th>
+                <th className="pb-2 text-right font-semibold" title="Share of checked answers that were right, for the model this AI task uses now">Correct answers<span className="block text-[10px] font-normal normal-case tracking-normal">for the model in use</span></th>
                 <th className="px-5 pb-2 text-right font-semibold">Our recommendation</th>
               </tr>
             </thead>

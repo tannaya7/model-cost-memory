@@ -60,7 +60,7 @@ export function ProfileSuggestPanel({ job, usage }: { job: string; usage: Profil
                     ))}
                   </ul>
                   <div className="mt-auto flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-semibold text-ink">{o.estimatedMonthlyUsd === null ? "Cost not estimated" : `About ${usd(o.estimatedMonthlyUsd)} a month (estimated)`}</span>
+                    <span className="text-sm font-semibold text-ink">{o.estimatedMonthlyUsd === null ? "Cost not estimated" : usage.daysOfHistory < 7 ? `Rough guess: about ${usd(o.estimatedMonthlyUsd)} a month (under 7 days of use)` : `About ${usd(o.estimatedMonthlyUsd)} a month (estimated)`}</span>
                     {o.fitsBudget !== null && <Pill tone={o.fitsBudget ? "good" : "bad"}>{o.fitsBudget ? "Fits your monthly budget" : "Over your monthly budget"}</Pill>}
                   </div>
                   {o.link && (

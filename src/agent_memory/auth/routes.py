@@ -147,6 +147,7 @@ def _project_out(p: Project) -> ProjectOut:
         content_retention_days=p.content_retention_days,
         monthly_budget_usd=float(p.monthly_budget_usd) if p.monthly_budget_usd is not None else None,
         store_tool_arguments=bool(p.store_tool_arguments),
+        billing_mode=p.billing_mode or "per_use",
     )
 
 
@@ -166,7 +167,8 @@ async def new_project(
     for _ in range(3):  # the slug has a random suffix; retry the rare collision
         try:
             project, key = await create_project(session, slug_for(body.name), name=body.name.strip(),
-                                                owner_user_id=user.user_id)
+                                                owner_user_id=user.user_id,
+                                                billing_mode=body.billing_mode or "per_use")
             return ProjectCreated(project=_project_out(project), api_key=key)
         except ProjectExists:
             continue
@@ -210,6 +212,8 @@ async def patch_project(
         project.content_retention_days = body.content_retention_days
     if "store_tool_arguments" in sent and body.store_tool_arguments is not None:
         project.store_tool_arguments = body.store_tool_arguments
+    if "billing_mode" in sent and body.billing_mode is not None:
+        project.billing_mode = body.billing_mode
     await session.commit()
     return _project_out(project)
 

@@ -10,10 +10,13 @@ import { IconAlert, IconArrowRight, IconFlask, IconSpark } from "../../ui/icons"
 import { UNTESTED_LABEL } from "../compare/wilson";
 import { Help } from "../../ui/Help";
 import { ProgressBar } from "../../ui/NotEnoughData";
+import { evidenceSoFar } from "../shared";
 import { buildWhy } from "./why";
+import { NOT_A_BENCHMARK, volumeWords, wrongAnswerWords } from "../forecastText";
+import { useBillingMode } from "../../features/projects/hooks/useBillingMode";
 import { ButtonLink, ModelName, Panel, PanelHeader, Pill, Reveal } from "../../ui/primitives";
 
-function headline(rec: Recommendation): { title: React.ReactNode; body: string } {
+function headline(rec: Recommendation, billing: string): { title: React.ReactNode; body: string } {
   const cur = rec.current?.model;
   const to = rec.recommended?.model;
   const curStats = rec.models.find((m) => m.model === cur);
@@ -28,7 +31,7 @@ function headline(rec: Recommendation): { title: React.ReactNode; body: string }
       return {
         title: <>Move to <span className="text-gradient">{to}</span></>,
         body: `${to} gets ${pct(toStats?.weighted_pass_rate)} of answers correct, within ${points} points of the best model${
-          cheaper && cheaper > 1.05 ? `, at ${cheaper >= 10 ? Math.round(cheaper) : cheaper.toFixed(1)}× less per successful answer` : ""
+          billing !== "subscription" && cheaper && cheaper > 1.05 ? `, at ${cheaper >= 10 ? Math.round(cheaper) : cheaper.toFixed(1)}× less per successful answer` : ""
         }. The system is ${Math.round(rec.rules.switch_confidence * 100)}% sure before it advises a move like this.`,
       };
     case "SWITCH":
@@ -44,7 +47,7 @@ function headline(rec: Recommendation): { title: React.ReactNode; body: string }
     default:
       return {
         title: <>Still learning</>,
-        body: `Not enough checked answers yet. We need at least ${rec.rules.evidence_floor} to give you a recommendation. You have ${Math.round(rec.evidence.n_runs)} so far.`,
+        body: `Not enough checked answers yet. We need at least ${rec.rules.evidence_floor} to give you a recommendation. You have ${evidenceSoFar(rec)} so far on your best-covered model.`,
       };
   }
 }
@@ -77,7 +80,8 @@ function ModelCard({ label, m, highlight }: { label: string; m: ModelEvidence | 
 
 export function VerdictTab({ rec }: { rec: Recommendation }) {
   const p = useP();
-  const { title, body } = headline(rec);
+  const { mode: billing } = useBillingMode();
+  const { title, body } = headline(rec, billing);
   const cur = rec.models.find((m) => m.model === rec.current?.model);
   const to = rec.models.find((m) => m.model === rec.recommended?.model);
   const moving = rec.recommended && rec.current && rec.recommended.model !== rec.current.model;
@@ -104,10 +108,11 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
             )}
             {rec.verdict === "INSUFFICIENT_EVIDENCE" && (
               <div className="flex max-w-md flex-col gap-2">
-                <ProgressBar n={rec.evidence.n_runs} min={rec.rules.evidence_floor} />
+                <ProgressBar n={evidenceSoFar(rec)} min={rec.rules.evidence_floor} />
                 <p className="text-xs text-muted">{rec.next_step ?? "Next step: choose how answers are checked on the task page."}</p>
               </div>
             )}
+            {rec.verdict !== "INSUFFICIENT_EVIDENCE" && <p className="max-w-xl text-[11px] leading-snug text-muted">{NOT_A_BENCHMARK}</p>}
             {rec.next_step && rec.verdict !== "INSUFFICIENT_EVIDENCE" && (
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 {rec.next_step && <p className="text-xs text-muted">{rec.next_step}</p>}
@@ -127,17 +132,26 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
             )}
             {f && (rec.verdict === "DOWNGRADE" || rec.verdict === "SWITCH") && (
               <div className="grid grid-cols-2 gap-3">
+                {billing !== "per_use" && (
+                  <div className="col-span-2 rounded-[14px] border border-rule bg-surface-2/50 p-4">
+                    <p className="text-sm font-semibold text-ink">{billing === "both" ? "If you pay a subscription" : "Your allowance"}</p>
+                    <p className="text-[13px] text-dim">A smaller model may use less of your allowance. We cannot say how much: providers do not publish exact rates, and we have not verified how each one counts cached text.</p>
+                    {billing === "both" && <p className="mt-1 text-[11px] text-muted">We cannot tell which calls were paid which way, so we show both.</p>}
+                  </div>
+                )}
+                {billing !== "subscription" && (
                 <div className="rounded-[14px] border border-rule bg-surface-2/50 p-4">
-                  <p className="flex items-center gap-1.5 text-[11px] text-muted">{f.monthly_saving_usd >= 0 ? "Saved per month" : "Extra cost per month"}
+                  <p className="flex items-center gap-1.5 text-[11px] text-muted">{billing === "both" ? "If you pay per use: " : ""}{f.monthly_saving_usd >= 0 ? "Saved per month" : "Extra cost per month"}
                     <Help label="How these two numbers are worked out">The saving is the cost today minus the cost of the recommended model, at your usual number of AI calls. The wrong answers are what we expect on top of today, with the likely range because we only checked some of your calls.</Help>
                   </p>
                   <p className={`tabular text-2xl font-semibold ${f.monthly_saving_usd >= 0 ? "text-ok" : "text-warn"}`}>{usd(Math.abs(f.monthly_saving_usd))}</p>
-                  <p className="text-[11px] text-muted">at {f.runs_per_month.toLocaleString("en")} AI calls a month</p>
+                  <p className="text-[11px] text-muted">{volumeWords(f, rec.current?.model)}</p>
                 </div>
-                <div className="rounded-[14px] border border-rule bg-surface-2/50 p-4">
-                  <p className="text-[11px] text-muted">{f.extra_failures_per_month > 0 ? "Extra wrong answers a month" : "Fewer wrong answers a month"}</p>
-                  <p className="tabular text-2xl font-semibold text-ink">{Math.abs(f.extra_failures_per_month).toFixed(1)}</p>
-                  <p className="tabular text-[11px] text-muted">likely {f.extra_failures_low.toFixed(1)} to {f.extra_failures_high.toFixed(1)}</p>
+                )}
+                <div className={`rounded-[14px] border border-rule bg-surface-2/50 p-4${billing === "subscription" ? " col-span-2" : ""}`}>
+                  <p className="text-[11px] text-muted">Wrong answers a month</p>
+                  <p className="tabular text-lg font-semibold text-ink">{wrongAnswerWords(f).headline}</p>
+                  <p className="tabular text-[11px] text-muted">{wrongAnswerWords(f).range}</p>
                   <p className="mt-1 text-[11px] leading-snug text-muted">A guess from your own checked answers, so it comes as a range.</p>
                 </div>
               </div>
@@ -150,7 +164,7 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
         <Panel className="p-5 md:p-6">
           <PanelHeader title="Why we recommend this" />
           <dl className="mt-3 grid gap-3">
-            {buildWhy(rec).map((w) => (
+            {buildWhy(rec, billing).map((w) => (
               <div key={w.title}>
                 <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted">{w.title}</dt>
                 <dd className="mt-0.5 text-sm text-dim">{w.text}</dd>

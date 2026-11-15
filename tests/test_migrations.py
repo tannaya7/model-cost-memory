@@ -135,3 +135,16 @@ async def test_migration_0003_adds_the_embedding_model_and_the_tool_privacy_sett
     assert default == "false"  # privacy by default: arguments are not kept unless a project opts in
     index = (await session.execute(text("SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_runs_embedding_cache'"))).scalar_one()
     assert "WHERE (embedding IS NOT NULL)" in index
+
+
+async def test_migration_0021_billing_mode_defaults_to_per_use_and_is_checked(session):
+    default = (await session.execute(text(
+        "SELECT column_default FROM information_schema.columns WHERE table_name = 'projects' "
+        "AND column_name = 'billing_mode'"))).scalar_one()
+    assert default == "'per_use'::text"
+    session.add(Project(project_id="plain", api_key_hash="h"))
+    await session.commit()
+    assert (await session.execute(text("SELECT billing_mode FROM projects WHERE project_id = 'plain'"))).scalar_one() == "per_use"
+    with pytest.raises(IntegrityError):
+        await session.execute(text("UPDATE projects SET billing_mode = 'free' WHERE project_id = 'plain'"))
+    await session.rollback()

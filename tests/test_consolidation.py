@@ -148,3 +148,18 @@ async def test_a_downgrade_carries_a_savings_forecast(client, world):
     assert f["runs_per_month"] == 400
     assert f["monthly_saving_usd"] == pytest.approx((0.03 - 0.001) / 0.99 * 400 * 0.99, rel=0.01)
     assert f["extra_failures_low"] <= f["extra_failures_per_month"] <= f["extra_failures_high"]
+
+
+async def test_the_monthly_volume_counts_only_calls_on_the_model_in_use(client, world):
+    key, job, add = world
+    now = datetime.now(UTC)
+    await add(400, fail_every=100, at=now)  # big, in use: 400 calls, $0.03 each
+    await add(400, model="mini", version="mini-2026-09", cost=0.001, fail_every=100,
+              at=now - timedelta(hours=6))  # the cheaper candidate also ran in production
+    body = (await client.get("/v1/jobs/invoice/recommendation", headers={"X-API-Key": key})).json()
+    assert body["verdict"] == "DOWNGRADE" and body["current"]["model"] == "big"
+    f = body["forecast"]
+    assert f["runs_per_month"] == 400  # not 800
+    # independent calculation: saving per correct answer x correct answers on the model in use
+    per_success = 0.03 / 0.9975 - 0.001 / 0.9975
+    assert f["monthly_saving_usd"] == pytest.approx(per_success * 400 * 0.9975, rel=0.01)
