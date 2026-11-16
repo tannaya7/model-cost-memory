@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { screen } from "@testing-library/react";
 import { renderWithProviders } from "../../test/render";
@@ -28,6 +29,7 @@ describe("ExamplesCard", () => {
     expect(screen.getByText("Translate poem")).toBeInTheDocument();
     expect(screen.getByText("A call marked wrong")).toBeInTheDocument();
     expect(screen.getByText(/Wrong total/)).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "How calls are matched to this task" }));
     expect(screen.getByText(/because your code names it/)).toBeInTheDocument();
     expect(screen.getByText(/visible only to people with access/)).toBeInTheDocument();
     expect(calls.filter((c) => c.includes("/v1/runs?")).length).toBe(2);

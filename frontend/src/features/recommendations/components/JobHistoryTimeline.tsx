@@ -101,7 +101,7 @@ export function JobHistoryTimeline({ jobName }: { jobName: string }) {
                           getReasonChip(entry.supersession_reason)}
                       </div>
                       <div className="flex items-center gap-2">
-                        {getVerdictChip(entry.verdict)}
+                        {getVerdictChip(entry.verdict, billing === "subscription")}
                       </div>
                     </div>
 

@@ -351,7 +351,7 @@ function DropCard() {
 function RetestCard({ progress }: { progress: number }) {
   return (
     <>
-      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-accent"><IconFlask size={13} /> Re-testing a new model</p>
+      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-accent"><IconFlask size={13} /> Trials on a new model</p>
       <p className="mt-1 font-mono text-sm text-ink">gemini-3.5-flash-lite</p>
       <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-surface-3">
         <motion.div className="h-full rounded-full bg-gradient-to-r from-accent to-accent-2" animate={{ width: `${(progress / 50) * 100}%` }} transition={{ duration: 0.2 }} />
@@ -481,21 +481,21 @@ function Marquee() {
 
 /** Simulated-time results only, each traced in research_notes/Product ideas deep research/claims_ledger.md. */
 const FIGURES = [
-  { value: 9, suffix: " in 10", label: "five-point quality drops caught in computer tests", note: "93 of 100 on our tuning runs (95% range 86 to 97%) and 89 of 100 on new runs we had not used before (81 to 94%). 50 AI calls a day, checked 14 days after the change. 81 of 100 when inputs were also changing (tuning runs only)." },
-  { value: 2, suffix: " in 100 or fewer", label: "false alarms on stable traffic", note: "2 of 100 on tuning runs (95% range 0.6 to 7%), 0 of 100 on new runs (0 to 3.7%)." },
-  { value: 76, suffix: "%", label: "of the time on the right model", note: "Computer tests on tuning runs, not re-checked on new runs yet. Against 65% for re-checking once a month, and 25% for a test set never updated (which cannot follow a change, by design)." },
-  { value: 9, suffix: "%", label: "of spend keeps the evidence fresh", note: "Computer tests on tuning runs, not re-checked on new runs yet. At 100 calls a day. With fewer re-tests the cost falls but so does accuracy." },
+  { value: 9, suffix: " in 10", label: "five-point quality drops caught in computer tests", note: "93 of 100 on the data we tuned on (95% range 86 to 97%) and 89 of 100 on new data we had not used before (81 to 94%). 50 AI calls a day, checked 14 days after the change. 81 of 100 when inputs were also changing (tuned data only)." },
+  { value: 2, suffix: " in 100 or fewer", label: "wrong warnings on steady traffic", note: "2 of 100 on the data we tuned on (95% range 0.6 to 7%), 0 of 100 on new data (0 to 3.7%)." },
+  { value: 76, suffix: "%", label: "of the time on the right model", note: "Computer tests on tuned data, not yet re-checked on new data. Against 65% for re-checking once a month, and 25% for a test set never updated." },
+  { value: 9, suffix: "%", label: "of spend keeps the evidence fresh", note: "Computer tests on tuned data, not yet re-checked on new data. At 100 calls a day. With fewer trials the cost falls but so does accuracy." },
 ];
 
 const STEPS = [
   { icon: IconBolt, title: "Record", text: "A few lines around the call you already make. Prompt, model, tokens and cost are sent in the background; your call never changes." },
-  { icon: IconCheck, title: "Check", text: "Every answer is marked pass or fail by your rule: an answer key, a JSON schema, or a label you add later." },
-  { icon: IconSpark, title: "Remember", text: "Evidence ages. Fresh runs count more, runs on a replaced model version fade faster, and new models get re-tested on your prompts." },
-  { icon: IconDollar, title: "Advise", text: "Per job: the cheapest model shown, at 95% confidence, to pass within 3 points of the best, what moving saves, and the runs behind it." },
+  { icon: IconCheck, title: "Check", text: "Every answer is marked right or wrong by your rule: an answer key, a format check, or a label you add later." },
+  { icon: IconSpark, title: "Remember", text: "Evidence ages. Fresh AI calls count more, and new models get a trial on your prompts." },
+  { icon: IconDollar, title: "Advise", text: "Per AI task: the cheapest model shown, at 95% confidence, to be within 3 points of the best, and what moving saves." },
 ];
 
 const FEATURES = [
-  { icon: IconDollar, title: "The cheapest model that still works", text: "A verdict per job, proven on your own traffic with a confidence range, never a public benchmark. With the monthly saving and the expected change in failures." },
+  { icon: IconDollar, title: "The cheapest model that still works", text: "A recommendation per AI task, proven on your own traffic with a confidence range, never a public benchmark. With the monthly saving and the expected change in failures." },
   { icon: IconAlert, title: "A warning when an upgrade breaks things", text: "Every version change is compared with the one before it on the same mix of inputs, and in our simulations a model that quietly got worse under the same name was often caught (a 5-point drop in 77 of 100 simulations at 50 calls a day). Alerts go to Slack or Discord." },
   { icon: IconFlask, title: "New models tried for you", text: "When a cheaper model appears, a sample of your past prompts is replayed on it within a budget you set, so the evidence exists before you need it." },
   { icon: IconShield, title: "Your data has an end", text: "Prompts and answers are deleted after the retention you choose; the figures stay. Delete a project and everything in it goes." },
@@ -557,7 +557,7 @@ export default function Landing() {
               Long-term memory for the AI features you run
             </motion.p>
             <motion.h1 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05, duration: 0.7 }} className="mt-5 text-[34px] font-semibold leading-[1.04] tracking-tight md:text-[52px]">
-              Stop paying for a bigger model than the job needs.
+              Stop paying for a bigger model than the work needs.
             </motion.h1>
             <motion.p initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, duration: 0.7 }} className="mt-5 max-w-xl text-[17px] leading-relaxed text-dim">
               Record every AI call. Each answer is checked, every model's real record on your work is remembered,
@@ -589,8 +589,8 @@ export default function Landing() {
           </Reveal>
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {FIGURES.map((f, i) => (
-              <Reveal key={f.label} delay={i * 0.08}>
-                <div className="panel p-6">
+              <Reveal key={f.label} delay={i * 0.08} className="h-full">
+                <div className="panel h-full p-6">
                   <p className="text-[44px] font-semibold leading-none tracking-tight"><span className="text-gradient"><Figure value={f.value} suffix={f.suffix} /></span></p>
                   <p className="mt-3 text-sm font-semibold text-ink">{f.label}</p>
                   <p className="mt-1 text-xs text-muted">{f.note}</p>
@@ -709,7 +709,7 @@ export default function Landing() {
         <div className="mx-auto grid max-w-[1200px] gap-10 px-4 py-12 md:grid-cols-[1.4fr_1fr_1fr_1fr] md:px-6">
           <div>
             <span className="flex items-center gap-2 font-semibold"><IconLogo size={22} /> Model &amp; Cost Memory</span>
-            <p className="mt-3 max-w-xs text-sm text-dim">Long-term memory of how every model really performs on your work, so each job runs on the cheapest one that still does it.</p>
+            <p className="mt-3 max-w-xs text-sm text-dim">Long-term memory of how every model really performs on your work, so each AI task runs on the cheapest one that still does it.</p>
           </div>
           {[
             { title: "Product", links: [["How it works", "#how"], ["What you get", "#what"], ["Results", "#numbers"], ["Set up", "#setup"]] },

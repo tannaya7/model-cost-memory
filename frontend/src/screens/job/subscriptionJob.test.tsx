@@ -50,12 +50,12 @@ describe("task page by billing mode", () => {
 
   it("the Spend tab shows tokens on a subscription and money otherwise", async () => {
     const first = mount("subscription", <SpendTab job="invoice-extract" />);
-    expect(await screen.findByText("Tokens this job used, per day")).toBeInTheDocument();
+    expect(await screen.findByText("Tokens this AI task used, per day")).toBeInTheDocument();
     expect(screen.getByText("100K tokens over 60 days")).toBeInTheDocument();
     expect(screen.queryByText(/What this job costs/)).toBeNull();
     first.unmount();
     mount("per_use", <SpendTab job="invoice-extract" />);
-    expect(await screen.findByText("What this job costs, per day")).toBeInTheDocument();
+    expect(await screen.findByText("What this AI task costs, per day")).toBeInTheDocument();
   });
 
   it("a negative forecast saving is shown as a rising bill, never as a saving", async () => {
@@ -68,7 +68,7 @@ describe("task page by billing mode", () => {
 
   it("no forecast yet gives a calm still-learning card and no figures", async () => {
     mount("per_use", <VerdictTab rec={{ ...rec, forecast: null } as Recommendation} />);
-    expect(await screen.findByTestId("forecast-learning")).toHaveTextContent("Still learning how much this task runs");
+    expect(await screen.findByTestId("forecast-learning")).toHaveTextContent("Still learning how often this task is used");
     expect(screen.queryByText(/Wrong answers a month/)).toBeNull();
   });
 });

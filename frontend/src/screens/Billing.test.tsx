@@ -80,12 +80,11 @@ describe("allowanceWays (measured facts only)", () => {
 const SLOW = 15_000;
 
 describe("Overview by billing mode", () => {
-  it("per use is exactly as before: Spend, Saving available, You could save", async () => {
+  it("per use: Spend, the saving banner and no subscription wording", async () => {
     overviewApi("per_use");
     mountOverview();
-    expect(await screen.findByRole("heading", { level: 2, name: /You could save/ }, { timeout: SLOW })).toBeInTheDocument();
-    expect(screen.getByText("Saving available")).toBeInTheDocument();
-    expect(screen.getAllByText("Spend").length).toBeGreaterThan(0);
+    expect(await screen.findByRole("heading", { level: 3, name: /You could save/ }, { timeout: SLOW })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: /^Spend, last 30 days/ })).toBeInTheDocument();
     expect(screen.queryByText(/allowance/i)).toBeNull();
     expect(screen.queryByText(/not your bill/)).toBeNull();
   });
@@ -93,11 +92,11 @@ describe("Overview by billing mode", () => {
   it("the spend split is titled by what it shows: money for per use, usage for a subscription", async () => {
     overviewApi("per_use");
     const first = mountOverview();
-    expect(await screen.findByRole("heading", { level: 2, name: "Where the money goes" }, { timeout: SLOW })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 3, name: "Where the money goes" }, { timeout: SLOW })).toBeInTheDocument();
     first.unmount();
     overviewApi("subscription");
     mountOverview();
-    expect(await screen.findByRole("heading", { level: 2, name: "Where your usage goes" }, { timeout: SLOW })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 3, name: "Where your usage goes" }, { timeout: SLOW })).toBeInTheDocument();
     expect(screen.queryByText("Where the money goes")).toBeNull();
   });
 
@@ -105,25 +104,27 @@ describe("Overview by billing mode", () => {
     overviewApi("both");
     const user = userEvent.setup();
     mountOverview();
-    expect(await screen.findByRole("heading", { level: 2, name: "Where the money goes" }, { timeout: SLOW })).toBeInTheDocument();
-    const header = screen.getByRole("heading", { level: 2, name: "Where the money goes" }).closest("header")!;
+    expect(await screen.findByRole("heading", { level: 3, name: "Where the money goes" }, { timeout: SLOW })).toBeInTheDocument();
+    const header = screen.getByRole("heading", { level: 3, name: "Where the money goes" }).closest("header")!;
     await user.click(within(header).getByRole("tab", { name: "AI calls" }));
-    expect(await screen.findByRole("heading", { level: 2, name: "Where your usage goes" }, { timeout: SLOW })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 3, name: "Where your usage goes" }, { timeout: SLOW })).toBeInTheDocument();
   });
 
   it("an older project with no billing mode is treated as per use", async () => {
     overviewApi(null);
     mountOverview();
-    expect(await screen.findByRole("heading", { level: 2, name: /You could save/ }, { timeout: SLOW })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 3, name: /You could save/ }, { timeout: SLOW })).toBeInTheDocument();
   });
 
   it("subscription: usage and ways to make the allowance last, no saved money", async () => {
     overviewApi("subscription");
     mountOverview();
-    expect(await screen.findByRole("heading", { level: 2, name: /Ways to make your allowance last longer/ }, { timeout: SLOW })).toBeInTheDocument();
-    expect(screen.getByText("Usage")).toBeInTheDocument();
-    expect(await screen.findByText(/Worth about \$12\.50 at list prices\. You pay a flat fee, so this is not your bill\./)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 3, name: /Ways to make your allowance last longer/ }, { timeout: SLOW })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: /^Usage, last 30 days/ })).toBeInTheDocument();
+    expect(await screen.findByText(/List price \$12\.50, not your bill/)).toBeInTheDocument();
     expect((await screen.findAllByText(/60% of this prompt/)).length).toBeGreaterThan(0);
+    // the top two ideas show first; the rest are one click away
+    await userEvent.setup().click(await screen.findByRole("button", { name: /Show \d+ more idea/ }));
     expect(screen.getByText(/A smaller model may use less of your allowance\. We cannot say how much/)).toBeInTheDocument();
     for (const gone of [/Saving available/, /You could save/, /Saved per month/, /^Spend$/, /Money spent on wrong answers/, /spending is heading/]) {
       // widgets that leave on a billing change stay on screen for their short exit animation, so wait for them to go
@@ -134,12 +135,13 @@ describe("Overview by billing mode", () => {
   it("both: shows each view, labelled, with the honest line", async () => {
     overviewApi("both");
     mountOverview();
-    expect(await screen.findByRole("heading", { level: 2, name: /You could save/ }, { timeout: SLOW })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { level: 2, name: /Ways to make your allowance last longer/ }, { timeout: SLOW })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 3, name: /You could save/ }, { timeout: SLOW })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 3, name: /Ways to make your allowance last longer/ }, { timeout: SLOW })).toBeInTheDocument();
     expect(screen.getByText("If you pay per use")).toBeInTheDocument();
     expect(screen.getByText("If you pay a subscription")).toBeInTheDocument();
-    expect(screen.getAllByText("We cannot tell which calls were paid which way, so we show both.").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Saving available if paid per use")).toBeInTheDocument();
+    // said once, in the page header, not repeated on cards
+    expect(screen.getAllByText("We cannot tell which calls were paid which way, so we show both.")).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 3, name: /^Usage, last 30 days/ })).toBeInTheDocument();
   });
 
   it("thin data on a subscription gets a plain explanation, not a blank card", async () => {
@@ -155,7 +157,7 @@ describe("Overview by billing mode", () => {
       "/v1/news": { items: [], sources: [], your_models: [], updated_at: null, next_refresh_at: null },
     });
     mountOverview();
-    expect(await screen.findByRole("heading", { level: 2, name: /Ways to make your allowance last longer/ }, { timeout: SLOW })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 3, name: /Ways to make your allowance last longer/ }, { timeout: SLOW })).toBeInTheDocument();
     expect(await screen.findByText(/Next step: keep using your app/)).toBeInTheDocument();
   });
 });

@@ -104,7 +104,7 @@ export default function NewProject() {
             <motion.div key="name" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
               <Panel glow className="p-6 md:p-8">
                 <h1 className="text-3xl font-semibold tracking-tight">{first ? "Create your first project" : "New project"}</h1>
-                <p className="mt-2 text-dim">A project is one app that uses AI, such as an invoice assistant or a support bot. Its AI calls, AI tasks, alerts and keys are kept apart from every other project. You only need a name to start.</p>
+                <p className="mt-2 text-dim">A project is one app that uses AI, like an invoice assistant. You only need a name to start.</p>
                 <form onSubmit={submit} className="mt-6 flex flex-col gap-3">
                   <label htmlFor="project-name" className="text-sm font-semibold text-dim">Project name</label>
                   <input
@@ -137,7 +137,7 @@ export default function NewProject() {
             <motion.div key="key" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
               <Panel glow className="p-6 md:p-8">
                 <h1 className="text-3xl font-semibold tracking-tight"><span className="text-gradient">{made.name}</span> is ready</h1>
-                <p className="mt-2 text-dim">This is the project's key. Your app uses it to send us a record of each AI call it makes. <strong className="text-ink">It is shown only now</strong>: only its first characters are kept, so copy it somewhere safe. You can make a new one later in the project's settings.</p>
+                <p className="mt-2 text-dim">Your app uses this key to send us its AI calls. <strong className="text-ink">It is shown only now</strong>, so copy it somewhere safe. You can make a new one in Settings.</p>
                 <div className="mt-6"><CopyBox value={made.key} label="Project key" /></div>
                 <label className="mt-5 flex items-center gap-3 text-sm text-dim">
                   <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} className="h-4 w-4 accent-[var(--color-accent)]" />
@@ -163,11 +163,11 @@ export default function NewProject() {
                   <li>
                     <p className="font-semibold">2. Wrap the model call you already make</p>
                     <pre className="mt-2 overflow-x-auto rounded-[12px] border border-rule bg-bg p-4 font-mono text-[12.5px] leading-relaxed text-dim">{snippet}</pre>
-                    <p className="mt-1.5 text-xs text-muted">Your call does not change. Give it a short name for the kind of work it does, for example invoice-extract or ticket-classify. We call this an AI task: one kind of work your app asks an AI to do.</p>
+                    <p className="mt-1.5 text-xs text-muted">Your call does not change. Give it a short name, like invoice-extract. That name is an AI task: one kind of work your app asks an AI to do.</p>
                   </li>
                   <li>
                     <p className="font-semibold">3. Tell it how to check an answer</p>
-                    <p className="mt-1 text-sm text-dim">On the dashboard, create the AI task and choose how a correct answer is recognised: an answer key, a JSON schema (a template the answer must match), or a label you add later. Our recommendation appears once a model has about 25 recent checked answers; moving to a cheaper one needs more.</p>
+                    <p className="mt-1 text-sm text-dim">On the dashboard, create the AI task and choose how a correct answer is recognised. Our recommendation appears once a model has about 25 recent checked answers; moving to a cheaper one needs more.</p>
                   </li>
                 </ol>
                 <div className="mt-8 flex flex-wrap justify-end gap-2">

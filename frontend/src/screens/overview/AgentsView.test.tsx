@@ -79,7 +79,7 @@ describe("AgentsView", () => {
     expect(screen.getByText(/Tools used most: search_docs \(12\)/)).toBeInTheDocument();
     expect(screen.getByText("task-1")).toBeInTheDocument();
     expect(screen.getByText(/about 12K tokens of tool list/)).toBeInTheDocument();
-    expect(screen.getByText(/An estimate/)).toBeInTheDocument();
+    expect(screen.getByText(/Estimate: size guessed/)).toBeInTheDocument();
     expect(screen.getByText(/may be large/)).toBeInTheDocument();
   });
 
@@ -123,7 +123,7 @@ describe("ToolListBody", () => {
     stubApi({ "/v1/insights/agents": reply() });
     renderWithProviders(<ToolListBody job="invoice-extract" days={30} />);
     expect(await screen.findByText(/about 12K tokens of tool list/)).toBeInTheDocument();
-    expect(screen.getByText(/An estimate/)).toBeInTheDocument();
+    expect(screen.getByText(/Estimate: size guessed/)).toBeInTheDocument();
   });
 
   it("says so when the task sends no tool list", async () => {

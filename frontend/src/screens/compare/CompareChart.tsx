@@ -80,7 +80,7 @@ export function CompareChart({
   return (
     <ChartFrame
       title="Cost against quality"
-      hint="Each dot is a model. Further left is cheaper, higher is more correct answers. Filled dots were measured on this AI task. Hollow dots have not been used on it: their cost is an estimate from list prices and we have not tested how many answers they get right."
+      hint="Left is cheaper, higher is more correct answers. Filled dots were measured; hollow dots are estimates from list prices, not tested."
       legend={[
         { name: "Measured on this AI task", color: "var(--color-accent)" },
         { name: "Not tested (estimated cost)", color: "var(--color-dim)", dashed: true },
@@ -102,7 +102,7 @@ export function CompareChart({
               tick={{ fill: "var(--chart-tick)", fontSize: 11 }}
               axisLine={{ stroke: "var(--chart-axis)" }}
               tickLine={false}
-              label={{ value: listPrice ? "list price per 1,000 answers, not your bill (cheaper to the left)" : "cost per 1,000 answers (cheaper to the left)", position: "insideBottom", offset: -16, fill: "var(--chart-tick)", fontSize: 11 }}
+              label={{ value: listPrice ? "list price per 1,000 answers, not your bill (further left uses less)" : "cost per 1,000 answers (cheaper to the left)", position: "insideBottom", offset: -16, fill: "var(--chart-tick)", fontSize: 11 }}
             />
             <YAxis
               type="number"
@@ -147,12 +147,12 @@ export function CompareChart({
           </ScatterChart>
         </ResponsiveContainer>
       </div>
-      <div className="overflow-auto rounded-[12px] border border-rule">
+      <div className="scroll-hint-x overflow-auto rounded-[12px] border border-rule">
         <table className="w-full border-collapse text-left text-xs">
           <thead className="bg-surface-2">
             <tr>
               {["Model", "Source", listPrice ? "List price per 1,000 answers" : "Cost per 1,000 answers", "Correct answers", "Checked answers"].map((c) => (
-                <th key={c} className="px-3 py-2 font-semibold uppercase tracking-wider text-muted">{c}</th>
+                <th key={c} className={`${c === "Source" ? "hidden sm:table-cell " : ""}whitespace-nowrap px-3 py-2 font-semibold uppercase tracking-wider text-muted${c.includes("per 1,000") ? " text-right" : ""}`}>{c}</th>
               ))}
             </tr>
           </thead>
@@ -160,7 +160,7 @@ export function CompareChart({
             {rows.map((r, i) => (
               <tr key={i} className="border-t border-rule">
                 {r.map((cell, j) => (
-                  <td key={j} className={j === 0 ? "px-3 py-1.5 font-mono text-ink" : "px-3 py-1.5 text-dim"}>{cell}</td>
+                  <td key={j} className={j === 0 ? "whitespace-nowrap px-3 py-1.5 font-mono text-ink" : j === 1 ? "hidden px-3 py-1.5 text-dim sm:table-cell" : j === 2 ? "whitespace-nowrap px-3 py-1.5 text-right text-dim" : "px-3 py-1.5 text-dim"}>{cell}{j === 0 && <span className="block font-sans text-[10px] text-muted sm:hidden">{r[1]}</span>}</td>
                 ))}
               </tr>
             ))}

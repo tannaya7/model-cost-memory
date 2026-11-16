@@ -88,11 +88,13 @@ function AlertsSection({ project }: { project: Project }) {
   const s = useFieldSave(project);
   return (
     <Panel id="alerts" className="scroll-mt-24 p-5 md:p-6">
-      <PanelHeader title="Where alerts go" hint="Paste a Slack, Discord, Google Chat or Mattermost incoming webhook, or your own https endpoint. Leave empty to see alerts here only." />
+      <PanelHeader title="Where alerts go" hint="Paste a Slack, Discord, Google Chat or Mattermost webhook. Leave empty to see alerts here only." />
       <label htmlFor="webhook" className="mt-4 block text-xs font-semibold text-dim">Webhook URL</label>
       <input id="webhook" type="url" className={cx(field, "mt-1.5")} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://hooks.slack.com/services/…" />
       {project.webhook_secret && (
-        <div className="mt-2 space-y-1 text-xs text-muted">
+        <details className="mt-2 text-xs text-muted">
+          <summary className="cursor-pointer font-semibold text-accent">For developers: check a message came from us</summary>
+          <div className="mt-2 space-y-1">
           <p>
             If you send alerts to your own program, you can check a message really came from us. Each one carries a time in <span className="font-mono">X-MCM-Timestamp</span> and a signature in <span className="font-mono">X-MCM-Signature-V2</span>.
           </p>
@@ -102,7 +104,8 @@ function AlertsSection({ project }: { project: Project }) {
           <p>
             For now we also still send the older <span className="font-mono">X-MCM-Signature</span>, which signs the body only.
           </p>
-        </div>
+          </div>
+        </details>
       )}
       <SaveRow
         saving={s.saving}
@@ -125,9 +128,9 @@ function PrivacySection({ project }: { project: Project }) {
   const valid = Number.isInteger(n) && n >= 1 && n <= 3650;
   return (
     <Panel id="privacy" className="scroll-mt-24 p-5 md:p-6">
-      <PanelHeader title="How long prompts and answers are kept" hint="After this many days, the text of each AI call (its prompt, answer, tool calls and answer key) is deleted each night. Whether it was correct, what it cost and how many tokens it used are kept, so our recommendations do not change. Tokens are the small pieces of text AI models read and write." />
+      <PanelHeader title={<span className="inline-flex items-center gap-1.5">How long prompts and answers are kept <Help label="About keeping prompts and answers">Tokens are the small pieces of text AI models read and write. After this many days the text of each AI call (prompt, answer, tool calls, answer key) is deleted each night. Whether it was correct, what it cost and how many tokens it used are kept, so our recommendations do not change.</Help></span>} hint="The text of each AI call is deleted after this many days." />
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <input id="retention" type="number" min={1} max={3650} className={cx(field, "w-28")} value={days} onChange={(e) => setDays(e.target.value)} aria-label="Days to keep run content" />
+        <input id="retention" type="number" min={1} max={3650} className={field.replace("w-full", "w-28")} value={days} onChange={(e) => setDays(e.target.value)} aria-label="Days to keep AI call content" />
         <span className="text-sm text-dim">days</span>
         {[30, 90, 365].map((d) => (
           <button key={d} type="button" onClick={() => setDays(String(d))} className={cx("rounded-full border px-3 py-1 text-xs font-semibold", Number(days) === d ? "border-accent text-accent" : "border-rule text-muted hover:text-dim")}>
@@ -152,7 +155,7 @@ function RetestsSection({ project }: { project: Project | null }) {
   const share = l && l.monthly_cap_usd > 0 ? Math.min(1, l.spent_this_month_usd / l.monthly_cap_usd) : 0;
   return (
     <Panel id="retests" className="scroll-mt-24 p-5 md:p-6">
-      <PanelHeader title="Trials on a new model" hint="A trial replays your past prompts on another model, using your provider key, to see if it does as well as the one you use now. It never spends more than the monthly budget you set here." />
+      <PanelHeader title="Trials on a new model" hint="Replay past prompts on another model, using your provider key and a budget you set." />
       {l && (
         <div className="mt-4">
           <div className="flex justify-between text-xs text-dim">
@@ -168,7 +171,7 @@ function RetestsSection({ project }: { project: Project | null }) {
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <label className="block">
             <span className="text-xs font-semibold text-dim">Monthly budget for trials (USD)</span>
-            <input type="number" min={0} max={10000} className={cx(field, "mt-1.5")} value={cap} onChange={(e) => setCap(e.target.value)} />
+            <input type="number" min={0} max={10000} className={cx(field.replace("w-full", "w-40"), "mt-1.5 block")} value={cap} onChange={(e) => setCap(e.target.value)} />
           </label>
           <label className="flex items-start gap-3 rounded-[12px] border border-rule bg-surface-2/50 p-3">
             <input type="checkbox" checked={allowed} onChange={(e) => setAllowed(e.target.checked)} className="mt-1 h-4 w-4 accent-[var(--color-accent)]" />
@@ -219,7 +222,7 @@ export function KeysSection({ project, mode }: { project: Project | null; mode: 
   const [confirm, setConfirm] = useState(false);
   return (
     <Panel id="keys" className="scroll-mt-24 p-5 md:p-6">
-      <PanelHeader title="API keys" hint="Your app's SDK identifies itself with the project key when it sends AI calls. It is shown once when made; only its first characters are stored for display." />
+      <PanelHeader title="API keys" hint="Your app uses the project key to send AI calls. It is shown once when made." />
       {fresh && (
         <div className="mt-4">
           <ApiKeyRevealBox apiKey={fresh} title="Your new project key. Copy it now: it is not shown again." onDismiss={() => setFresh(null)} />
@@ -282,8 +285,8 @@ export function BillingSection({ project }: { project: Project }) {
 function SubscriptionLimitPointer() {
   return (
     <Panel id="budget" className="scroll-mt-24 p-5 md:p-6">
-      <PanelHeader title="Your allowance" hint="You pay a flat fee, so there is no monthly dollar limit to set. What matters is your plan's usage allowance, for example a 5-hour session or a week, that resets." />
-      <p className="mt-3 text-sm text-dim">Add your allowance in <a href="#limits" onClick={(e) => { e.preventDefault(); document.getElementById("limits")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className="text-accent underline">Usage limits</a>, further down this page. We then estimate whether you will run out before it resets.</p>
+      <PanelHeader title="Your allowance" hint="You pay a flat fee, so there is no dollar limit to set. Your plan's allowance is what matters." />
+      <p className="mt-3 text-sm text-dim">Add your allowance in <a href="#limits" onClick={(e) => { e.preventDefault(); document.getElementById("limits")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className="text-accent underline">Usage limits</a>, below.</p>
     </Panel>
   );
 }
@@ -307,7 +310,7 @@ export function BudgetSection({ project }: { project: Project }) {
   };
   return (
     <Panel id="budget" className="scroll-mt-24 p-5 md:p-6">
-      <PanelHeader title="Monthly spending limit" hint="Set the most you want your app's AI calls to cost each month. We warn you at 85% and 95%, and if the month looks like it will go over. We only warn: nothing is ever blocked." />
+      <PanelHeader title={<span className="inline-flex items-center gap-1.5">Monthly spending limit <Help label="About the spending limit">We warn you at 85% and 95%, and if the month looks like it will go over. The spend is an estimate from your recorded calls at list prices.</Help></span>} hint="The most you want your AI calls to cost each month. We only warn, never block." />
       <p className="mt-3 text-sm text-ink">Current limit: <span className="font-semibold">{current === null ? "Not set" : `$${current.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(current) ? 0 : 2 })} a month`}</span></p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="flex items-center rounded-[10px] border border-rule bg-surface-2 px-3 focus-within:border-accent">
@@ -320,7 +323,6 @@ export function BudgetSection({ project }: { project: Project }) {
         {s.saved && <span className="flex items-center gap-1 text-xs text-ok"><IconCheck size={14} /> Saved</span>}
       </div>
       {(problem || s.error) && <p role="alert" className="mt-2 text-xs text-bad">{problem ?? s.error}</p>}
-      <p className="mt-3 text-xs text-muted">The spend is an estimate from your recorded calls at list prices.</p>
     </Panel>
   );
 }
@@ -353,8 +355,8 @@ export function ToolInputsSection({ project }: { project: Project }) {
   return (
     <Panel id="tool-inputs" className="scroll-mt-24 p-5 md:p-6">
       <PanelHeader
-        title={<span className="inline-flex items-center gap-1.5">Keep the inputs of tool calls so loops are easier to spot <Help label="About tool inputs">When your agent calls a tool, the call has inputs, like the search words it used. With this on, your app can send them to us. We compare them only to notice when an agent repeats the same step. They are never used to train anything, and they are deleted with the rest of the run text after your retention period.</Help></span>}
-        hint="Your app can send the inputs of each tool call. We use them only to notice when an agent repeats the same step. This helps catch loops that the default check misses."
+        title={<span className="inline-flex items-center gap-1.5">Keep the inputs of tool calls so loops are easier to spot <Help label="About tool inputs">When your agent calls a tool, the call has inputs, like the search words it used. With this on, your app can send them to us. We compare them only to notice when an agent repeats the same step. They are never used to train anything, and they are deleted with the rest of the AI call text after your retention period.</Help></span>}
+        hint="Lets us notice when an agent repeats the same step."
       />
       <p role="note" className="mt-3 rounded-md border border-warn/40 bg-warn/10 p-2.5 text-[13px] text-ink">
         <span className="font-semibold">Warning:</span> tool inputs may contain private data, such as customer names, file contents or secrets. Leave this off unless you are comfortable with that being stored.
@@ -392,7 +394,7 @@ function LimitsSection() {
     <Panel id="limits" className="scroll-mt-24 p-5 md:p-6">
       <PanelHeader
         title="Usage limits"
-        hint="A usage limit is a cap you or your provider set, so a mistake cannot use up more than you planned, for example a plan's 5-hour or weekly limit, a limit on one model, or an API budget. We estimate whether you will hit it before it resets, and which cheaper option would make it last."
+        hint="A cap your plan or budget sets. We warn you before you reach it."
         actions={!adding && <Button size="sm" variant="primary" onClick={() => setAdding(true)}>Add a usage limit</Button>}
       />
       {adding && (
@@ -404,7 +406,7 @@ function LimitsSection() {
         {limits.isPending ? (
           <Skeleton className="h-24" />
         ) : (limits.data ?? []).length === 0 ? (
-          !adding && <EmptyState title="No usage limits yet" hint="A limit is a cap on how much AI you may use, set by your plan or your budget. Add one and we will warn you before it runs out." />
+          !adding && <EmptyState title="No usage limits yet" hint="Add one and we warn you before it runs out." />
         ) : (
           (limits.data ?? []).map((l) => <LimitCard key={l.limit_id} limit={l} />)
         )}
@@ -420,7 +422,7 @@ function StatusSection() {
   const late = Object.entries(h?.overdue ?? {});
   return (
     <Panel id="status" className="scroll-mt-24 p-5 md:p-6">
-      <PanelHeader title="System status" hint="Checked every minute, so you can tell if the service is running normally. If something shows as not working, wait a minute and refresh." />
+      <PanelHeader title="System status" hint="Checked every minute." />
       {health.isPending ? (
         <Skeleton className="mt-4 h-16" />
       ) : (

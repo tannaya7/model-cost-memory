@@ -462,10 +462,10 @@ function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle
           >
             <div aria-hidden className="pointer-events-none absolute inset-0 opacity-30" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.35) 1px, transparent 1px)", backgroundSize: "10px 10px" }} />
             <span className="relative grid h-8 w-8 place-items-center rounded-[9px] bg-white/20"><IconFlask size={16} /></span>
-            <p className="relative mt-3 text-sm font-semibold">{billing === "subscription" ? "Try a smaller model" : "Try a cheaper model"}</p>
-            <p className="relative mt-1 text-xs text-white/80">We replay your past prompts on another model to see if it does as well, within a budget you set.</p>
+            <p className="relative mt-2.5 text-sm font-semibold">{billing === "subscription" ? "Try a smaller model" : "Try a cheaper model"}</p>
+            <p className="relative mt-1 text-xs text-white/80">Replays your past prompts, within a budget you set.</p>
             <Link to={p("/retest")} className="relative mt-3 block rounded-[10px] bg-white/95 px-3 py-2 text-center text-xs font-semibold text-[var(--promo-ink)] transition-colors hover:bg-white">
-              Start a trial on a new model
+              Start a trial
             </Link>
           </motion.div>
         )}

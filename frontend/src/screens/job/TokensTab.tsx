@@ -43,67 +43,6 @@ export function TokensTab({ job }: { job: string }) {
   return (
     <div className="flex flex-col gap-4">
       <Panel className="p-5">
-        <ChartFrame
-          title="Input and output tokens"
-          hint={`Last ${DAYS} days: ${count(cur.input + cur.cacheRead)} input, ${count(cur.output)} output`}
-          legend={[
-            { name: "Input", color: "var(--series-1)" },
-            { name: "Output", color: "var(--series-3)" },
-            { name: "Cached", color: "var(--series-7)" },
-          ]}
-          table={{ columns: ["Day", "Input", "Output", "Cached"], rows: rows.map((r) => [r.day, count(r.input), count(r.output), count(r.cached)]) }}
-        >
-          <TokenBars rows={rows} height={220} />
-        </ChartFrame>
-      </Panel>
-
-      <Panel className="p-5">
-        <ChartFrame
-          title="Average input per run"
-          hint={
-            <span className="inline-flex flex-wrap items-center gap-2">
-              {avgNow === null ? "No runs yet" : `${count(Math.round(avgNow))} tokens per run`}
-              {avgNow !== null && <DeltaPill value={avgChange} upIsGood={false} />}
-              <span className="text-xs text-muted">vs the {DAYS} days before</span>
-            </span>
-          }
-          table={{ columns: ["Day", "Input per run"], rows: avgRows.map((r) => [r.day, r.avg === null ? "–" : count(r.avg)]) }}
-        >
-          <div style={{ height: 180 }} className="w-full">
-            <ResponsiveContainer>
-              <LineChart data={avgRows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                <CartesianGrid stroke={CHART.grid} vertical={false} />
-                <XAxis dataKey="day" tickFormatter={tickDay} tick={CHART.tickFont} axisLine={{ stroke: CHART.axis }} tickLine={false} minTickGap={28} />
-                <YAxis tickFormatter={(v: number) => count(v)} tick={CHART.tickFont} axisLine={false} tickLine={false} width={48} />
-                <Tooltip
-                  content={({ active, payload, label }) =>
-                    active && payload?.length ? <TooltipCard title={tickDay(String(label))} rows={[{ color: "var(--series-1)", label: "Input per run", value: count(Number(payload[0].value)) }]} /> : null
-                  }
-                />
-                <Line type="monotone" dataKey="avg" stroke="var(--series-1)" strokeWidth={2} dot={false} connectNulls isAnimationActive={animate} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </ChartFrame>
-      </Panel>
-
-      <Panel className="p-5">
-        <h2 className="text-[15px] font-semibold tracking-tight text-ink">Where this task's tokens went</h2>
-        <p className="mb-3 mt-0.5 text-[13px] text-dim">{tokensAre(billing)} These are this task's prompts that use the most.</p>
-        <TokensWentBody days={DAYS} job={job} limit={5} />
-      </Panel>
-
-      <Panel className="p-5">
-        <PromptVersions job={job} days={DAYS} />
-      </Panel>
-
-      <Panel className="p-5">
-        <h2 className="text-[15px] font-semibold tracking-tight text-ink">Size of this task's tool list</h2>
-        <p className="mb-3 mt-0.5 text-[13px] text-dim">Tools are extra abilities, such as searching or looking something up, that your code offers the AI. Their descriptions are sent with every call.</p>
-        <ToolListBody job={job} days={DAYS} />
-      </Panel>
-
-      <Panel className="p-5">
         <h2 className="text-[15px] font-semibold tracking-tight text-ink">Ways to use fewer tokens</h2>
         <p className="mt-0.5 text-[13px] text-dim">Rule-based suggestions from the last {DAYS} days. They are estimates, not promises.</p>
         {found.length === 0 ? (
@@ -119,8 +58,71 @@ export function TokensTab({ job }: { job: string }) {
             ))}
           </ul>
         )}
-        <p className="mt-4 text-xs text-muted">Figures are from recorded runs.</p>
+        <p className="mt-4 text-xs text-muted">Figures are from recorded AI calls.</p>
       </Panel>
+      <Panel className="p-5">
+        <h2 className="text-[15px] font-semibold tracking-tight text-ink">Where this task's tokens went</h2>
+        <p className="mb-3 mt-0.5 text-[13px] text-dim">{tokensAre(billing)} These are this task's prompts that use the most.</p>
+        <TokensWentBody days={DAYS} job={job} limit={5} />
+      </Panel>
+      <div className="grid gap-4 lg:grid-cols-2">
+      <Panel className="p-5">
+        <ChartFrame
+          title="Input and output tokens"
+          hint={`Last ${DAYS} days: ${count(cur.input + cur.cacheRead)} input, ${count(cur.output)} output`}
+          legend={[
+            { name: "Input", color: "var(--series-1)" },
+            { name: "Output", color: "var(--series-3)" },
+            { name: "Cached", color: "var(--series-7)" },
+          ]}
+          table={{ columns: ["Day", "Input", "Output", "Cached"], rows: rows.map((r) => [r.day, count(r.input), count(r.output), count(r.cached)]) }}
+        >
+          <TokenBars rows={rows} height={220} />
+        </ChartFrame>
+      </Panel>
+      <Panel className="p-5">
+        <ChartFrame
+          title="Average input per AI call"
+          hint={
+            <span className="inline-flex flex-wrap items-center gap-2">
+              {avgNow === null ? "No AI calls yet" : `${count(Math.round(avgNow))} tokens per AI call`}
+              {avgNow !== null && <DeltaPill value={avgChange} upIsGood={false} />}
+              <span className="text-xs text-muted">vs the {DAYS} days before</span>
+            </span>
+          }
+          table={{ columns: ["Day", "Input per AI call"], rows: avgRows.map((r) => [r.day, r.avg === null ? "–" : count(r.avg)]) }}
+        >
+          <div style={{ height: 180 }} className="w-full">
+            <ResponsiveContainer>
+              <LineChart data={avgRows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                <CartesianGrid stroke={CHART.grid} vertical={false} />
+                <XAxis dataKey="day" tickFormatter={tickDay} tick={CHART.tickFont} axisLine={{ stroke: CHART.axis }} tickLine={false} minTickGap={28} />
+                <YAxis tickFormatter={(v: number) => count(v)} tick={CHART.tickFont} axisLine={false} tickLine={false} width={48} />
+                <Tooltip
+                  content={({ active, payload, label }) =>
+                    active && payload?.length ? <TooltipCard title={tickDay(String(label))} rows={[{ color: "var(--series-1)", label: "Input per AI call", value: count(Number(payload[0].value)) }]} /> : null
+                  }
+                />
+                <Line type="monotone" dataKey="avg" stroke="var(--series-1)" strokeWidth={2} dot={false} connectNulls isAnimationActive={animate} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartFrame>
+      </Panel>
+      </div>
+      <details className="group flex flex-col gap-4">
+        <summary className="cursor-pointer text-sm font-semibold text-accent">Prompt changes and tool list</summary>
+        <div className="mt-4 flex flex-col gap-4">
+          <Panel className="p-5">
+            <PromptVersions job={job} days={DAYS} />
+          </Panel>
+          <Panel className="p-5">
+            <h2 className="text-[15px] font-semibold tracking-tight text-ink">Size of this task's tool list</h2>
+            <p className="mb-3 mt-0.5 text-[13px] text-dim">Tools are extra abilities, such as searching or looking something up, that your code offers the AI. Their descriptions are sent with every call.</p>
+            <ToolListBody job={job} days={DAYS} />
+          </Panel>
+        </div>
+      </details>
     </div>
   );
 }

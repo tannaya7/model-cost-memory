@@ -102,7 +102,7 @@ export function LimitCard({ limit }: { limit: UsageLimit }) {
                     to={p(`/jobs/${encodeURIComponent(s.job)}`)}
                     className="shrink-0 rounded-md border border-accent/40 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent-soft"
                   >
-                    See re-test →
+                    See trial →
                   </Link>
                 )}
               </li>

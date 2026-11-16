@@ -83,7 +83,7 @@
       "why": "Evidence 22.5 of the 25 needed to judge it"
     }
   ],
-  "next_step": "Re-test acme-nano: cheaper, but not enough evidence yet",
+  "next_step": "Try acme-nano in a trial: not enough evidence yet",
   "progress": 1.0,
   "recommended": {
     "model": "acme-mini",

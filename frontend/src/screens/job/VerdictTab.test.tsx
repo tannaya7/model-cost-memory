@@ -46,7 +46,7 @@ describe("VerdictTab", () => {
 
   it("offers the re-tests that would settle an open question", () => {
     renderWithProviders(<WithProject id="acme"><VerdictTab rec={downgrade} /></WithProject>);
-    expect(screen.getByRole("link", { name: /Trial acme-nano on past prompts/ })).toHaveAttribute("href", "/p/acme/retest?job=invoice-extract&model=acme-nano");
+    expect(screen.getByRole("link", { name: /Start a trial on acme-nano/ })).toHaveAttribute("href", "/p/acme/retest?job=invoice-extract&model=acme-nano");
   });
 
   it("gives the chart's numbers as a table on request", async () => {

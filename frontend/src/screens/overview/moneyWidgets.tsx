@@ -1,7 +1,7 @@
 /** Three widgets about what the money is doing: where the month will end against a budget, how much went
  * on wrong answers, and what a good answer costs. All figures are estimates from recorded runs at list
  * prices, and each widget says so. */
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { parseBudget, useMonthlyBudget } from "../../features/projects/hooks/useBudget";
 import { useDaily } from "../../features/insights/api/dailyApi";
@@ -10,7 +10,7 @@ import { pct, usd } from "../../ui/format";
 import { Button, cx, EmptyState, Skeleton } from "../../ui/primitives";
 import { clearBrowserBudget, readBrowserBudget } from "./budget";
 import { BUDGET_FIRST_ALERT, monthProjection, unitCosts, wastedSpend } from "./metrics";
-import { DeltaPill, Shell, UnpricedChip, type Ctx, type ShellProps } from "./widgets";
+import { DeltaPill, ownsUnpriced, Shell, UnpricedChip, type Ctx, type ShellProps } from "./widgets";
 
 const dollars = (v: number) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} />;
 
@@ -23,7 +23,11 @@ const STATUS = {
   over: { text: "Over your monthly budget", cls: "bg-bad-soft text-bad" },
 } as const;
 
-export function MonthProjection({ shell }: { shell: ShellProps }) {
+/** How the month-end estimate is worked out: shown behind a "?" wherever the estimate appears. */
+export const FORECAST_HELP = "We take what you have spent this month and add your average daily spending of the last 7 days for each day left, at list prices. The range uses your cheapest and dearest of those 7 days. Days are counted in UTC. It is an estimate, not a bill. Your monthly budget is saved on your account. We warn you as you near it, and nothing is ever blocked.";
+
+/** The month-end estimate and the optional budget. `embedded` gives just the content, for use inside another card. */
+export function MonthProjection({ shell, ctx, embedded }: { shell: ShellProps; ctx?: Pick<Ctx, "unpricedOwner">; embedded?: boolean }) {
   const account = useMonthlyBudget();
   const { projectId } = account;
   const daily = useDaily({ days: 40 }); // the month so far, and the 7 days before today
@@ -61,31 +65,43 @@ export function MonthProjection({ shell }: { shell: ShellProps }) {
   const status = p.status === "none" ? null : STATUS[p.status];
   const used80 = p.usedShare !== null && p.usedShare >= BUDGET_FIRST_ALERT; // 85%, where our first warning fires (the next is at 95%)
 
-  return (
-    <Shell shell={shell} help="We take what you have spent this month and add your average daily spending of the last 7 days for each day left. The range uses your cheapest and dearest of those 7 days. It is an estimate, not a bill." title="Where this month's spending is heading" hint={`${p.monthLabel}. If the pace holds, you will have spent about this much by month end.`}>
+  const wrap = (children: ReactNode) =>
+    embedded ? (
+      <div className="flex flex-col gap-3">{children}</div>
+    ) : (
+      <Shell shell={shell} help={FORECAST_HELP} title="Where this month's spending is heading" hint={`${p.monthLabel}, if the pace holds`}>
+        {children}
+      </Shell>
+    );
+  return wrap(
+    <>
       {daily.isPending ? (
-        <Skeleton className="h-48" />
+        <Skeleton className={embedded ? "h-16" : "h-48"} />
       ) : p.mtd === 0 && p.dailyRate === 0 ? (
         <EmptyState title="No spend this month yet" hint="The estimate appears after your app sends AI calls to a model with a known price. Start by creating an AI task and sending a call." />
       ) : (
-        <div className="flex flex-1 flex-col gap-4">
+        <div className="flex flex-1 flex-col gap-3">
           <div>
             {p.learning ? (
               <>
                 <p className="text-lg font-semibold leading-tight text-ink">Still learning your pace</p>
                 <p className="mt-1.5 text-xs text-muted">
-                  The month-end estimate appears once there are 7 full days of history. So far this month: {usd(p.mtd)} (day {p.day} of {p.daysInMonth}).
+                  Needs 7 full days of history. So far this month: {usd(p.mtd)} (day {p.day} of {p.daysInMonth}).
                 </p>
               </>
             ) : (
               <>
-                <p className="text-[34px] font-semibold leading-none tracking-tight text-ink tabular">{dollars(p.projected)}</p>
+                <p className={cx("flex flex-wrap items-baseline gap-x-2 font-semibold leading-none tracking-tight text-ink tabular", embedded ? "text-[22px]" : "text-[34px]")}>
+                  {embedded && <span className="text-sm font-medium text-dim">On pace for</span>}
+                  {dollars(p.projected)}
+                  <span className="rounded-full bg-surface-3 px-2 py-0.5 text-[11px] font-medium text-muted">estimate</span>
+                </p>
                 <p className="mt-1.5 text-xs text-muted">
-                  likely between {usd(p.low)} and {usd(p.high)} by {p.lastDayLabel} · {usd(p.mtd)} so far (day {p.day} of {p.daysInMonth})
+                  likely {usd(p.low)} to {usd(p.high)} by {p.lastDayLabel} · {usd(p.mtd)} so far (day {p.day} of {p.daysInMonth})
                 </p>
               </>
             )}
-            {p.unpriced > 0 && <div className="mt-2"><UnpricedChip count={p.unpriced} /></div>}
+            {p.unpriced > 0 && !embedded && (!ctx || ownsUnpriced(ctx, "projection")) && <div className="mt-2"><UnpricedChip count={p.unpriced} /></div>}
           </div>
 
           <div>
@@ -94,11 +110,6 @@ export function MonthProjection({ shell }: { shell: ShellProps }) {
               <motion.div className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-accent to-accent-2" initial={{ width: 0 }} animate={{ width: `${(p.mtd / scale) * 100}%` }} transition={{ duration: 0.9, delay: 0.1, ease: [0.22, 1, 0.36, 1] }} />
               {budget && <span aria-hidden className="absolute -bottom-1.5 -top-1.5 w-0.5 rounded bg-ink" style={{ left: `${(budget / scale) * 100}%` }} />}
             </div>
-            <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
-              <li className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent" /> Spent so far</li>
-              <li className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-accent/30" /> Expected by month end</li>
-              {budget && <li className="flex items-center gap-1.5"><span className="h-2.5 w-0.5 rounded bg-ink" /> Budget {usd(budget)}</li>}
-            </ul>
           </div>
 
           {status && (
@@ -124,6 +135,8 @@ export function MonthProjection({ shell }: { shell: ShellProps }) {
                 <Button size="sm" variant="primary" onClick={moveToAccount} disabled={account.saving}>Save to my account</Button>
                 {problem && <span role="alert" className="basis-full text-[11px] text-bad">{problem}</span>}
               </div>
+            ) : !budget && !editing ? (
+              <button type="button" onClick={() => setEditing(true)} className="self-start rounded-[9px] border border-rule bg-surface-2 px-3 py-1.5 text-[13px] font-semibold text-accent-ink transition-colors hover:border-accent hover:underline">Set a monthly budget</button>
             ) : editing || !budget ? (
               <form onSubmit={save} className="flex flex-wrap items-center gap-2">
                 <label htmlFor={`budget-${shell.id}`} className="text-xs text-dim">{budget ? "Monthly budget" : "Set a monthly budget"}</label>
@@ -133,7 +146,7 @@ export function MonthProjection({ shell }: { shell: ShellProps }) {
                   <input id={`budget-${shell.id}`} inputMode="decimal" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={budget ? String(budget) : "e.g. 500"} className="w-24 bg-transparent px-1.5 py-1.5 text-sm text-ink outline-none placeholder:text-muted" />
                 </span>
                 <Button size="sm" variant="primary" type="submit" disabled={account.saving || !draft.trim()}>Save</Button>
-                {budget && <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>}
+                <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
                 {problem && <span role="alert" className="basis-full text-[11px] text-bad">{problem}</span>}
               </form>
             ) : (
@@ -144,13 +157,10 @@ export function MonthProjection({ shell }: { shell: ShellProps }) {
                 <button type="button" onClick={clear} className="font-semibold text-muted hover:text-bad hover:underline">Remove</button>
               </div>
             )}
-            <p className="text-[11px] leading-snug text-muted">
-              Days are counted in UTC. How it is worked out: what you have spent this month, plus your average daily spending of the last 7 days for each day left, at list prices. The range uses your cheapest and dearest of those 7 days. Your monthly budget is saved on your account. We warn you as you near it, and nothing is ever blocked.
-            </p>
           </div>
         </div>
       )}
-    </Shell>
+    </>,
   );
 }
 
@@ -160,8 +170,11 @@ export function MonthProjection({ shell }: { shell: ShellProps }) {
 export function WastedSpend({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
   const w = wastedSpend(ctx.cur);
   const worst = w.byJob[0]?.wasted ?? 0;
+  const how = w.estimated
+    ? "How it is estimated: each AI task's spend for a day is split by its share of wrong answers, so a wrong answer is counted at the average cost of that task's AI calls that day."
+    : "Added up from what each wrong answer actually cost. A wrong answer may still have been a useful call, for example while testing a model.";
   return (
-    <Shell shell={shell} help="When an AI gives a wrong answer you still pay for the call. We add up those costs. Some are estimated from each day's average." title="Money spent on wrong answers" hint={`Last ${ctx.days} days${w.estimated ? ", estimated" : ""}. You pay even when an answer is wrong.`}>
+    <Shell shell={shell} help={`When an AI gives a wrong answer you still pay for the call. We add up those costs. ${how}`} title="Money spent on wrong answers" hint={`Last ${ctx.days} days${w.estimated ? ", estimated" : ""}`}>
       {ctx.dailyPending ? (
         <Skeleton className="h-44" />
       ) : w.spend === 0 ? (
@@ -176,7 +189,7 @@ export function WastedSpend({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
               )}
               of {usd(w.spend)} went on {w.failedRuns.toLocaleString("en")} answers that were checked and found wrong
             </p>
-            {w.unpriced > 0 && <div className="mt-2"><UnpricedChip count={w.unpriced} /></div>}
+            {w.unpriced > 0 && ownsUnpriced(ctx, "wasted-spend") && <div className="mt-2"><UnpricedChip count={w.unpriced} /></div>}
           </div>
           {w.byJob.length === 0 ? (
             <p className="text-sm text-ok">Nothing wasted: every checked answer in this period was correct.</p>
@@ -195,11 +208,6 @@ export function WastedSpend({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
               ))}
             </ul>
           )}
-          <p className="mt-auto border-t border-rule pt-3 text-[11px] leading-snug text-muted">
-            {w.estimated
-              ? "How it is estimated: each AI task's spend for a day is split by its share of wrong answers, so a wrong answer is counted at the average cost of that task's AI calls that day."
-              : "Added up from what each wrong answer actually cost. A wrong answer may still have been a useful call, for example while testing a model."}
-          </p>
         </div>
       )}
     </Shell>
@@ -213,7 +221,7 @@ export function UnitCost({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
   const { all, jobs } = unitCosts(ctx.cur, ctx.prev, ctx.curDone, ctx.prevDone);
   const max = Math.max(...jobs.map((j) => j.per1k ?? 0), 0.0001);
   return (
-    <Shell shell={shell} help="We divide what you spent by the number of correct answers. A cheap model that is often wrong can cost more per correct answer. This is the fair way to compare." title="What 1,000 correct answers cost you" hint={`What it costs to get 1,000 right answers, last ${ctx.days} days.`}>
+    <Shell shell={shell} help="We divide what you spent by the number of correct answers. Spending includes calls that were never checked. A cheap model that is often wrong costs more per correct answer, so this is the fair way to compare. The change is against the period before." title="What 1,000 correct answers cost you" hint={`Last ${ctx.days} days`}>
       {ctx.dailyPending ? (
         <Skeleton className="h-44" />
       ) : jobs.length === 0 ? (
@@ -223,8 +231,8 @@ export function UnitCost({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-[34px] font-semibold leading-none tracking-tight text-ink tabular">{all.per1k === null ? "–" : dollars(all.per1k)}</p>
-              <p className="mt-1.5 text-xs text-muted">across all AI tasks, per 1,000 correct answers</p>
-              {all.unpriced > 0 && <div className="mt-2"><UnpricedChip count={all.unpriced} /></div>}
+              <p className="mt-1.5 text-xs text-muted">across all AI tasks</p>
+              {all.unpriced > 0 && ownsUnpriced(ctx, "unit-cost") && <div className="mt-2"><UnpricedChip count={all.unpriced} /></div>}
             </div>
             {all.change !== null && <DeltaPill value={all.change} upIsGood={false} />}
           </div>
@@ -242,9 +250,6 @@ export function UnitCost({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
               </li>
             ))}
           </ul>
-          <p className="mt-auto border-t border-rule pt-3 text-[11px] leading-snug text-muted">
-            Spending includes calls that were never checked. Wrong answers count against a model: one that is cheap per call but often wrong costs more per correct answer. The change is against the period before.
-          </p>
         </div>
       )}
     </Shell>

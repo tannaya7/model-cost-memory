@@ -54,6 +54,7 @@ function ProjectCard({ project, jobs, index }: { project: Project; jobs: Job[] |
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate text-lg font-semibold tracking-tight text-ink" title={project.name}>{project.name}</p>
+            <p className="mt-0.5 text-xs text-muted">since {shortDate(project.created_at)}</p>
           </div>
           <IconArrowRight size={18} className="mt-1 shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-accent" />
         </div>
@@ -72,7 +73,6 @@ function ProjectCard({ project, jobs, index }: { project: Project; jobs: Job[] |
             <IconBell size={12} /> {project.webhook_url ? "Alerts to webhook" : "Alerts in app only"}
           </Pill>
           <Pill tone="neutral" icon={false}><IconShield size={12} /> Prompts kept {project.content_retention_days} d</Pill>
-          <span className="ml-auto text-xs text-muted">since {shortDate(project.created_at)}</span>
         </div>
       </Link>
     </motion.li>

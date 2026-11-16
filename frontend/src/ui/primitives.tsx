@@ -13,12 +13,15 @@ export function Panel({
   children,
   className,
   glow = false,
+  fill = false,
   as: Tag = "section",
   ...rest
 }: {
   children: ReactNode;
   className?: string;
   glow?: boolean;
+  /** Let the content grow to the panel's height, so a card stretched to match its row has no dead strip. */
+  fill?: boolean;
   as?: "section" | "div" | "article";
 } & React.HTMLAttributes<HTMLElement>) {
   return (
@@ -29,7 +32,7 @@ export function Panel({
           className="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full bg-accent/20 blur-3xl"
         />
       )}
-      <div className="relative">{children}</div>
+      <div className={cx("relative", fill && "flex min-h-0 flex-1 flex-col")}>{children}</div>
     </Tag>
   );
 }

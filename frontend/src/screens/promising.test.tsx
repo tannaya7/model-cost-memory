@@ -28,7 +28,7 @@ describe("Promising, worth a trial", () => {
     expect(links[0].getAttribute("href")).toBe("/p/acme/retest?job=invoice-extract&model=acme-nano");
     expect(card.querySelector("button")).toBeNull();
     // The trial link is the only way to start one: no second "Trial acme-nano" button elsewhere on the tab.
-    expect(screen.queryByRole("link", { name: /Trial acme-nano on past prompts/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Start a trial on acme-nano/ })).toBeNull();
   });
 
   it("uses no banned word and not the green switch colour", () => {

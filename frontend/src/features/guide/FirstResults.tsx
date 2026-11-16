@@ -20,15 +20,16 @@ export function FirstResults({ floor }: { floor?: number }) {
   const checked = (daily.data ?? []).reduce((s, d) => s + (d.passed ?? 0) + (d.failed ?? 0), 0);
   if (!firstResultsReady({ owned: mode === "owned", flagsLoaded: loaded, flags, checked, floor })) return null;
   return (
-    <section aria-labelledby="first-results-title" className="rounded-[16px] border border-accent/40 bg-accent-soft p-4 md:p-5">
+    <section aria-labelledby="first-results-title" className="flex flex-col gap-3 rounded-[16px] border border-accent/40 bg-accent-soft p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 md:px-5 md:py-4">
+      <div className="min-w-0">
       <h2 id="first-results-title" className="text-base font-semibold text-ink">Your first results are in</h2>
-      <p className="mt-1 text-sm text-dim">Start here:</p>
-      <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-sm text-dim">
-        <li>{billing === "subscription" ? "The Usage card is how much your app used. Its list-price figure is not your bill." : "The Spend card is what you spent."}</li>
-        <li>{billing === "subscription" ? "The ways to make your allowance last longer, and each AI task page, show what we measured and the model we would suggest." : "The Saving available card, and each AI task page, show the model we would suggest."} It is a suggestion from your own checked answers. Nothing changes unless you decide.</li>
-        <li>On an AI task, the range shows how sure we are. With only a few checked answers it is wide, and it narrows as more are checked.</li>
-      </ul>
-      <div className="mt-3">
+      <p className="mt-1 text-sm text-dim">
+        {billing === "subscription"
+          ? "Usage is how much your app used, and its list price is not your bill. Ideas to make your allowance last are suggestions. Nothing changes unless you decide. A wide range means few checked answers."
+          : "Spend is what you paid. The saving is our suggestion. Nothing changes unless you decide. A wide range means few checked answers."}
+      </p>
+      </div>
+      <div className="shrink-0">
         <Button size="sm" variant="primary" onClick={() => set("first_results_seen", true)}>Got it</Button>
       </div>
     </section>

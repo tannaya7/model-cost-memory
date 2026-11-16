@@ -8,6 +8,7 @@ import { pickPassExamples, summaryLines } from "../../features/runs/sample";
 import { fetchRuns } from "../../features/runs/api/runsApi";
 import { RunDetailPanel } from "../../features/runs/components/RunDetailPanel";
 import type { Run } from "../../shared/api/types";
+import { Help } from "../../ui/Help";
 import { ErrorState, ModelName, Panel, PanelHeader, Pill, Skeleton } from "../../ui/primitives";
 
 const REMOVED = "The text of this call was removed after your retention period (see Settings). Only the numbers are kept.";
@@ -72,7 +73,12 @@ export function ExamplesCard({ job }: { job: string }) {
 
   return (
     <Panel className="p-5 md:p-6">
-      <PanelHeader title="What this task looks like in practice" hint="The last 30 days" />
+      <div className="flex items-center gap-2">
+        <PanelHeader title="What this task looks like in practice" hint="The last 30 days" />
+        <Help label="How calls are matched to this task">
+          A call lands in this task because your code names it <span className="rounded-md border border-rule bg-surface-2 px-1.5 py-0.5 font-mono text-xs">{job}</span> when it sends the call. We do not guess from the content. This text comes from your own calls and is visible only to people with access to this project.
+        </Help>
+      </div>
       <div className="mt-4">
         {pending ? (
           <Skeleton className="h-40" />
@@ -95,14 +101,18 @@ export function ExamplesCard({ job }: { job: string }) {
                   <p className="mt-1">{tokensAre(billing)} Longer prompts and answers use more tokens.</p>
                 </details>
               )}
-              <p>
-                A call lands in this task because your code names it <span className="rounded-md border border-rule bg-surface-2 px-1.5 py-0.5 font-mono text-xs">{job}</span> when it sends the call. We do not guess from the content.
-              </p>
             </div>
             <ul className="mt-5 flex flex-col gap-4">
               {typical && <Example title="A typical call (marked correct)" run={typical} onOpen={setOpen} />}
-              {different && <Example title="A different kind of call (marked correct)" run={different} onOpen={setOpen} />}
               {failItem && <Example title="A call marked wrong" run={failItem} onOpen={setOpen} />}
+              {different && (
+                <li>
+                  <details>
+                    <summary className="cursor-pointer text-xs font-semibold text-accent">Show a different kind of call</summary>
+                    <div className="mt-3"><ul><Example title="A different kind of call (marked correct)" run={different} onOpen={setOpen} /></ul></div>
+                  </details>
+                </li>
+              )}
             </ul>
             {!failItem && !nothingChecked && <p className="mt-4 text-sm text-dim">No call has been marked wrong yet.</p>}
             {nothingChecked && (
@@ -113,7 +123,6 @@ export function ExamplesCard({ job }: { job: string }) {
           </>
         )}
       </div>
-      <p className="mt-4 text-xs text-muted">This text comes from your own calls and is visible only to people with access to this project.</p>
       <RunDetailPanel runId={open} onClose={() => setOpen(null)} />
     </Panel>
   );

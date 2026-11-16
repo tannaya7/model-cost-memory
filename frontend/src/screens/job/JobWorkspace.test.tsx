@@ -33,8 +33,24 @@ describe("AI task page", () => {
     expect(screen.getByRole("tab", { name: "Recommendation" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Trials on new models" })).toBeInTheDocument();
     expect(screen.getByText("What this task is")).toBeInTheDocument();
+    expect(screen.queryByText(/Checked against the format you defined/)).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Show how we know" }));
     expect(await screen.findByText(/Checked against the format you defined/)).toBeInTheDocument();
     expect(screen.getByText(/No calls this month yet|Loading this month/)).toBeInTheDocument();
+  });
+
+  it("an AI task with no calls shows no recommendation or percentage", async () => {
+    stubApi({ "/v1/jobs": [{ ...job, run_count: 0 }], "/v1/jobs/invoice-extract/recommendation": { job: "invoice-extract", verdict: "HOLD", models: [], retest_candidates: [], evidence: { failing_runs: [] }, promising: { model: "acme-mini" } }, "/v1/runs": { items: [], next_cursor: null } });
+    show();
+    expect((await screen.findAllByText("No AI calls yet")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Promising")).toBeNull();
+  });
+
+  it("uses one noun on the tabs: AI task, AI call, correct answers, trial", async () => {
+    stubApi({ "/v1/jobs": [job], "/v1/jobs/invoice-extract/recommendation": new Response("{}", { status: 404 }), "/v1/runs": { items: [], next_cursor: null } });
+    show();
+    expect(await screen.findByText("Every AI call, newest first")).toBeInTheDocument();
+    expect(screen.queryByText(/Every run/)).toBeNull();
   });
 
   it("saves an edited description with PATCH", async () => {

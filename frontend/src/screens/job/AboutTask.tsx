@@ -18,9 +18,10 @@ export function AboutTask({ job }: { job: Job }) {
   const { mode: billing } = useBillingMode();
   const daily = useDaily({ job: job.name, days: 30 });
   const profile = useTaskProfile(job.name);
+  const [open, setOpen] = useState(false);
   const line = daily.isPending ? "Loading this month..." : monthLine(summarizeMonth(daily.data ?? []), billing);
   return (
-    <Panel className="flex flex-col gap-4 p-4 md:p-5">
+    <Panel className="flex flex-col gap-3 p-4 md:p-5">
       <div className="flex items-center gap-2">
         <h2 className="text-sm font-semibold text-ink">What this task is</h2>
         <Help label="What is in this box?">
@@ -30,12 +31,25 @@ export function AboutTask({ job }: { job: Job }) {
           <span className="mt-2 block"><b>Written by AI</b> is optional and off until you turn it on. It reads a few sample calls and may be wrong.</span>
         </Help>
       </div>
-      <p className="text-xs text-muted">{TASK_EXPLAINER}</p>
-
       <section>
         <p className={LABEL}>What you told us</p>
         <Description job={job} />
       </section>
+      {profile.data?.models?.length ? <p className="text-xs text-dim">Models used: {profile.data.models.join(", ")}</p> : null}
+      <div>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={`about-${job.name}`}
+          onClick={() => setOpen((v) => !v)}
+          className="text-xs font-semibold text-accent hover:underline"
+        >
+          {open ? "Hide how we know" : "Show how we know"}
+        </button>
+      </div>
+
+      {open && <div id={`about-${job.name}`} className="flex flex-col gap-4">
+      <p className="text-xs text-muted">{TASK_EXPLAINER}</p>
 
       <section>
         <p className={LABEL}>What we can see from your calls</p>
@@ -74,6 +88,7 @@ export function AboutTask({ job }: { job: Job }) {
         <p className={LABEL}>Written by AI (optional)</p>
         <AiSummary name={job.name} summary={profile.data?.summary} />
       </section>
+      </div>}
     </Panel>
   );
 }

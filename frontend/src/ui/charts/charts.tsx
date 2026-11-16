@@ -293,7 +293,7 @@ export function CostQualityMap({
             tick={CHART.tickFont}
             axisLine={{ stroke: CHART.axis }}
             tickLine={false}
-            label={{ value: listPrice ? "cost per successful run at list prices, not your bill →  (cheaper to the left)" : "cost per successful run →  (cheaper to the left)", position: "insideBottom", offset: -12, fill: "var(--chart-tick)", fontSize: 11 }}
+            label={{ value: listPrice ? "cost per successful run at list prices, not your bill →  (further left uses less)" : "cost per successful run →  (cheaper to the left)", position: "insideBottom", offset: -12, fill: "var(--chart-tick)", fontSize: 11 }}
           />
           <YAxis
             type="number"
@@ -440,13 +440,13 @@ export function CompareArea({
 }: {
   rows: Array<{ day: string; cur: number; prev: number; prevDay: string }>;
   format: (v: number) => string;
-  height?: number;
+  height?: number | string;
 }) {
   const animate = useAnimate();
   return (
     <div style={{ height }} className="w-full">
       <ResponsiveContainer>
-        <ComposedChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+        <ComposedChart data={rows} margin={{ top: 8, right: 18, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id="compare-fill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--color-accent)" stopOpacity={0.28} />

@@ -8,10 +8,10 @@ import { serverText } from "../../projects/moneyWording";
 import { useBillingMode } from "../../projects/hooks/useBillingMode";
 import { AI_SUMMARY_NOTE } from "../../../screens/job/VerdictTab";
 
-export function getVerdictChip(verdict: Verdict) {
+export function getVerdictChip(verdict: Verdict, lighter = false) {
   switch (verdict) {
     case "DOWNGRADE":
-      return <Badge tone="ok">Cheaper model available</Badge>;
+      return <Badge tone="ok">{lighter ? "Lighter model available" : "Cheaper model available"}</Badge>;
     case "SWITCH":
       return <Badge tone="warn">Switch model</Badge>;
     case "HOLD":
@@ -101,7 +101,7 @@ export function RecommendationCard({ recommendation }: { recommendation: Recomme
       {/* Header: Chip & Headline */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-bold tracking-tight text-ink">{headline}</h2>
-        <div>{getVerdictChip(verdict)}</div>
+        <div>{getVerdictChip(verdict, billing === "subscription")}</div>
       </div>
 
       {/* Optional plain-English summary, written from the figures below and never deciding anything */}

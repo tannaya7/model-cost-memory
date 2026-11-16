@@ -83,16 +83,16 @@ export default function Models() {
     <div className="flex flex-col gap-5">
       <header>
         <h1 className="text-3xl font-semibold tracking-tight">Models</h1>
-        <p className="mt-1 text-sm text-dim">What each AI model costs, and which ones their makers are shutting down. Use it to see what you pay per model and to spot a model you must replace. Prices come from the public price list, refreshed daily. A retired model is never recommended.</p>
+        <p className="mt-1 text-sm text-dim">What each model costs, and which are being shut down. Prices refresh daily.</p>
       </header>
 
       <Reveal className="grid gap-4 lg:grid-cols-3">
         <Panel className="p-5 md:p-6 lg:col-span-2">
-          <PanelHeader title="What the models you run cost" hint="List price in US dollars per million tokens. Tokens are the small pieces of text AI models read and write; longer prompts and answers use more." />
+          <PanelHeader title="What the models you run cost" hint="List price in US dollars per million tokens." />
           <div className="mt-5">{used.isPending ? <Skeleton className="h-48" /> : <PriceBars models={usedModels} />}</div>
         </Panel>
-        <Panel className="p-5">
-          <PanelHeader title="Being retired" hint="Models you use that their maker is shutting down. Move to another model before the shutdown date." />
+        <Panel className="self-start p-5">
+          <PanelHeader title="Being retired" hint="Move to another model before the shutdown date." />
           <div className="mt-4">
             {used.isPending ? (
               <Skeleton className="h-32" />
@@ -137,7 +137,7 @@ export default function Models() {
               </>
             }
           />
-          <div className="mt-4 overflow-x-auto">
+          <div className="scroll-hint-x mt-4 overflow-x-auto">
             {catalog.isPending ? (
               <Skeleton className="h-72" />
             ) : catalog.isError ? (

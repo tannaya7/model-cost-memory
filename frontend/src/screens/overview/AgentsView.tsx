@@ -96,7 +96,7 @@ function ToolRow({ t, showJob = true }: { t: ToolsUsage; showJob?: boolean }) {
         {showJob && <span className="font-semibold">{jobTitle(t.job)}: </span>}
         about {count(t.avg_tools_tokens)} tokens of tool list on every call, roughly {pct(t.share_of_tokens_in, 0)} of what you send in
       </p>
-      <p className="mt-0.5 text-xs text-muted">An estimate: we guess the size from the tool list your code sends. Providers do not report it.</p>
+      <p className="mt-0.5 text-xs text-muted">Estimate: size guessed from the tool list your code sends.</p>
       {tip && <p className="mt-1 text-[13px] text-dim">{tip}</p>}
     </li>
   );

@@ -1,4 +1,4 @@
-/** The decision for one job, in words first, then the picture that proves it. */
+/** The decision for one AI task, in words first, then the picture that proves it. */
 import { useP } from "../../app/project";
 import { Link } from "react-router-dom";
 import type { ModelEvidence, Recommendation } from "../../shared/api/types";
@@ -37,12 +37,12 @@ function headline(rec: Recommendation, billing: string): { title: React.ReactNod
         title: <>Move to <span className="text-gradient">{to}</span></>,
         body: `${to} gets ${pct(toStats?.weighted_pass_rate)} of answers correct, within ${points} points of both the best model and your current one${
           billing !== "subscription" && cheaper && cheaper > 1.05 ? `, at ${cheaper >= 10 ? Math.round(cheaper) : cheaper.toFixed(1)}× less per successful answer` : ""
-        }. We only advise a move like this with ${confidenceWords(rec.rules.switch_confidence).plain} (${confidenceWords(rec.rules.switch_confidence).exact}).`,
+        }.`,
       };
     case "SWITCH":
       return {
         title: <>Move to <span className="text-gradient">{to}</span></>,
-        body: `${cur} fails more often than ${to}: ${pct(curStats?.weighted_pass_rate)} against ${pct(toStats?.weighted_pass_rate)}. We only advise this with ${confidenceWords(rec.rules.switch_confidence).plain} (${confidenceWords(rec.rules.switch_confidence).exact}) that the difference is real.`,
+        body: `${cur} fails more often than ${to}: ${pct(curStats?.weighted_pass_rate)} against ${pct(toStats?.weighted_pass_rate)}. We only advise this when we are very sure the difference is real.`,
       };
     case "HOLD":
       return {
@@ -65,7 +65,7 @@ function ModelCard({ label, m, highlight, billing = "per_use" }: { label: string
       <p className="mt-1 truncate font-mono text-[15px] font-semibold text-ink">{m.model}</p>
       <dl className="mt-3 grid grid-cols-2 gap-3">
         <div>
-          <dt className="text-[11px] text-muted">Correct answers</dt>
+          <dt className="flex min-h-[2.4em] items-end text-[11px] leading-tight text-muted">Correct answers</dt>
           <dd className="tabular text-lg font-semibold text-ink">{pct(m.weighted_pass_rate)}</dd>
           {m.pass_rate_low !== null && (
             <dd className="tabular text-[11px] text-muted">likely {pct(m.pass_rate_low, 0)}–{pct(m.pass_rate_high, 0)}</dd>
@@ -73,7 +73,7 @@ function ModelCard({ label, m, highlight, billing = "per_use" }: { label: string
           <dd className="mt-1 text-[11px] leading-snug text-muted">Out of every 100 answers we checked, about {Math.round((m.weighted_pass_rate ?? 0) * 100)} were right.</dd>
         </div>
         <div>
-          <dt className="text-[11px] text-muted">{billing === "per_use" ? "Cost per correct answer" : "Cost per correct answer, at list prices"}</dt>
+          <dt className="flex min-h-[2.4em] items-end text-[11px] leading-tight text-muted">{billing === "per_use" ? "Cost per correct answer" : "Cost per correct answer, at list prices"}</dt>
           <dd className="tabular text-lg font-semibold text-ink">{usd(m.cost_per_success_usd)}</dd>
           <dd className="tabular text-[11px] text-muted">from {m.n_runs.toLocaleString("en")} checked answers</dd>
           <dd className="mt-1 text-[11px] leading-snug text-muted">{billing === "per_use" ? "What you pay, on average, for each right answer." : billing === "both" ? "List prices, not your bill: what a per-use call would cost, on average, for each right answer." : "At list prices, not your bill: what each right answer would cost if you paid per use."}</dd>
@@ -96,6 +96,7 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
   const f = rec.forecast;
   const trial = promisingOf(rec);
   const summary = serverText(rec.summary, billing, null);
+  const whySections = buildWhy(rec, billing);
 
   return (
     <div className="flex flex-col gap-4">
@@ -159,7 +160,7 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
             )}
             {!f && (rec.verdict === "DOWNGRADE" || rec.verdict === "SWITCH") && (
               <div className="rounded-[14px] border border-rule bg-surface-2/50 p-4" data-testid="forecast-learning">
-                <p className="text-sm font-semibold text-ink">Still learning how much this task runs</p>
+                <p className="text-sm font-semibold text-ink">Still learning how often this task is used</p>
                 <p className="text-[13px] text-dim">Monthly figures appear once the model in use has a week of calls. Nothing is guessed before then.</p>
               </div>
             )}
@@ -168,7 +169,7 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
                 {billing !== "per_use" && (
                   <div className="col-span-2 rounded-[14px] border border-rule bg-surface-2/50 p-4">
                     <p className="text-sm font-semibold text-ink">{billing === "both" ? "If you pay a subscription" : "Your allowance"}</p>
-                    <p className="text-[13px] text-dim">A smaller model may use less of your allowance. We cannot say how much: providers do not publish exact rates, and we have not verified how each one counts cached text.</p>
+                    <p className="text-[13px] text-dim">A smaller model may use less of your allowance. We cannot say how much: providers do not publish exact rates.</p>
                     {billing === "both" && <p className="mt-1 text-[11px] text-muted">We cannot tell which calls were paid which way, so we show both.</p>}
                   </div>
                 )}
@@ -185,7 +186,6 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
                   <p className="text-[11px] text-muted">Wrong answers a month</p>
                   <p className="tabular text-lg font-semibold text-ink">{wrongAnswerWords(f).headline}</p>
                   <p className="tabular text-[11px] text-muted">{wrongAnswerWords(f).range}</p>
-                  <p className="mt-1 text-[11px] leading-snug text-muted">A guess from your own checked answers, so it comes as a range.</p>
                 </div>
               </div>
             )}
@@ -197,18 +197,31 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
         <Panel className="p-5 md:p-6">
           <PanelHeader title="Why we recommend this" />
           <dl className="mt-3 grid gap-3">
-            {buildWhy(rec, billing).map((w) => (
+            {whySections.slice(0, 2).map((w) => (
               <div key={w.title}>
                 <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted">{w.title}</dt>
                 <dd className="mt-0.5 text-sm text-dim">{w.text}</dd>
               </div>
             ))}
           </dl>
+          {whySections.length > 2 && (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-xs font-semibold text-accent">More reasons</summary>
+              <dl className="mt-3 grid gap-3">
+                {whySections.slice(2).map((w) => (
+                  <div key={w.title}>
+                    <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted">{w.title}</dt>
+                    <dd className="mt-0.5 text-sm text-dim">{w.text}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
+          )}
           {rec.retest_candidates.filter((m) => m !== trial?.model).length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
               {rec.retest_candidates.filter((m) => m !== trial?.model).map((model) => (
                 <ButtonLink key={model} to={p(`/retest?job=${encodeURIComponent(rec.job)}&model=${encodeURIComponent(model)}`)} size="sm">
-                  <IconFlask size={14} /> Trial {model} on past prompts
+                  <IconFlask size={14} /> Start a trial on {model}
                 </ButtonLink>
               ))}
             </div>
@@ -234,12 +247,12 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
             title="Every model you have tried, on cost and quality"
             hint={
               <>
-                Up is more reliable, left is cheaper. The green band is good enough: within {Math.round(rec.rules.margin * 100)} points of the best model.
-                The cheapest model inside it wins. Bars show where each pass rate likely lies ({Math.round(rec.rules.confidence * 100)}% range).
+                Up is more reliable, left is {billing === "per_use" ? "cheaper" : "lighter on your allowance"}. The green band is good enough: within {Math.round(rec.rules.margin * 100)} points of the best model.
+                {billing === "per_use" ? "The cheapest" : "The lightest"} model inside it wins. Bars show where each correct-answer rate likely lies ({Math.round(rec.rules.confidence * 100)}% range).
               </>
             }
             table={{
-              columns: ["Model", "Pass rate", "Likely range", billing === "per_use" ? "Cost / success" : "Cost / success (list price)", "Checked runs", "Judged"],
+              columns: ["Model", "Correct answers", "Likely range", billing === "per_use" ? "Cost / success" : "Cost / success (list price)", "Checked answers", "Judged"],
               rows: rec.models.map((m) => [
                 m.model,
                 pct(m.weighted_pass_rate),
@@ -257,7 +270,7 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
 
       <Reveal delay={0.12}>
         <Panel className="p-5 md:p-6">
-          <PanelHeader title="How each model was judged" hint="The rule: cheapest model shown to pass within the tolerance of both the best model and your current one" />
+          <PanelHeader title="How each model was judged" hint="The cheapest model that stays within the tolerance" />
           <ul className="mt-4 divide-y divide-rule">
             {[...rec.models]
               .sort((a, b) => (a.cost_per_success_usd ?? Infinity) - (b.cost_per_success_usd ?? Infinity))
@@ -284,8 +297,8 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
               })}
           </ul>
           <p className="mt-3 text-xs text-muted">
-            Based on {rec.evidence.n_runs.toLocaleString("en")} checked answers. Older runs count less, and runs on a superseded model version fade faster.{" "}
-            <Link to={`?tab=runs`} className="text-accent hover:underline">See the runs</Link>
+            Based on {rec.evidence.n_runs.toLocaleString("en")} checked answers. Older answers count less.{" "}
+            <Link to={`?tab=runs`} className="text-accent hover:underline">See the AI calls</Link>
           </p>
         </Panel>
       </Reveal>

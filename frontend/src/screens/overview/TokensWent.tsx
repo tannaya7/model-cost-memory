@@ -142,7 +142,7 @@ export function TokensWentBody({ days, job, limit }: { days: number; job?: strin
           <GroupCard key={`${g.job}:${g.prompt_version ?? ""}`} g={g} mode={mode} />
         ))}
       </ul>
-      <p className="mt-3 text-xs text-muted">Shares are of the tokens used in the last {q.data.days} days. Tips are rule-based ideas and may not fit every prompt.</p>
+      <p className="mt-3 text-xs text-muted">Shares of the last {q.data.days} days. Tips are ideas, not promises.</p>
     </>
   );
 }

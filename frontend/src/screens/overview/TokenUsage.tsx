@@ -135,7 +135,7 @@ export function TokenUsage({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
         </div>
       </div>
 
-      <p className="mt-auto pt-4 text-xs text-muted">Figures come from recorded runs (your AI calls). Limits and rates are estimates.</p>
+      <p className="mt-auto pt-4 text-xs text-muted">Limits and rates are estimates.</p>
     </Shell>
   );
 }

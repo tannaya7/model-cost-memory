@@ -40,9 +40,14 @@ export function ProviderKeyForm({ onSaved }: { onSaved: () => void }) {
       <div>
         <h2 className="text-base font-semibold text-ink">Add the key trials on new models should use</h2>
         <p className="mt-1 text-xs text-dim">
-          A trial replays your past prompts on another model to see if it does as well. It uses your own provider key, so the spending is yours and stays under the monthly budget above. Saving the key lets trials run within that budget, including ones we start when a cheaper model appears. An AI task that has only ever used one model gets one trial of a cheaper model from this provider as soon as you save, with a small budget ($1 by default). Only models with a known price are tried, so the budget always holds. The key is encrypted on the server and
-          only its last four characters are ever shown again. You can remove it at any time.
+          It stays under the monthly budget above. Stored encrypted; only the last 4 characters show. Remove it any time.
         </p>
+        <details className="mt-1 text-xs text-dim">
+          <summary className="cursor-pointer font-semibold text-accent">How trials use this key</summary>
+          <p className="mt-1">
+            A trial replays your past prompts on another model to see if it does as well. It uses your own provider key, so the spending is yours. Saving the key lets trials run within your budget, including ones we start when a cheaper model appears. An AI task that has only ever used one model gets one trial of a cheaper model from this provider as soon as you save, with a small budget ($1 by default). Only models with a known price are tried, so the budget always holds.
+          </p>
+        </details>
       </div>
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
         <label className="text-sm text-ink">

@@ -57,7 +57,7 @@ function Table({ versions }: { versions: PromptVersion[] }) {
   // one card per version on a phone, one column per version on a wide screen
   return (
     <>
-      <div className="hidden overflow-x-auto md:block">
+      <div className="scroll-hint-x hidden overflow-x-auto md:block">
         <table className="w-full text-left text-[13px]">
           <thead>
             <tr className="border-b border-rule">
@@ -151,7 +151,7 @@ export function PromptVersions({ job, days = 30 }: { job: string; days?: number 
         <h2 id="pv-title" className="text-[15px] font-semibold tracking-tight text-ink">Before and after a prompt change</h2>
         <Help label="What is a prompt version?">{HELP}</Help>
       </div>
-      <p className="mb-3 mt-0.5 text-[13px] text-dim">Your prompt versions for this task, side by side, from the last {days} days.</p>
+      <div className="mb-3" />
       {q.isPending ? (
         <Skeleton className="h-40 w-full" />
       ) : q.isError ? (

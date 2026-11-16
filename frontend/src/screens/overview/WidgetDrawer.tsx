@@ -124,7 +124,8 @@ export function WidgetDrawer({ open, onClose, ids, onAdd, onRemove }: { open: bo
     setJustAdded(id);
     window.setTimeout(() => setJustAdded((v) => (v === id ? null : v)), 1600);
   };
-  const all = Object.keys(WIDGETS) as WidgetId[];
+  // Widgets that were merged into newer ones stay listed only for people who already have them on their overview.
+  const all = (Object.keys(WIDGETS) as WidgetId[]).filter((id) => !WIDGETS[id].legacy || ids.includes(id));
 
   // Rendered in <body>, outside #root, so the app behind can be made inert while the dialog is open.
   return createPortal(
