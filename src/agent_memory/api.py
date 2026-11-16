@@ -41,7 +41,7 @@ from .recommend.cache import cached_recommend
 from .recommend.engine import JobRecommendation, ModelEvidence
 from .insights.task_profile import MIN_CALLS, task_profile
 from .recommend.summary import summarize
-from .recommend.task_summary import delete_summary, provider_name, task_summary_state
+from .recommend.task_summary import delete_project_summaries, delete_summary, provider_name, task_summary_state
 from .retest import keys as provider_keys
 from .retest.runner import RetestRefused, enqueue, spent_this_month, start_on_first_key
 from .schemas import (
@@ -87,7 +87,9 @@ from .schemas import (
     ProviderKeyIn,
     ProviderKeyOut,
     RecommendationEvidence,
+    PromisingOut,
     RecommendationOut,
+    SureEnoughOut,
     RecommendationRules,
     RetestCreate,
     RetestLimits,
@@ -103,8 +105,9 @@ from .schemas import (
     UsedPercentIn,
 )
 from .auth import routes as auth_routes
-from .auth.access import current_project
+from .auth.access import current_project, signed_in_project
 from .config import check_startup, get_settings
+from .csrf import CsrfMiddleware
 from .heartbeat import overdue
 from .news import service as news_service
 from .news.feeds import FEEDS as NEWS_FEEDS
@@ -118,6 +121,7 @@ from .storage import lineage
 from .versions import normalize
 
 PREVIEW_CHARS = 200
+MAX_JOBS_PER_PROJECT = 500  # generous: a project has a few dozen tasks; this stops runaway creation
 log = logging.getLogger("agent_memory.api")
 
 
@@ -145,6 +149,7 @@ app.add_middleware(
     SessionMiddleware, secret_key=_session_secret(), session_cookie="mcm_session", same_site="lax",
     https_only=get_settings().public_url.startswith("https://"), max_age=14 * 24 * 3600,
 )
+app.add_middleware(CsrfMiddleware)  # a changing request with the sign-in cookie must come from this site
 app.add_middleware(RateLimitMiddleware)  # added last, so it runs first: refused requests do no work
 app.include_router(auth_routes.router)
 
@@ -297,12 +302,15 @@ async def get_task_profile(
 @app.put("/v1/task-summary-consent", response_model=TaskSummaryOut, tags=["jobs"])
 async def put_task_summary_consent(
     body: TaskSummaryConsentIn,
-    project: Project = Depends(current_project),
+    project: Project = Depends(signed_in_project),
     session: AsyncSession = Depends(get_session),
 ) -> TaskSummaryOut:
     """Switch the AI-written task summaries on or off for this project. Off by default; while off, no
-    sample prompt is ever sent to an outside AI service."""
+    sample prompt is ever sent to an outside AI service. Only the signed-in owner may change it (a project
+    key, which an SDK holds, is refused), and switching it off deletes the project's stored summaries."""
     project.task_summary_consent = body.enabled
+    if not body.enabled:
+        await delete_project_summaries(session, project.project_id)
     await session.commit()
     return TaskSummaryOut(state="off" if not body.enabled else "pending", text=None, consent=body.enabled,
                           service=provider_name(get_settings()))
@@ -384,6 +392,10 @@ async def create_job_endpoint(
     session: AsyncSession = Depends(get_session),
 ) -> JobOut:
     """Define a job and how a correct answer is recognised."""
+    count = (await session.execute(select(func.count()).select_from(Job).where(Job.project_id == project.project_id))).scalar_one()
+    if count >= MAX_JOBS_PER_PROJECT:
+        raise HTTPException(409, f"This project already has {MAX_JOBS_PER_PROJECT} jobs, which is the most one "
+                                 "project can have. Use fewer, broader job names or delete ones you no longer need.")
     try:
         job = await ingest.create_job(session, project, body)
     except ingest.DuplicateJob as exc:
@@ -544,6 +556,12 @@ def _recommendation_out(r: JobRecommendation, summary: str | None = None,
         forecast=ForecastOut(**vars(r.forecast)) if r.forecast else None, summary=summary,
         summary_prompt_version=summary_version, warnings=d.warnings,
         next_step=d.next_step, computed_at=r.computed_at,
+        promising=PromisingOut(
+            model=d.promising.model, current=d.promising.current, gap_points=d.promising.gap * 100,
+            low_points=d.promising.low * 100, high_points=d.promising.high * 100,
+            more_needed=d.promising.more_needed) if d.promising else None,
+        sure_enough=SureEnoughOut(needed=d.sure_enough_needed, have=d.sure_enough_have)
+        if d.verdict == "INSUFFICIENT_EVIDENCE" and d.sure_enough_have is not None else None,
     )
 
 

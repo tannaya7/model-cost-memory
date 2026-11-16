@@ -261,3 +261,27 @@ async def test_the_monthly_budget_can_be_set_validated_and_cleared(client, dev_l
     for bad in (0, -5, 10_000_001):
         assert (await client.patch(url, json={"monthly_budget_usd": bad})).status_code == 422
     assert (await client.patch(url, json={"monthly_budget_usd": None})).json()["monthly_budget_usd"] is None
+
+
+async def test_f16_shadow_runs_do_not_count_towards_the_budget(session):
+    job = await make_job(session, budget=Decimal("100"))
+    await spend(session, job, [0], cost="90", kind="SHADOW")
+    assert await check_budgets(session, now=NOW) == []
+
+
+async def test_f17_the_text_never_rounds_up_to_a_level_not_reached(session):
+    job = await make_job(session, budget=Decimal("100"))
+    await spend(session, job, [0], cost="94.6")
+    assert [a.detail["level"] for a in await check_budgets(session, now=NOW)] == ["85"]
+    a = (await alerts(session, "BUDGET"))[0]
+    assert "94%" in a.detail["summary"] and "95%" not in a.detail["summary"]
+
+
+async def test_f15_a_first_run_on_the_day_seven_days_ago_is_enough_like_the_web_app(session):
+    job = await make_job(session, budget=Decimal("100"))
+    first = NOW.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=7) + timedelta(hours=12)
+    session.add(run(job, first, cost=Decimal("40")))
+    session.add_all(run(job, NOW - timedelta(days=d), cost=Decimal("10")) for d in [1, 2, 3, 4, 5, 6])
+    await session.commit()
+    levels = [a.detail["level"] for a in await check_budgets(session, now=NOW)]
+    assert "PROJECTED" in levels

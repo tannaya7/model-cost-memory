@@ -206,11 +206,16 @@ def summarise(old: Version, new: Version) -> str:
 
 
 def _compare(versions: list[Version]) -> Comparison | None:
-    ordered = sorted(versions, key=lambda v: v.first_seen)
+    """The two most recently used versions, the one used last being "newer" (F20): a rollback to an earlier
+    version (v1, v2, v1) compares v2 with v1 and says it went back, instead of calling v2 the newer one."""
+    ordered = sorted(versions, key=lambda v: (v.last_seen, v.first_seen))
     if len(ordered) < 2:
         return None
     old, new = ordered[-2], ordered[-1]
-    return Comparison(older=old.label, newer=new.label, side_by_side=ran_side_by_side(old, new), summary=summarise(old, new))
+    summary = summarise(old, new)
+    if new.first_seen < old.first_seen:
+        summary = f"Went back to {new.label}, which was in use before {old.label}. {summary}"
+    return Comparison(older=old.label, newer=new.label, side_by_side=ran_side_by_side(old, new), summary=summary)
 
 
 def _same_start(a: str, b: str) -> bool:

@@ -18,7 +18,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, Response
-from sqlalchemy import Text, cast, select
+from sqlalchemy import Text, cast, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +32,8 @@ from ..alerts.notifier import retry_given_up_alerts
 from ..security import generate_webhook_secret
 from ..urls import UnsafeUrl, check_outbound
 from .access import current_user, owned_project
+
+MAX_PROJECTS_PER_USER = 50  # generous: a person has a handful; this stops runaway creation
 
 log = logging.getLogger("agent_memory.auth")
 router = APIRouter()
@@ -164,6 +166,11 @@ async def new_project(
     body: ProjectCreate, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)
 ) -> ProjectCreated:
     """Create a project you own. Its key is in the response once; copy it into the SDK."""
+    owned = (await session.execute(
+        select(func.count()).select_from(Project).where(Project.owner_user_id == user.user_id))).scalar_one()
+    if owned >= MAX_PROJECTS_PER_USER:
+        raise HTTPException(409, f"You already have {MAX_PROJECTS_PER_USER} projects, which is the most "
+                                 "one account can have. Delete one you no longer use first.")
     for _ in range(3):  # the slug has a random suffix; retry the rare collision
         try:
             project, key = await create_project(session, slug_for(body.name), name=body.name.strip(),

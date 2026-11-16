@@ -226,6 +226,10 @@ def read_response(response: Any, *, include_arguments: bool = False) -> dict[str
         out["tokens_out"] = _int(_get(usage, "output_tokens"))
         out["cache_read_tokens"] = _int(_get(usage, "cache_read_input_tokens"))
         out["cache_write_tokens"] = _int(_get(usage, "cache_creation_input_tokens"))
+        # UNVERIFIED field names (Anthropic usage.cache_creation split; docs page not re-opened): absent -> 5m rate.
+        one_hour = _int(_get(usage, "cache_creation", "ephemeral_1h_input_tokens"))
+        if one_hour:
+            out["cache_write_1h_tokens"] = min(one_hour, out["cache_write_tokens"])
     elif _get(usage, "prompt_tokens") is not None:  # OpenAI and compatible servers (incl. Ollama)
         cached = _int(_get(usage, "prompt_tokens_details", "cached_tokens"))
         out["tokens_in"] = max(_int(_get(usage, "prompt_tokens")) - cached, 0)

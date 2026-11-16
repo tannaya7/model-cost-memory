@@ -226,3 +226,18 @@ async def test_only_the_owner_changes_the_billing_mode(client, dev_login):
     assert (await client.patch(f"/v1/projects/{pid}", json={"billing_mode": "both"})).status_code == 401
     await dev_login(client, "ben@example.com")
     assert (await client.patch(f"/v1/projects/{pid}", json={"billing_mode": "both"})).status_code in (403, 404)
+
+
+async def test_f22_input_size_band_counts_cached_tokens(client, session):
+    project, key = await create_project(session, "bands")
+    job = Job(project_id="bands", name="doc", check_kind="ANSWER_KEY", check_config={"fields": ["t"]})
+    session.add(job)
+    await session.flush()
+    session.add(Run(
+        run_id=uuid.uuid4(), job_id=job.job_id, project_id="bands", prompt="p", prompt_hash="h", model="mini",
+        model_version="mini-2026-09", tokens_in=500, cache_read_tokens=100_000, outcome="PASS", cost_usd=0.002,
+        state="INDEXED", created_at=datetime.now(UTC) - timedelta(hours=1),
+    ))
+    await session.commit()
+    body = (await client.get("/v1/jobs/doc/insights", headers={"X-API-Key": key})).json()
+    assert [b["group"] for b in body["by_input_size"]] != ["under 8k"]

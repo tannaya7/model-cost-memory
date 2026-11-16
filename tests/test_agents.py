@@ -148,3 +148,26 @@ async def test_labels_and_possible_loop_on_the_endpoint(client, session):
     coder = next(a for a in body["agents"] if a["agent"] == "coder")
     assert coder["models"] == ["m"] and coder["steps_per_task"] == 3.0
     assert {"name": "search", "calls": 3} in coder["top_tools"]
+
+
+async def test_f24_a_big_trace_does_not_starve_loop_detection_of_the_others(session, monkeypatch):
+    from agent_memory.insights import agents as mod
+
+    monkeypatch.setattr(mod, "MAX_STEP_ROWS", 6)
+    await session.execute(Project.__table__.insert().values(project_id="f24", api_key_hash=hash_key(generate_key())))
+    job = Job(project_id="f24", name="j", check_kind="LATE_LABEL", check_config={})
+    session.add(job)
+    await session.flush()
+    now = datetime.now(UTC)
+
+    def run(trace, prompt, minutes_ago, tin):
+        return Run(run_id=uuid.uuid4(), job_id=job.job_id, project_id="f24", prompt=prompt, prompt_hash=prompt,
+                   model="m", model_version="m-1", trace_id=trace, tokens_in=tin, tokens_out=0, cache_read_tokens=0,
+                   cost_usd=Decimal("0.01"), run_kind="PRODUCTION", created_at=now - timedelta(minutes=minutes_ago))
+
+    session.add_all([run("big", f"p{i}", 600 - i, 1000) for i in range(20)]
+                    + [run("loopy", "same", 30 - i, 10) for i in range(6)])
+    await session.commit()
+    result = await mod.agent_insights(session, "f24", now=now)
+    by = {t.trace_id: t for t in result.traces}
+    assert by["loopy"].possible_loop is not None and by["loopy"].possible_loop.repeats == 6

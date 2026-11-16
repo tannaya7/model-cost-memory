@@ -19,9 +19,9 @@ recommended and why it changed.
   with the reason it passed or failed.
 - Evidence fades with age, faster for model versions that have been superseded, so conclusions stay
   current without anyone curating a test set.
-- A cheaper model is recommended only when the system is **95% sure it is at most 3 points worse** than the
+- A cheaper model is recommended only when the system is **about 97.5% sure (one-sided) that it is at most 3 points worse** than the
   best, ranked by **cost per successful run**, with a savings forecast and the failing runs behind it.
-  Advising a move away from the model in use asks for **99%**, so the advice does not flip on daily noise.
+  Advising a move away from the model in use asks for **about 99.5% (one-sided)**, so the advice does not flip on daily noise.
 - Scheduled jobs store each changed verdict with its lineage, detect regressions across version changes (and
   silent drops under an unchanged name), alert a signed webhook, track model retirements, and **re-test**
   cheaper candidates on the customer's own key, always within a budget and a monthly cap.
@@ -80,8 +80,8 @@ Simulated data, run through the production engine, decay, consolidation and regr
   points is caught 93% of the time (likely 86-97%) and 10 points always, the day after it lands, with 2 false
   alarms in 100 unchanged upgrades. A silent drop under an unchanged name, watched for 28 days, is caught at 5
   points 77% of the time at 50 runs a day and 100/100 at 100 runs a day, and always at 10 points, with 1 false
-  alarm in 100 at 50 runs a day and none in 100 at 100 a day: **90% of 5-point silent drops once a job has
-  about 100 runs a day**. When the inputs themselves get harder (long documents growing from 10% to 50%), the
+  alarm in 100 at 50 runs a day and none in 100 at 100 a day: **100 of 100 5-point silent drops (96 to 100%) at
+  100 runs a day**. When the inputs themselves get harder (long documents growing from 10% to 50%), the
   detector still raises 2 false alarms in 100 upgrades and 1 in 100 silent controls, because it compares
   versions within each input-size band; it catches 81% of 5-point upgrade drops and 65% of silent ones there.
   Before that change, the same drift raised false alarms in 14 of 20 upgrades and 9 of 20 silent controls.
@@ -178,6 +178,12 @@ cd frontend && npm test && npm run build
 ```
 
 Docker is for the server only. See [`deploy/README.md`](deploy/README.md).
+
+## Security notes
+
+- Sign-in uses a signed cookie that is valid for 14 days. Logging out clears your browser's copy but does not revoke it on the server, so a stolen cookie keeps working until it expires. Server-side sessions are planned for later.
+- Changing requests that carry the sign-in cookie are refused with 403 when they come from another site (Origin / Sec-Fetch-Site check). Requests with a project key are not affected.
+- Task summaries mask emails, links, keys, passwords, tokens and long numbers before anything is sent out. Names and street addresses cannot be recognised and are not removed.
 
 ## Contributing
 

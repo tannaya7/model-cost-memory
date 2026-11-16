@@ -107,3 +107,25 @@ async def owned_project(
     if project is None or project.owner_user_id != user.user_id:
         raise HTTPException(404, "No such project among yours")
     return project
+
+
+async def signed_in_project(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(current_user),
+    x_project_id: str | None = Header(default=None),
+) -> Project:
+    """The project the signed-in owner is working in, for settings that only the owner may change (a project
+    key, which an SDK or script holds, is not enough; a key alone gets 401). Same project choice as
+    `current_project` for a signed-in user: X-Project-Id, or the only project they own."""
+    owned = select(Project).where(Project.owner_user_id == user.user_id)
+    if x_project_id:
+        project = (await session.execute(owned.where(Project.project_id == x_project_id))).scalar_one_or_none()
+        if project is None:
+            raise HTTPException(404, "No such project among yours")
+    else:
+        mine = (await session.execute(owned.limit(2))).scalars().all()
+        if len(mine) != 1:
+            raise HTTPException(400, "Choose a project: send X-Project-Id" if mine else "Create a project first")
+        project = mine[0]
+    set_context(project_id=project.project_id)
+    return project

@@ -170,21 +170,19 @@ async def agent_insights(
         task_ids = {st.trace_id for st in mine if st.trace_id}
         if task_ids:
             a.steps_per_task = round(sum(1 for st in mine if st.trace_id) / len(task_ids), 1)
-    if traces:
+    for t in traces:
+        # One query per trace (at most TOP_TRACES), each with its own row limit: a single shared limit let one
+        # big trace starve loop detection for the others (F24).
         in_trace = (
             await session.execute(
-                select(*cols).where(*scope, Run.trace_id.in_([t.trace_id for t in traces]))
+                select(*cols).where(*scope, Run.trace_id == t.trace_id)
                 .order_by(Run.created_at, Run.run_id).limit(MAX_STEP_ROWS)
             )
         ).all()
-        grouped: dict[str, list[Step]] = {}
-        for r in in_trace:
-            grouped.setdefault(r[1], []).append(_step(r))
-        for t in traces:
-            group = grouped.get(t.trace_id, [])
-            t.agent_names = sorted({st.agent for st in group if st.agent})
-            t.multi_agent = is_multi_agent(group)
-            t.possible_loop = detect_loop(group)
+        group = [_step(r) for r in in_trace]
+        t.agent_names = sorted({st.agent for st in group if st.agent})
+        t.multi_agent = is_multi_agent(group)
+        t.possible_loop = detect_loop(group)
     all_names = [n for st in steps for n in st.tool_names]
     kinds = UsageKinds(
         calls=len(steps), uses_tools=uses_tools(steps), works_like_agent=works_like_agent(steps),

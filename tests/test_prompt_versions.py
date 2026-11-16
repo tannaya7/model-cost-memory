@@ -146,3 +146,19 @@ async def test_endpoint(client, session):
     assert (await client.get("/v1/insights/prompt-versions", headers=h)).status_code == 422
     theirs = (await client.get("/v1/insights/prompt-versions?job=support", headers={"X-API-Key": other})).json()
     assert [v["label"] for v in theirs["versions"]] == ["Version v9"]
+
+
+def test_f20_a_rollback_compares_the_version_in_use_now_as_the_newer_one():
+    rows = ([row(i, "v1") for i in range(10)] + [row(10 + i, "v2") for i in range(10)]
+            + [row(20 + i, "v1") for i in range(10)])
+    c = build_versions(rows).comparison
+    assert (c.older, c.newer) == ("Version v2", "Version v1")
+    assert c.summary.startswith("Went back to Version v1")
+
+
+def test_f20_a_b_a_detected_names_the_live_version_as_newer():
+    rows = ([row(i, text=A + f"t{i}") for i in range(12)] + [row(12 + i, text=B + f"t{i}") for i in range(12)]
+            + [row(24 + i, text=A + f"t{i}") for i in range(12)])
+    r = build_versions(rows)
+    assert r.source == "detected" and len(r.versions) == 2
+    assert (r.comparison.older, r.comparison.newer) == ("Detected version 2", "Detected version 1")

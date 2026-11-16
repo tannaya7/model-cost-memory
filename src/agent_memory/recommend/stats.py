@@ -41,6 +41,14 @@ def z_for(confidence: float) -> float:
     return NormalDist().inv_cdf(1 - (1 - confidence) / 2)
 
 
+def confidence_words(confidence: float) -> str:
+    """What a two-sided confidence level really is, in plain words: z_for() makes a 0.99 interval a 99.5%
+    one-sided test and 0.95 a 97.5% one."""
+    one_sided = 1 - (1 - confidence) / 2
+    level = "very high" if confidence >= 0.99 else "high"
+    return f"{level} confidence (about {one_sided * 100:.1f}%, one-sided)"
+
+
 def sample(results: Iterable[tuple[float, bool]]) -> Sample | None:
     """From (weight, passed) pairs; None when there is no weight at all."""
     total = squares = passing = 0.0

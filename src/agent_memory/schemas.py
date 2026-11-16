@@ -212,6 +212,11 @@ class RunCreate(Model):
     tokens_out: int = Field(default=0, ge=0, le=MAX_TOKENS, description="Output tokens, thinking included")
     cache_read_tokens: int = Field(default=0, ge=0, le=MAX_TOKENS)
     cache_write_tokens: int = Field(default=0, ge=0, le=MAX_TOKENS)
+    cache_write_1h_tokens: int = Field(
+        default=0, ge=0, le=MAX_TOKENS,
+        description="The part of cache_write_tokens written to the 1-hour cache (priced higher than the "
+                    "5-minute cache). Used for the cost only; not stored",
+    )
     cost_usd: float | None = Field(
         default=None, ge=0, le=10_000,
         description="Used only when the model catalog has no price; otherwise the server computes it",
@@ -332,6 +337,26 @@ class RecommendationEvidence(Model):
     )
 
 
+class PromisingOut(Model):
+    """'Worth a trial': a cheaper model that looks close to the model in use but is not proven. Never advice."""
+
+    model: str
+    current: str = Field(description="The model in use that it was compared with")
+    gap_points: float = Field(description="Observed candidate minus model in use, in percentage points")
+    low_points: float = Field(description="Lower end of the range of that gap, in points (one-sided 95% bound)")
+    high_points: float = Field(description="Upper end of the range of that gap, in points")
+    more_needed: int | None = Field(
+        description="About this many more checked answers on the candidate before a switch could be recommended")
+
+
+class SureEnoughOut(Model):
+    """Stage 2 of the progress bar: checked answers per model before a switch could be recommended."""
+
+    needed: int | None = Field(
+        description="About this many per model, if today's observed rates held; null when it cannot be told")
+    have: float | None = Field(description="What the thinner of the two compared models has now")
+
+
 class RecommendationOut(Model):
     """The cheapest model that does this job properly, with the evidence behind it."""
 
@@ -354,6 +379,10 @@ class RecommendationOut(Model):
     warnings: list[str]
     next_step: str | None
     computed_at: datetime
+    promising: PromisingOut | None = Field(
+        default=None, description="Set only for HOLD, never together with a proven model; never counted as a saving")
+    sure_enough: SureEnoughOut | None = Field(
+        default=None, description="Set for INSUFFICIENT_EVIDENCE when two models can be compared")
 
 
 class SpendOut(Model):
@@ -368,7 +397,7 @@ class ForecastOut(Model):
     """What switching would change per month, if next month looks like the last 30 days."""
 
     runs_per_month: int = Field(description="Production runs in the last 30 days on the model in use (not the candidate), the volume the saving is priced on")
-    monthly_saving_usd: float = Field(description="Negative means switching costs more")
+    monthly_saving_usd: float = Field(description="Change of the monthly bill at the same call volume: runs_per_month x (average cost per call now - on the recommended model). Negative means switching costs more")
     extra_failures_per_month: float = Field(description="Negative means fewer failures")
     extra_failures_low: float = Field(description="Lower end of the interval, in failures per month")
     extra_failures_high: float

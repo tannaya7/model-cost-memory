@@ -74,3 +74,35 @@ def test_write_factor_blends_the_five_minute_and_one_hour_split():
     assert write_factor_for_split(0, 100) == Decimal("2")
     assert write_factor_for_split(50, 50) == Decimal("1.625")
     assert write_factor_for_split(0, 0) == Decimal("1.25")
+
+
+def test_f2_f3_f4_cache_read_factors_per_family():
+    """Audit F2/F3/F4. OpenAI pricing page (opened 2026-11-16): cached input / input is 0.5 for gpt-4o and
+    gpt-4o-mini, 0.25 for gpt-4.1(-mini) and o3. Anthropic pricing page: Mythos 5.1 is 0.025x like Fable 5.1."""
+    from agent_memory.costing import cache_factors
+
+    d = Decimal
+    assert cache_factors("gpt-4o")[0] == d("0.5")
+    assert cache_factors("gpt-4o-2024-08-06")[0] == d("0.5")
+    assert cache_factors("gpt-4o-mini")[0] == d("0.5")
+    assert cache_factors("gpt-4.1")[0] == d("0.25")
+    assert cache_factors("gpt-4.1-mini-2025-04-14")[0] == d("0.25")
+    assert cache_factors("o3")[0] == d("0.25")
+    assert cache_factors("claude-mythos-5-1")[0] == d("0.025")
+    # F4: a longer version number is not the shorter one
+    assert cache_factors("claude-fable-5-10")[0] == d("0.1")
+    assert cache_factors("claude-sonnet-5-50")[0] == d("0.1")
+    assert cache_factors("claude-sonnet-5-5-20261001")[0] == d("0.05")
+    assert cache_factors("gpt-5")[0] == d("0.1")
+    assert cache_factors("o3-mini")[0] == d("0.1")  # not priced here: default, never o3's factor
+
+
+def test_f5_one_hour_cache_writes_cost_twice_the_input_price():
+    """Audit F5. Anthropic pricing page: '5-minute cache write 1.25x, 1-hour cache write 2x base input price'."""
+    price = Price.from_input_output(10, 50)
+    assert compute_cost(price, 0, 0, cache_write_tokens=1_000_000) == Decimal("12.500000")
+    assert compute_cost(price, 0, 0, cache_write_tokens=1_000_000, cache_write_1h_tokens=1_000_000) == Decimal("20.000000")
+    assert compute_cost(price, 0, 0, cache_write_tokens=1_000_000, cache_write_1h_tokens=500_000) == Decimal("16.250000")
+    # the split can never exceed the total writes
+    assert compute_cost(price, 0, 0, cache_write_tokens=100, cache_write_1h_tokens=10**9) == compute_cost(
+        price, 0, 0, cache_write_tokens=100, cache_write_1h_tokens=100)

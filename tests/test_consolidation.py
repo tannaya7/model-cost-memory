@@ -140,6 +140,7 @@ async def test_the_recommendation_cache_sees_a_new_run_immediately(client, world
 async def test_a_downgrade_carries_a_savings_forecast(client, world):
     key, job, add = world
     now = datetime.now(UTC)
+    await add(1, at=now - timedelta(days=40))  # the model has been in use for over 30 days, so no young-job scaling
     await add(400, fail_every=100, at=now)  # big, $0.03 a run, 400 production runs this month
     await add(400, model="mini", version="mini-2026-09", cost=0.001, kind="RETEST", fail_every=100, at=now)
     body = (await client.get("/v1/jobs/invoice/recommendation", headers={"X-API-Key": key})).json()
@@ -153,6 +154,7 @@ async def test_a_downgrade_carries_a_savings_forecast(client, world):
 async def test_the_monthly_volume_counts_only_calls_on_the_model_in_use(client, world):
     key, job, add = world
     now = datetime.now(UTC)
+    await add(1, at=now - timedelta(days=40))  # in use for over 30 days: the plain 30-day count applies
     await add(400, fail_every=100, at=now)  # big, in use: 400 calls, $0.03 each
     await add(400, model="mini", version="mini-2026-09", cost=0.001, fail_every=100,
               at=now - timedelta(hours=6))  # the cheaper candidate also ran in production

@@ -585,7 +585,7 @@
             "type": "number"
           },
           "monthly_saving_usd": {
-            "description": "Negative means switching costs more",
+            "description": "Change of the monthly bill at the same call volume: runs_per_month x (average cost per call now - on the recommended model). Negative means switching costs more",
             "title": "Monthly Saving Usd",
             "type": "number"
           },
@@ -1940,6 +1940,57 @@
         "title": "ProjectPatch",
         "type": "object"
       },
+      "PromisingOut": {
+        "description": "'Worth a trial': a cheaper model that looks close to the model in use but is not proven. Never advice.",
+        "properties": {
+          "current": {
+            "description": "The model in use that it was compared with",
+            "title": "Current",
+            "type": "string"
+          },
+          "gap_points": {
+            "description": "Observed candidate minus model in use, in percentage points",
+            "title": "Gap Points",
+            "type": "number"
+          },
+          "high_points": {
+            "description": "Upper end of the range of that gap, in points",
+            "title": "High Points",
+            "type": "number"
+          },
+          "low_points": {
+            "description": "Lower end of the range of that gap, in points (one-sided 95% bound)",
+            "title": "Low Points",
+            "type": "number"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "more_needed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "About this many more checked answers on the candidate before a switch could be recommended",
+            "title": "More Needed"
+          }
+        },
+        "required": [
+          "model",
+          "current",
+          "gap_points",
+          "low_points",
+          "high_points",
+          "more_needed"
+        ],
+        "title": "PromisingOut",
+        "type": "object"
+      },
       "PromptComparisonOut": {
         "properties": {
           "newer": {
@@ -2497,6 +2548,17 @@
             "title": "Progress",
             "type": "number"
           },
+          "promising": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PromisingOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set only for HOLD, never together with a proven model; never counted as a saving"
+          },
           "recommended": {
             "anyOf": [
               {
@@ -2553,6 +2615,17 @@
             ],
             "description": "Git blob hash of the prompt file used",
             "title": "Summary Prompt Version"
+          },
+          "sure_enough": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SureEnoughOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set for INSUFFICIENT_EVIDENCE when two models can be compared"
           },
           "verdict": {
             "enum": [
@@ -2891,6 +2964,14 @@
             "maximum": 10000000.0,
             "minimum": 0.0,
             "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cache_write_1h_tokens": {
+            "default": 0,
+            "description": "The part of cache_write_tokens written to the 1-hour cache (priced higher than the 5-minute cache). Used for the cost only; not stored",
+            "maximum": 10000000.0,
+            "minimum": 0.0,
+            "title": "Cache Write 1H Tokens",
             "type": "integer"
           },
           "cache_write_tokens": {
@@ -3748,6 +3829,41 @@
           "share"
         ],
         "title": "SpendOut",
+        "type": "object"
+      },
+      "SureEnoughOut": {
+        "description": "Stage 2 of the progress bar: checked answers per model before a switch could be recommended.",
+        "properties": {
+          "have": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the thinner of the two compared models has now",
+            "title": "Have"
+          },
+          "needed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "About this many per model, if today's observed rates held; null when it cannot be told",
+            "title": "Needed"
+          }
+        },
+        "required": [
+          "needed",
+          "have"
+        ],
+        "title": "SureEnoughOut",
         "type": "object"
       },
       "TaskProfileOut": {
@@ -8647,41 +8763,9 @@
     },
     "/v1/task-summary-consent": {
       "put": {
-        "description": "Switch the AI-written task summaries on or off for this project. Off by default; while off, no\nsample prompt is ever sent to an outside AI service.",
+        "description": "Switch the AI-written task summaries on or off for this project. Off by default; while off, no\nsample prompt is ever sent to an outside AI service. Only the signed-in owner may change it (a project\nkey, which an SDK holds, is refused), and switching it off deletes the project's stored summaries.",
         "operationId": "put_task_summary_consent_v1_task_summary_consent_put",
         "parameters": [
-          {
-            "in": "header",
-            "name": "x-api-key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
           {
             "in": "header",
             "name": "x-project-id",
