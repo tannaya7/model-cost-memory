@@ -21,7 +21,7 @@ import {
 } from "recharts";
 import { useReducedMotion } from "framer-motion";
 import type { ModelEvidence } from "../../shared/api/types";
-import { pct, shortDate, usd } from "../format";
+import { count, pct, shortDate, usd } from "../format";
 import { CHART } from "./series";
 import { TooltipCard } from "./ChartFrame";
 import type { Row } from "./data";
@@ -46,7 +46,9 @@ export function SpendArea({
   names,
   colors,
   height = 260,
+  unit = "usd",
 }: {
+  unit?: "usd" | "tokens";
   rows: Row[];
   names: string[];
   colors: Map<string, string>;
@@ -67,7 +69,7 @@ export function SpendArea({
           </defs>
           <CartesianGrid stroke={CHART.grid} vertical={false} />
           <XAxis dataKey="day" tickFormatter={tickDay} tick={CHART.tickFont} axisLine={{ stroke: CHART.axis }} tickLine={false} minTickGap={28} />
-          <YAxis tickFormatter={(v: number) => usd(v, { compact: true })} tick={CHART.tickFont} axisLine={false} tickLine={false} width={56} />
+          <YAxis tickFormatter={(v: number) => (unit === "tokens" ? count(v) : usd(v, { compact: true }))} tick={CHART.tickFont} axisLine={false} tickLine={false} width={56} />
           <Tooltip
             cursor={{ stroke: "var(--chart-cursor)", strokeWidth: 1 }}
             content={({ active, payload, label }) =>
@@ -77,8 +79,8 @@ export function SpendArea({
                   rows={[
                     ...payload
                       .filter((p) => Number(p.value) > 0)
-                      .map((p) => ({ color: String(p.color), label: String(p.name), value: usd(Number(p.value)) })),
-                    { label: "Total", value: usd(payload.reduce((s, p) => s + Number(p.value), 0)) },
+                      .map((p) => ({ color: String(p.color), label: String(p.name), value: unit === "tokens" ? count(Number(p.value)) : usd(Number(p.value)) })),
+                    { label: "Total", value: unit === "tokens" ? count(payload.reduce((s, p) => s + Number(p.value), 0)) : usd(payload.reduce((s, p) => s + Number(p.value), 0)) },
                   ]}
                 />
               ) : null
@@ -211,7 +213,9 @@ export function CostQualityMap({
   current,
   floor,
   height = 320,
+  listPrice = false,
 }: {
+  listPrice?: boolean;
   models: ModelEvidence[];
   colors: Map<string, string>;
   recommended?: string | null;
@@ -289,7 +293,7 @@ export function CostQualityMap({
             tick={CHART.tickFont}
             axisLine={{ stroke: CHART.axis }}
             tickLine={false}
-            label={{ value: "cost per successful run →  (cheaper to the left)", position: "insideBottom", offset: -12, fill: "var(--chart-tick)", fontSize: 11 }}
+            label={{ value: listPrice ? "cost per successful run at list prices, not your bill →  (cheaper to the left)" : "cost per successful run →  (cheaper to the left)", position: "insideBottom", offset: -12, fill: "var(--chart-tick)", fontSize: 11 }}
           />
           <YAxis
             type="number"
@@ -314,7 +318,7 @@ export function CostQualityMap({
                   rows={[
                     { label: "Pass rate", value: pct(p.y) },
                     { label: "Likely range", value: `${pct(p.y - p.err[0])} – ${pct(p.y + p.err[1])}` },
-                    { label: "Cost per success", value: usd(p.x) },
+                    { label: listPrice ? "Cost per success (list price)" : "Cost per success", value: usd(p.x) },
                     { label: "Checked runs", value: p.runs.toLocaleString("en") },
                   ]}
                 />
@@ -339,7 +343,7 @@ export function Sparkline({ values, color = "var(--color-accent)", height = 36 }
   return (
     <div style={{ height }} className="w-full" aria-hidden>
       <ResponsiveContainer>
-        <AreaChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+        <AreaChart data={data} accessibilityLayer={false} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
           <YAxis hide domain={["dataMin", "dataMax"]} />
           <defs>
             <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">

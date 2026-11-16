@@ -119,7 +119,11 @@ const projects: Project[] = [
 ];
 
 // In-memory jobs list seeded from jobs.sample.json
-const jobs: Job[] = [...(initialJobs as Job[])];
+const extraJobs = [
+  { check_config: { fields: ["clauses"] }, check_kind: "ANSWER_KEY", description: "Summarise a contract in plain words", job_id: "00000000-0000-0000-0000-000000001004", name: "contract-summary", retest_consent: true, run_count: 640, runs_by_state: { CHECKED: 420, INDEXED: 220 } },
+  { check_config: { fields: ["category"] }, check_kind: "ANSWER_KEY", description: "Sort incoming email into folders", job_id: "00000000-0000-0000-0000-000000001005", name: "email-triage", retest_consent: true, run_count: 300, runs_by_state: { CHECKED: 140, INDEXED: 160 } },
+] as unknown as Job[];
+const jobs: Job[] = [...(initialJobs as Job[]), ...extraJobs];
 const retests = new Map<string, RetestStatus>();
 let mockProviderKey: RetestLimits["provider_key"] = null;
 
@@ -564,6 +568,7 @@ export const handlers = [
         retest_candidates: [],
         warnings: [],
         next_step: "Record more runs, or run a re-test to gather evidence sooner",
+        sure_enough: { needed: 380, have: 11 },
       };
       return HttpResponse.json(rec);
     }
@@ -582,6 +587,30 @@ export const handlers = [
         retest_candidates: [],
         warnings: [],
         next_step: null,
+      };
+      return HttpResponse.json(rec);
+    }
+
+    if (jobName === "contract-summary" || jobName === "email-triage") {
+      // Same two models for both: the one in use, and a cheaper one. contract-summary is "worth a trial"
+      // (close, not proven); email-triage is plainly unsure (the cheaper model may be a lot worse).
+      const big = { ...base.models[0], model: "acme-large", model_version: "acme-large-2026-09", n_runs: 420, failures: 17, evidence_weight: 300, effective_n: 280, weighted_pass_rate: 0.96, pass_rate_low: 0.93, pass_rate_high: 0.977, mean_cost_usd: 0.03, cost_per_success_usd: 0.03125, status: "GOOD_ENOUGH" as const, eligible: true, why: "Highest pass rate we can be sure of" };
+      const promisingJob = jobName === "contract-summary";
+      const small = { ...base.models[1], model: "acme-mini", model_version: "acme-mini-2026-09", n_runs: promisingJob ? 260 : 120, failures: promisingJob ? 12 : 14, evidence_weight: promisingJob ? 190 : 100, effective_n: promisingJob ? 180 : 90, weighted_pass_rate: promisingJob ? 0.953 : 0.883, pass_rate_low: promisingJob ? 0.91 : 0.81, pass_rate_high: promisingJob ? 0.977 : 0.93, mean_cost_usd: 0.002, cost_per_success_usd: promisingJob ? 0.0021 : 0.00227, status: "UNSURE" as const, eligible: false, why: "Not yet sure it is within 3 points of acme-large, the model in use; a re-test would settle it" };
+      const rec: Recommendation = {
+        ...base,
+        job: jobName,
+        verdict: "HOLD",
+        current: { model: big.model, model_version: big.model_version },
+        recommended: { model: big.model, model_version: big.model_version },
+        reference: big.model,
+        models: [big, small],
+        evidence: { n_runs: big.n_runs + small.n_runs, evidence_weight: 490, floor: 25, failing_runs: [] },
+        retest_candidates: [small.model],
+        forecast: null,
+        warnings: [`Not yet sure ${small.model} is within 3 points of ${big.model}, the model in use; a re-test of ${small.model} would settle it`],
+        next_step: `Re-test ${small.model}: cheaper, but not enough evidence yet`,
+        promising: promisingJob ? { model: small.model, current: big.model, gap_points: -0.7, low_points: -4.8, high_points: 2.1, more_needed: 340 } : null,
       };
       return HttpResponse.json(rec);
     }
@@ -1050,7 +1079,7 @@ export const handlers = [
             suggested: "sonnet-5@low",
             share_of_use: 0.72,
             reduction: 0.81,
-            note: "Shown within 3 points of opus-5-5@medium at 99% confidence; it uses 81% less of this limit per run",
+            note: "Shown within 3 points of opus-5-5@medium with very high confidence (about 99.5%, one-sided); it uses 81% less of this limit per run",
           },
         ],
         hours_to_full_after: null,

@@ -50,5 +50,29 @@ export const MODEL_CATALOG: CatalogEntry[] = [
 /** The entry whose pattern matches a model id, if any. */
 export function entryFor(model: string): CatalogEntry | null {
   const id = model.toLowerCase();
-  return MODEL_CATALOG.find((e) => new RegExp(e.pattern).test(id)) ?? null;
+  const e = MODEL_CATALOG.find((x) => new RegExp(x.pattern).test(id));
+  if (!e) return null;
+  if (e.provider !== "Anthropic") return e;
+  const window = claudeWindow(id);
+  return window === e.contextWindow ? e : { ...e, contextWindow: window };
+}
+
+/**
+ * Claude context window by version, from the official models overview (https://platform.claude.com/docs/en/about-claude/models/overview,
+ * opened 2026-11-16, "All models" table): "1M tokens" for Opus 4.6 and later (4.6, 4.7, 4.8, 5, 5.5), Sonnet 4.6 and later (4.6, 5, 5.5)
+ * and Haiku 5.5; "200K tokens" for Opus 4.5, 4.1 and 4, Sonnet 4.5 and 4, and Haiku 4.5.
+ * An id whose version is not on that page gets no window rather than a guess.
+ */
+export function claudeWindow(id: string): number | undefined {
+  const m = /claude-(opus|sonnet|haiku)-(\d+)(?:-(\d{1,2})(?!\d))?/.exec(id.toLowerCase());
+  if (!m) return undefined;
+  const major = Number(m[2]);
+  const minor = m[3] === undefined ? 0 : Number(m[3]);
+  if (m[1] === "haiku") return major === 4 && minor === 5 ? 200_000 : major === 5 && minor === 5 ? 1_000_000 : undefined;
+  if (major >= 5) return 1_000_000;
+  if (major === 4) {
+    if (minor >= 6) return 1_000_000;
+    if (minor === 5 || minor === 1 || minor === 0) return 200_000;
+  }
+  return undefined;
 }

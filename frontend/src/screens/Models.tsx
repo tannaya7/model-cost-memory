@@ -88,7 +88,7 @@ export default function Models() {
 
       <Reveal className="grid gap-4 lg:grid-cols-3">
         <Panel className="p-5 md:p-6 lg:col-span-2">
-          <PanelHeader title="What the models you run cost" hint="List price in US dollars per million tokens. Tokens are the small pieces of text AI models are billed by; longer prompts and answers use more." />
+          <PanelHeader title="What the models you run cost" hint="List price in US dollars per million tokens. Tokens are the small pieces of text AI models read and write; longer prompts and answers use more." />
           <div className="mt-5">{used.isPending ? <Skeleton className="h-48" /> : <PriceBars models={usedModels} />}</div>
         </Panel>
         <Panel className="p-5">

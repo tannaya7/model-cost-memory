@@ -49,6 +49,16 @@ describe("landing page", () => {
     expect(screen.getByRole("heading", { name: /From every AI call to a decision/ })).toBeInTheDocument();
   });
 
+  it("has one main landmark, no stray list markup and a focusable, named code box", async () => {
+    stubApi({ "/v1/me": signedOut, "/auth/config": { google: true, dev_login: false, demo_project_id: null } });
+    const { container } = at("/", <Route path="/" element={<Landing />} />);
+    await screen.findByRole("heading", { level: 1, name: /Stop paying for a bigger model/ });
+    expect(screen.getAllByRole("main")).toHaveLength(1);
+    expect(container.querySelector("dl")).toBeNull();
+    expect(container.querySelector("ol")).toBeNull();
+    expect(screen.getByLabelText("Example code")).toHaveAttribute("tabindex", "0");
+  });
+
   it("stays the front door for a signed-in person, with a way to their projects", async () => {
     stubApi({ "/v1/me": user, "/auth/config": { google: true, dev_login: false, demo_project_id: null } });
     at("/", <Route path="/" element={<Landing />} />);
@@ -66,6 +76,16 @@ describe("landing page", () => {
 });
 
 describe("projects", () => {
+  it("keeps a very long unbroken project name inside its card, with the full name as a tooltip", async () => {
+    const long = "P".repeat(240);
+    stubApi({ "/v1/me": user, "/v1/projects": [{ ...project, name: long }] });
+    at("/projects", <Route path="/projects" element={<Projects />} />);
+    const name = await screen.findByText(long);
+    expect(name).toHaveClass("truncate");
+    expect(name).toHaveAttribute("title", long);
+    expect(name.closest("li")).toHaveClass("min-w-0");
+  });
+
   it("sends someone with no project straight to making one", async () => {
     stubApi({ "/v1/me": user, "/v1/projects": [] });
     at("/projects", <Route path="/projects" element={<Projects />} />);
@@ -77,6 +97,7 @@ describe("projects", () => {
     at("/projects", <Route path="/projects" element={<Projects />} />);
     const card = await screen.findByRole("link", { name: /Invoice assistant/ });
     expect(card).toHaveAttribute("href", "/p/invoices-1a2b");
+    expect(card).not.toHaveTextContent("invoices-1a2b");
     await waitFor(() => expect(card).toHaveTextContent("1,200"));
     expect(screen.getByRole("heading", { name: /Welcome back, Ana/ })).toBeInTheDocument();
     for (const link of screen.getAllByRole("link", { name: /New project/ })) expect(link).toHaveAttribute("href", "/projects/new");

@@ -77,11 +77,11 @@ export default function Overview() {
   const { byJob, isPending: recsPending } = useAllRecommendations(jobsQuery.data);
   const daily = useDaily({ days: days * 2 });
   const points = useMemo(() => daily.data ?? [], [daily.data]);
-  const { cur, prev } = useMemo(() => periods(points, days), [points, days]);
+  const { cur, prev, curDone, prevDone } = useMemo(() => periods(points, days), [points, days]);
 
   if (jobsQuery.isError && !jobsQuery.data) return <ErrorState error={jobsQuery.error} onRetry={() => jobsQuery.refetch()} />;
 
-  const ctx: Ctx = { days, points, cur, prev, dailyPending: daily.isPending, jobs: jobsQuery.data, jobsPending: jobsQuery.isPending, byJob, recsPending, billing };
+  const ctx: Ctx = { days, points, cur, prev, curDone, prevDone, dailyPending: daily.isPending, jobs: jobsQuery.data, jobsPending: jobsQuery.isPending, byJob, recsPending, billing };
 
   const exportCsv = () => {
     const url = URL.createObjectURL(new Blob([toCsv(cur)], { type: "text/csv" }));

@@ -23,7 +23,8 @@ import { MIN_CHECKED_ANSWERS } from "../compare/wilson";
 import { ButtonLink, cx, EmptyState, ModelName, Panel, Pill, Skeleton } from "../../ui/primitives";
 import { monthlySaving, VerdictPill } from "../shared";
 import { passRateInUse, savingVolume } from "../forecastText";
-import type { BillingMode } from "../../features/projects/hooks/useBillingMode";
+import { useBillingMode, type BillingMode } from "../../features/projects/hooks/useBillingMode";
+import { MONEY_ALERT_FALLBACK, serverText } from "../../features/projects/moneyWording";
 import { totals } from "./tokenMetrics";
 import { useAllowanceWays } from "./useAllowanceWays";
 import { MIN_CALLS } from "./agentView";
@@ -41,6 +42,9 @@ export interface Ctx {
   points: DayPoint[];
   cur: DayPoint[];
   prev: DayPoint[];
+  /** Completed UTC days only, for percent changes (today is partial). Left out = same as cur and prev. */
+  curDone?: DayPoint[];
+  prevDone?: DayPoint[];
   dailyPending: boolean;
   jobs: Job[] | undefined;
   jobsPending: boolean;
@@ -202,6 +206,8 @@ function Kpi({ label, icon, tint, value, render, change, upIsGood, note, index, 
 
 export function KpiCards({ ctx }: { ctx: Ctx }) {
   const { cur, prev, days, dailyPending } = ctx;
+  const curDone = ctx.curDone ?? cur;
+  const prevDone = ctx.prevDone ?? prev;
   const spend = sum(cur, "spend_usd");
   const spendPrev = sum(prev, "spend_usd");
   const unpriced = unpricedRuns(cur);
@@ -216,9 +222,9 @@ export function KpiCards({ ctx }: { ctx: Ctx }) {
   if (ctx.billing === "subscription" || ctx.billing === "both") return <AllowanceKpis ctx={ctx} />;
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <Kpi index={0} label="Spend" icon={<IconDollar size={16} />} tint="var(--series-1)" value={spend} render={(v) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} />} change={delta(spend, spendPrev)} upIsGood={false} help="This is what your AI calls cost, added up from the list price of each model. Calls to a model with no known price are left out, and we tell you how many." note={<>{`What you paid for AI, vs. ${usd(spendPrev)} the ${periodWord(days)} before`}{unpriced > 0 && <><br /><UnpricedChip count={unpriced} /></>}</>} />
-      <Kpi index={1} label="Correct answers" icon={<IconCheck size={16} />} tint="var(--series-3)" value={rate} render={(v) => <CountUp value={v * 100} suffix="%" decimals={1} />} change={rate !== null && ratePrev !== null ? rate - ratePrev : null} upIsGood help="We check an answer against the right answer or a rule you set. Out of every 100 answers we checked, this is how many were right. Answers nobody checked are not counted." note={rate === null ? (runs === 0 ? "No AI calls yet. They will show here once your app sends one." : "None of your AI calls are checked yet, so we cannot say how many are correct.") : <>{`Out of every 100 answers we checked, about ${Math.round(rate * 100)} were right`}{ratePrev !== null ? `, vs. ${pct(ratePrev)} the ${periodWord(days)} before` : ""}</>} />
-      <Kpi index={2} label="AI calls recorded" icon={<IconJobs size={16} />} tint="var(--series-7)" value={runs} render={(v) => <CountUp value={v} />} change={delta(runs, runsPrev)} upIsGood note={`Times your app asked an AI, vs. ${count(runsPrev)} the ${periodWord(days)} before`} />
+      <Kpi index={0} label="Spend" icon={<IconDollar size={16} />} tint="var(--series-1)" value={spend} render={(v) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} />} change={delta(sum(curDone, "spend_usd"), sum(prevDone, "spend_usd"))} upIsGood={false} help="This is what your AI calls cost, added up from the list price of each model. Calls to a model with no known price are left out, and we tell you how many." note={<>{`What your calls cost at list prices, vs. ${usd(spendPrev)} the ${periodWord(days)} before`}{unpriced > 0 && <><br /><UnpricedChip count={unpriced} /></>}</>} />
+      <Kpi index={1} label="Correct answers" icon={<IconCheck size={16} />} tint="var(--series-3)" value={rate} render={(v) => <CountUp value={v * 100} suffix="%" decimals={1} />} change={passRate(curDone) !== null && passRate(prevDone) !== null ? passRate(curDone)! - passRate(prevDone)! : null} upIsGood help="We check an answer against the right answer or a rule you set. Out of every 100 answers we checked, this is how many were right. Answers nobody checked are not counted." note={rate === null ? (runs === 0 ? "No AI calls yet. They will show here once your app sends one." : "None of your AI calls are checked yet, so we cannot say how many are correct.") : <>{`Out of every 100 answers we checked, about ${Math.round(rate * 100)} were right`}{ratePrev !== null ? `, vs. ${pct(ratePrev)} the ${periodWord(days)} before` : ""}</>} />
+      <Kpi index={2} label="AI calls recorded" icon={<IconJobs size={16} />} tint="var(--series-7)" value={runs} render={(v) => <CountUp value={v} />} change={delta(sum(curDone, "runs"), sum(prevDone, "runs"))} upIsGood note={`Times your app asked an AI, vs. ${count(runsPrev)} the ${periodWord(days)} before`} />
       <Kpi index={3} label="Saving available" icon={<IconSpark size={16} />} tint="var(--color-ok)" value={ctx.recsPending ? null : saving} render={(v) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} suffix="/mo" />} change={undefined} upIsGood help="This is what you would save each month by moving an AI task to a cheaper AI model that still gives about as many correct answers. It is an estimate from your own past calls. Nothing changes unless you decide." note={movable ? `Each month, if ${movable} ${movable === 1 ? "AI task moves" : "AI tasks move"} to a cheaper AI model, based on ${savingVolume(recs).toLocaleString("en")} calls a month on the models in use` : ctx.recsPending ? "Working it out..." : "No cheaper AI model is proven yet, or we need more checked answers"} />
     </div>
   );
@@ -227,15 +233,15 @@ export function KpiCards({ ctx }: { ctx: Ctx }) {
 /** Subscription and both: the same numbers, but usage instead of a bill and ways to make an allowance last. */
 function AllowanceKpis({ ctx }: { ctx: Ctx }) {
   const { cur, prev, days } = ctx;
+  const curDone = ctx.curDone ?? cur;
+  const prevDone = ctx.prevDone ?? prev;
   const both = ctx.billing === "both";
   const spend = sum(cur, "spend_usd");
   const unpriced = unpricedRuns(cur);
   const t = totals(cur);
-  const tPrev = totals(prev);
   const runs = sum(cur, "runs");
   const runsPrev = sum(prev, "runs");
   const rate = passRate(cur);
-  const ratePrev = passRate(prev);
   const a = useAllowanceWays(days, cur, ctx.byJob);
   const recs = [...ctx.byJob.values()];
   const saving = recs.reduce((s, r) => s + monthlySaving(r), 0);
@@ -243,14 +249,14 @@ function AllowanceKpis({ ctx }: { ctx: Ctx }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi index={0} label="Usage" icon={<IconDollar size={16} />} tint="var(--series-1)" value={t.all} render={(v) => <CountUp value={v} />} change={delta(t.all, tPrev.all)} upIsGood={false} help="How much AI your app used in this period, counted in tokens (the small pieces of text AI is billed by) and AI calls. This is measured from your recorded calls." note={<>{`tokens in ${count(runs)} AI calls`}<br />{`Worth about ${usd(spend)} at list prices. You pay a flat fee, so this is not your bill.`}{unpriced > 0 && <><br /><UnpricedChip count={unpriced} /></>}</>} />
-        <Kpi index={1} label="Correct answers" icon={<IconCheck size={16} />} tint="var(--series-3)" value={rate} render={(v) => <CountUp value={v * 100} suffix="%" decimals={1} />} change={rate !== null && ratePrev !== null ? rate - ratePrev : null} upIsGood help="We check an answer against the right answer or a rule you set. Out of every 100 answers we checked, this is how many were right. Answers nobody checked are not counted." note={rate === null ? (runs === 0 ? "No AI calls yet. They will show here once your app sends one." : "None of your AI calls are checked yet, so we cannot say how many are correct.") : `Out of every 100 answers we checked, about ${Math.round(rate * 100)} were right`} />
-        <Kpi index={2} label="AI calls recorded" icon={<IconJobs size={16} />} tint="var(--series-7)" value={runs} render={(v) => <CountUp value={v} />} change={delta(runs, runsPrev)} upIsGood note={`Times your app asked an AI, vs. ${count(runsPrev)} the ${days} days before`} />
+        <Kpi index={0} label="Usage" icon={<IconBolt size={16} />} tint="var(--series-1)" value={t.all} render={(v) => <CountUp value={v} />} change={delta(totals(curDone).all, totals(prevDone).all)} upIsGood={false} help="How much AI your app used in this period, counted in tokens (the small pieces of text AI is billed by) and AI calls. This is measured from your recorded calls." note={<>{`tokens in ${count(runs)} AI calls`}<br />{`Worth about ${usd(spend)} at list prices. You pay a flat fee, so this is not your bill.`}{unpriced > 0 && <><br /><UnpricedChip count={unpriced} /></>}</>} />
+        <Kpi index={1} label="Correct answers" icon={<IconCheck size={16} />} tint="var(--series-3)" value={rate} render={(v) => <CountUp value={v * 100} suffix="%" decimals={1} />} change={passRate(curDone) !== null && passRate(prevDone) !== null ? passRate(curDone)! - passRate(prevDone)! : null} upIsGood help="We check an answer against the right answer or a rule you set. Out of every 100 answers we checked, this is how many were right. Answers nobody checked are not counted." note={rate === null ? (runs === 0 ? "No AI calls yet. They will show here once your app sends one." : "None of your AI calls are checked yet, so we cannot say how many are correct.") : `Out of every 100 answers we checked, about ${Math.round(rate * 100)} were right`} />
+        <Kpi index={2} label="AI calls recorded" icon={<IconJobs size={16} />} tint="var(--series-7)" value={runs} render={(v) => <CountUp value={v} />} change={delta(sum(curDone, "runs"), sum(prevDone, "runs"))} upIsGood note={`Times your app asked an AI, vs. ${count(runsPrev)} the ${days} days before`} />
         <Kpi index={3} label="Ways to make your allowance last longer" icon={<IconSpark size={16} />} tint="var(--color-ok)" value={a.pending ? null : a.ways.length} render={(v) => <CountUp value={v} />} change={undefined} upIsGood help="Things we measured in your own calls that may use less of your allowance, such as text repeated at the start of every prompt or a large tool list. They are ideas, not promises, and none is a dollar saving." note={a.pending ? "Working it out..." : a.ways.length > 0 ? "Measured in your own calls. See the card below." : a.calls < MIN_CALLS ? "We need more AI calls before we can say" : "Nothing stands out in your calls"} />
       </div>
       {both && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Kpi index={4} label="Spend if paid per use" icon={<IconDollar size={16} />} tint="var(--series-1)" value={spend} render={(v) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} />} change={delta(spend, sum(prev, "spend_usd"))} upIsGood={false} help="What these calls would cost at list prices if every one were paid per use." note="At list prices, for all calls" />
+          <Kpi index={4} label="Spend if paid per use" icon={<IconDollar size={16} />} tint="var(--series-1)" value={spend} render={(v) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} />} change={delta(sum(curDone, "spend_usd"), sum(prevDone, "spend_usd"))} upIsGood={false} help="What these calls would cost at list prices if every one were paid per use." note="At list prices, for all calls" />
           <Kpi index={5} label="Saving available if paid per use" icon={<IconSpark size={16} />} tint="var(--color-ok)" value={ctx.recsPending ? null : saving} render={(v) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} suffix="/mo" />} change={undefined} upIsGood help="What you would save each month on calls paid per use by moving an AI task to a cheaper model that still gives about as many correct answers. An estimate from your own past calls." note={movable ? `Each month, if ${movable} ${movable === 1 ? "AI task moves" : "AI tasks move"} to a cheaper AI model, based on ${savingVolume(recs).toLocaleString("en")} calls a month on the models in use` : ctx.recsPending ? "Working it out..." : "No cheaper AI model is proven yet"} />
           <p className="text-[13px] text-dim sm:col-span-2 xl:col-span-2 xl:self-center">We cannot tell which calls were paid which way, so we show both.</p>
         </div>
@@ -338,7 +344,7 @@ function SavingsPanel({ ctx, label }: { ctx: Ctx; label?: string }) {
             <>
               <h2 className="mt-3 text-[30px] font-semibold leading-[1.05] tracking-tight md:text-[42px]">
                 {saving > 0 ? (
-                  <>You could save <span className="text-gradient"><CountUp value={saving} prefix="$" decimals={saving < 100 ? 2 : 0} /></span><span className="text-dim"> a month</span></>
+                  <>You could save about <span className="text-gradient"><CountUp value={saving} prefix="$" decimals={saving < 100 ? 2 : 0} /></span><span className="text-dim"> a month (an estimate)</span></>
                 ) : movable > 0 ? (
                   <>{someone} can run on <span className="text-gradient">a cheaper model</span></>
                 ) : jobs === 0 ? (
@@ -377,7 +383,7 @@ export function SpendTrend({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
     <Shell
       shell={shell}
       title={metric === "spend_usd" ? (sub ? "Worth at list prices" : "Spend") : "AI calls"}
-      hint={`${metric === "spend_usd" ? (sub ? "What your calls are worth at list prices each day. You pay a flat fee, so this is not your bill" : "What you paid each day") : "How many times your app asked an AI each day"}, last ${ctx.days} days. The dashed line is the ${ctx.days} days before.`}
+      hint={`${metric === "spend_usd" ? (sub ? "What your calls are worth at list prices each day. You pay a flat fee, so this is not your bill" : "What your calls cost each day at list prices") : "How many times your app asked an AI each day"}, last ${ctx.days} days. The dashed line is the ${ctx.days} days before.`}
       controls={<Toggle label="Measure" value={metric} onChange={setMetric} options={[["spend_usd", sub ? "List price" : "Spend"], ["runs", "AI calls"]]} />}
     >
       {ctx.dailyPending ? (
@@ -389,7 +395,7 @@ export function SpendTrend({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
               {metric === "spend_usd" ? <CountUp value={total} prefix="$" decimals={total < 100 ? 2 : 0} /> : <CountUp value={total} />}
             </p>
             <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted">
-              <DeltaPill value={delta(total, before)} upIsGood={metric === "runs"} /> vs. {metric === "spend_usd" ? usd(before) : count(before)}
+              <DeltaPill value={delta(sum(ctx.curDone ?? ctx.cur, metric), sum(ctx.prevDone ?? ctx.prev, metric))} upIsGood={metric === "runs"} /> vs. {metric === "spend_usd" ? usd(before) : count(before)}
             </p>
             <ul className="mt-5 flex flex-col gap-1.5 text-xs text-dim">
               <li className="flex items-center gap-2"><span className="h-0.5 w-5 rounded bg-accent" /> This period</li>
@@ -473,7 +479,7 @@ export function PassGauge({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
   return (
     <Shell
       shell={shell}
-      hint={`Out of every 100 answers we checked, about ${rate === null ? "..." : Math.round(rate * 100)} were right (${count(checked)} checked in the last ${ctx.days} days). The target is your own goal.`}
+      hint={checked === 0 ? "No checked answers yet. Once some are checked, this shows how many were right. The target is your own goal." : `Out of every 100 answers we checked, about ${rate === null ? "..." : Math.round(rate * 100)} were right (${count(checked)} checked in the last ${ctx.days} days). The target is your own goal.`}
       controls={
         <label className="flex items-center gap-1 text-xs text-muted">
           <span className="sr-only">Target</span>
@@ -524,11 +530,12 @@ export function SpendSplit({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
   return (
     <Shell
       shell={shell}
+      title={sub || metric === "runs" ? "Where your usage goes" : undefined}
       hint={`Which ${by === "job" ? "AI task" : "model"} takes the biggest share of your ${metric === "spend_usd" ? (sub ? "usage at list prices (not your bill)" : "spending") : "AI calls"}, last ${ctx.days} days`}
       controls={
         <>
           <Toggle label="Split by" value={by} onChange={setBy} options={[["job", "AI task"], ["model", "Model"]]} />
-          <Toggle label="Measure" value={metric} onChange={setMetric} options={[["spend_usd", "$"], ["runs", "AI calls"]]} />
+          <Toggle label="Measure" value={metric} onChange={setMetric} options={[["spend_usd", ctx.billing === "subscription" || ctx.billing === "both" ? "List price" : "$"], ["runs", "AI calls"]]} />
         </>
       }
     >
@@ -620,14 +627,15 @@ export function JobsTable({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
   const rows = jobs
     .map((job) => {
       const mine = ctx.cur.filter((x) => x.job === job.name);
-      const before = ctx.prev.filter((x) => x.job === job.name);
+      const mineDone = (ctx.curDone ?? ctx.cur).filter((x) => x.job === job.name);
+      const before = (ctx.prevDone ?? ctx.prev).filter((x) => x.job === job.name);
       const spend = sum(mine, "spend_usd");
-      return { job, runs: sum(mine, "runs"), spend, change: delta(spend, sum(before, "spend_usd")), rec: ctx.byJob.get(job.name) ?? null };
+      return { job, runs: sum(mine, "runs"), spend, change: delta(sum(mineDone, "spend_usd"), sum(before, "spend_usd")), rec: ctx.byJob.get(job.name) ?? null };
     })
     .map((r) => ({ ...r, rate: passRateInUse(r.rec) }))
     .sort((a, b) => b.spend - a.spend || b.runs - a.runs);
   return (
-    <Shell shell={shell} hint={`Each AI task (one kind of work your app asks an AI to do) with what it cost and our recommendation, last ${ctx.days} days`} controls={<Link to={p("/jobs")} className="text-xs font-semibold text-accent-ink hover:underline">All AI tasks →</Link>}>
+    <Shell shell={shell} hint={`Each AI task (one kind of work your app asks an AI to do) with ${ctx.billing === "subscription" ? "what it would cost at list prices (not your bill)" : "what it cost"} and our recommendation, last ${ctx.days} days`} controls={<Link to={p("/jobs")} className="text-xs font-semibold text-accent-ink hover:underline">All AI tasks →</Link>}>
       {ctx.jobsPending ? (
         <Skeleton className="h-48" />
       ) : jobs.length === 0 ? (
@@ -682,6 +690,7 @@ export function JobsTable({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
 
 export function Attention({ shell }: { shell: ShellProps }) {
   const p = useP();
+  const { mode } = useBillingMode();
   const regressions = useAllRegressions();
   const deprecated = useDeprecatedModels();
   const limits = useLimits();
@@ -691,8 +700,8 @@ export function Attention({ shell }: { shell: ShellProps }) {
       .filter((a) => a.kind !== "MODEL_RETIRING" || !(deprecated.data ?? []).some((m) => m.model === a.detail?.model))
       .map((a) => {
         const nk = newKindView(a);
-        if (nk) return { key: a.alert_id, tone: nk.tone, icon: nk.icon, title: nk.title, sub: [a.summary, nk.numbers].filter(Boolean).join(" "), to: p(nk.to) };
-        return { key: a.alert_id, tone: "bad" as const, icon: <IconAlert size={16} />, title: a.summary, sub: a.job, to: p(`/jobs/${encodeURIComponent(a.job)}?tab=quality`) };
+        if (nk) return { key: a.alert_id, tone: nk.tone, icon: nk.icon, title: nk.title, sub: [serverText(a.summary, mode, MONEY_ALERT_FALLBACK), serverText(nk.numbers, mode, null)].filter(Boolean).join(" "), to: p(nk.to) };
+        return { key: a.alert_id, tone: "bad" as const, icon: <IconAlert size={16} />, title: serverText(a.summary, mode, MONEY_ALERT_FALLBACK), sub: a.job, to: p(`/jobs/${encodeURIComponent(a.job)}?tab=quality`) };
       }),
     ...(deprecated.data ?? []).map((m) => ({
       key: m.model,

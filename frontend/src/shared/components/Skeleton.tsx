@@ -11,6 +11,7 @@ export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: nu
       aria-label="Loading"
       className="rounded-card border border-rule bg-surface p-3"
     >
+      <span className="sr-only">Loading…</span>
       <div className="grid gap-3">
         {Array.from({ length: rows }).map((_, r) => (
           <div key={r} className="grid gap-3" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>

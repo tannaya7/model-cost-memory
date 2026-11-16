@@ -62,7 +62,7 @@
       "shutdown_date": null,
       "status": "GOOD_ENOUGH",
       "weighted_pass_rate": 0.9904761904761905,
-      "why": "At most 3 points worse than acme-large, 95% sure"
+      "why": "At most 3 points worse than acme-large, with high confidence (about 97.5%, one-sided)"
     },
     {
       "catalog_status": "ACTIVE",

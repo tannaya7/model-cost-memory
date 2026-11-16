@@ -35,7 +35,8 @@ describe("Overview", () => {
   it("leads with the money a cheaper model would save", async () => {
     api({ "invoice-extract": downgrade, "ticket-classify": hold("ticket-classify"), "receipt-scan": hold("receipt-scan") });
     renderWithProviders(<Overview />);
-    const hero = await screen.findByRole("heading", { level: 2, name: /You could save/ });
+    // A big page: role-name lookups are slow in jsdom under load, so wait longer than the 1 s default.
+    const hero = await screen.findByRole("heading", { level: 2, name: /You could save/ }, { timeout: 15_000 });
     expect(hero).toHaveTextContent("a month");
     expect(screen.getByText(/can move to a cheaper model that gives about as many correct answers/)).toBeInTheDocument();
   });

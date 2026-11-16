@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/render";
 import { stubApi } from "../test/api";
@@ -11,6 +11,9 @@ import { useBillingMode } from "../features/projects/hooks/useBillingMode";
 import { allowanceWays, SMALLER_MODEL_TEXT } from "./overview/allowanceWays";
 import type { PromptGroup } from "../features/insights/api/promptsApi";
 import type { DayPoint } from "./overview/metrics";
+import { AlertItemCard } from "../features/alerts/components/AlertItemCard";
+import type { Alert } from "../shared/api/types";
+import { MONEY_ALERT_FALLBACK } from "../features/projects/moneyWording";
 import Overview from "./Overview";
 import Settings, { BillingSection } from "./Settings";
 import NewProject from "./NewProject";
@@ -73,41 +76,66 @@ describe("allowanceWays (measured facts only)", () => {
   });
 });
 
+// A big page: role-name lookups are slow in jsdom under load, so wait longer than the 1 s default.
+const SLOW = 15_000;
+
 describe("Overview by billing mode", () => {
   it("per use is exactly as before: Spend, Saving available, You could save", async () => {
     overviewApi("per_use");
     mountOverview();
-    expect(await screen.findByRole("heading", { level: 2, name: /You could save/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: /You could save/ }, { timeout: SLOW })).toBeInTheDocument();
     expect(screen.getByText("Saving available")).toBeInTheDocument();
     expect(screen.getAllByText("Spend").length).toBeGreaterThan(0);
     expect(screen.queryByText(/allowance/i)).toBeNull();
     expect(screen.queryByText(/not your bill/)).toBeNull();
   });
 
+  it("the spend split is titled by what it shows: money for per use, usage for a subscription", async () => {
+    overviewApi("per_use");
+    const first = mountOverview();
+    expect(await screen.findByRole("heading", { level: 2, name: "Where the money goes" }, { timeout: SLOW })).toBeInTheDocument();
+    first.unmount();
+    overviewApi("subscription");
+    mountOverview();
+    expect(await screen.findByRole("heading", { level: 2, name: "Where your usage goes" }, { timeout: SLOW })).toBeInTheDocument();
+    expect(screen.queryByText("Where the money goes")).toBeNull();
+  });
+
+  it("both: the split title follows the Measure toggle", async () => {
+    overviewApi("both");
+    const user = userEvent.setup();
+    mountOverview();
+    expect(await screen.findByRole("heading", { level: 2, name: "Where the money goes" }, { timeout: SLOW })).toBeInTheDocument();
+    const header = screen.getByRole("heading", { level: 2, name: "Where the money goes" }).closest("header")!;
+    await user.click(within(header).getByRole("tab", { name: "AI calls" }));
+    expect(await screen.findByRole("heading", { level: 2, name: "Where your usage goes" }, { timeout: SLOW })).toBeInTheDocument();
+  });
+
   it("an older project with no billing mode is treated as per use", async () => {
     overviewApi(null);
     mountOverview();
-    expect(await screen.findByRole("heading", { level: 2, name: /You could save/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: /You could save/ }, { timeout: SLOW })).toBeInTheDocument();
   });
 
   it("subscription: usage and ways to make the allowance last, no saved money", async () => {
     overviewApi("subscription");
     mountOverview();
-    expect(await screen.findByRole("heading", { level: 2, name: /Ways to make your allowance last longer/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: /Ways to make your allowance last longer/ }, { timeout: SLOW })).toBeInTheDocument();
     expect(screen.getByText("Usage")).toBeInTheDocument();
     expect(await screen.findByText(/Worth about \$12\.50 at list prices\. You pay a flat fee, so this is not your bill\./)).toBeInTheDocument();
     expect((await screen.findAllByText(/60% of this prompt/)).length).toBeGreaterThan(0);
     expect(screen.getByText(/A smaller model may use less of your allowance\. We cannot say how much/)).toBeInTheDocument();
     for (const gone of [/Saving available/, /You could save/, /Saved per month/, /^Spend$/, /Money spent on wrong answers/, /spending is heading/]) {
-      expect(screen.queryByText(gone)).toBeNull();
+      // widgets that leave on a billing change stay on screen for their short exit animation, so wait for them to go
+      await waitFor(() => expect(screen.queryByText(gone)).toBeNull());
     }
   });
 
   it("both: shows each view, labelled, with the honest line", async () => {
     overviewApi("both");
     mountOverview();
-    expect(await screen.findByRole("heading", { level: 2, name: /You could save/ })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { level: 2, name: /Ways to make your allowance last longer/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: /You could save/ }, { timeout: SLOW })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: /Ways to make your allowance last longer/ }, { timeout: SLOW })).toBeInTheDocument();
     expect(screen.getByText("If you pay per use")).toBeInTheDocument();
     expect(screen.getByText("If you pay a subscription")).toBeInTheDocument();
     expect(screen.getAllByText("We cannot tell which calls were paid which way, so we show both.").length).toBeGreaterThanOrEqual(1);
@@ -127,7 +155,7 @@ describe("Overview by billing mode", () => {
       "/v1/news": { items: [], sources: [], your_models: [], updated_at: null, next_refresh_at: null },
     });
     mountOverview();
-    expect(await screen.findByRole("heading", { level: 2, name: /Ways to make your allowance last longer/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: /Ways to make your allowance last longer/ }, { timeout: SLOW })).toBeInTheDocument();
     expect(await screen.findByText(/Next step: keep using your app/)).toBeInTheDocument();
   });
 });
@@ -182,13 +210,15 @@ describe("Settings: how you pay for AI", () => {
     account("per_use");
     renderWithProviders(<WithProject id="acme"><Settings /></WithProject>);
     expect(await screen.findByText("Monthly spending limit")).toBeInTheDocument();
+    expect(screen.getByText("Spending limit")).toBeInTheDocument(); // the side-nav label
     expect(screen.queryByText("Your allowance")).toBeNull();
   });
 
   it("subscription swaps the spending limit for a pointer to usage limits", async () => {
     account("subscription");
     renderWithProviders(<WithProject id="acme"><Settings /></WithProject>);
-    expect(await screen.findByText("Your allowance")).toBeInTheDocument();
+    expect((await screen.findAllByText("Your allowance")).length).toBe(2); // the side-nav label and the box
+    expect(screen.queryByText("Spending limit")).toBeNull();
     expect(screen.queryByText("Monthly spending limit")).toBeNull();
     expect(screen.getAllByRole("link", { name: "Usage limits" }).some((a) => a.getAttribute("href") === "#limits")).toBe(true);
   });
@@ -218,5 +248,27 @@ describe("New project: how do you pay for AI?", () => {
     await user.click(screen.getByRole("radio", { name: /Monthly subscription/ }));
     await user.click(screen.getByRole("button", { name: /Create project/ }));
     await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toEqual({ name: "Bot", billing_mode: "subscription" }));
+  });
+});
+
+describe("Server-written alert wording on a subscription", () => {
+  const budget = {
+    alert_id: "id-b", job: "invoice-extract", kind: "BUDGET", summary: "You have used 85% of your $500.00 monthly AI budget.",
+    detail: { level: "85", spent_usd: 425, budget_usd: 500 }, created_at: "2026-11-10T09:00:00Z", delivered_at: null, delivery_attempts: 0, delivery_failed_at: null, resolved_at: null,
+  } as unknown as Alert;
+  const card = () => <WithProject id="acme"><AlertItemCard item={{ kind: "regression", alert: budget, timestamp: budget.created_at }} /></WithProject>;
+
+  it("hides dollar wording and shows the neutral line", async () => {
+    stubApi({ "/v1/projects/acme": { project_id: "acme", name: "Acme", billing_mode: "subscription" } });
+    renderWithProviders(card());
+    expect(await screen.findByText(MONEY_ALERT_FALLBACK)).toBeInTheDocument();
+    expect(screen.queryByText(/\$/)).toBeNull();
+  });
+
+  it("per use still shows the server's wording", async () => {
+    stubApi({ "/v1/projects/acme": { project_id: "acme", name: "Acme", billing_mode: "per_use" } });
+    renderWithProviders(card());
+    expect(await screen.findByText(budget.summary)).toBeInTheDocument();
+    expect(screen.getByText("Spent $425 of your $500 limit.")).toBeInTheDocument();
   });
 });

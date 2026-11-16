@@ -1,5 +1,6 @@
 /** The whole app's frame: a left sidebar (the project, four destinations and the project's own pages),
  * a top bar with search (Ctrl/⌘ K), theme, alerts and the account menu, and a bottom bar on phones. */
+import { useBillingMode } from "../features/projects/hooks/useBillingMode";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -27,6 +28,7 @@ import {
   IconSidebar,
 } from "../ui/icons";
 import { ThemeToggle } from "../ui/ThemeToggle";
+import { useModalFocus } from "../ui/useModalFocus";
 import { TourHost } from "../features/guide/TourHost";
 import { cx, Skeleton } from "../ui/primitives";
 
@@ -80,6 +82,7 @@ function ProjectSwitcher() {
       </span>
     );
   }
+  if (projects.isPending) return <span role="status" className="block truncate px-2 py-1 text-sm text-muted">Loading projects…</span>;
   if (projects.isError || list.length === 0) return null;
   return (
     <div ref={ref} className="relative">
@@ -236,7 +239,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
       { label: "Live pipeline", hint: "AI calls arriving right now", to: p("/activity?tab=live") },
       { label: "AI news", hint: "Stories about your models", to: p("/activity?tab=news") },
       { label: "Settings", hint: "Project name, keys, alert webhook and data retention (how long data is kept)", to: p("/settings") },
-      { label: "Usage limits", hint: "Caps that stop a mistake running up a huge bill", to: p("/settings#limits") },
+      { label: "Usage limits", hint: "Caps we warn you about before you reach them", to: p("/settings#limits") },
     ];
     const jobItems = (jobs.data ?? []).map((j) => ({ label: jobTitle(j.name), code: j.name, hint: "AI task", to: p(`/jobs/${encodeURIComponent(j.name)}`) }));
     const q = query.trim().toLowerCase();
@@ -249,6 +252,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
       setIndex(0);
     }
   }, [open]);
+  const dialogRef = useModalFocus<HTMLDivElement>(open, onClose, "input");
 
   const go = (c: Command | undefined) => {
     if (!c) return;
@@ -267,7 +271,9 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
           onMouseDown={(e) => e.target === e.currentTarget && onClose()}
         >
           <motion.div
+            ref={dialogRef}
             role="dialog"
+            aria-modal="true"
             aria-label="Go to"
             initial={{ opacity: 0, y: 12, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -278,7 +284,11 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
             <div className="flex items-center gap-3 border-b border-rule px-4">
               <IconSearch size={18} className="text-muted" />
               <input
-                autoFocus
+                role="combobox"
+                aria-expanded="true"
+                aria-controls="palette-results"
+                aria-autocomplete="list"
+                aria-activedescendant={commands[index] ? `palette-opt-${index}` : undefined}
                 value={query}
                 onChange={(e) => {
                   setQuery(e.target.value);
@@ -288,7 +298,6 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
                   if (e.key === "ArrowDown") setIndex((i) => Math.min(i + 1, commands.length - 1));
                   else if (e.key === "ArrowUp") setIndex((i) => Math.max(i - 1, 0));
                   else if (e.key === "Enter") go(commands[index]);
-                  else if (e.key === "Escape") onClose();
                 }}
                 placeholder="Jump to an AI task, a page or a setting…"
                 aria-label="Search"
@@ -296,15 +305,18 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
               />
               <kbd className="rounded-md border border-rule px-1.5 py-0.5 font-mono text-[10px] text-muted">esc</kbd>
             </div>
-            <ul className="max-h-[50vh] overflow-auto p-2">
-              {commands.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted">Nothing matches “{query}”.</li>}
+            <ul id="palette-results" role="listbox" aria-label="Results" className="max-h-[50vh] overflow-auto p-2">
+              {commands.length === 0 && <li role="presentation" className="px-3 py-6 text-center text-sm text-muted">Nothing matches “{query}”.</li>}
               {commands.map((c, i) => (
-                <li key={`${c.to}-${c.label}`}>
-                  <button
-                    type="button"
+                <li key={`${c.to}-${c.label}`} role="presentation">
+                  <div
+                    id={`palette-opt-${i}`}
+                    role="option"
+                    aria-selected={i === index}
                     onMouseEnter={() => setIndex(i)}
                     onClick={() => go(c)}
                     className={cx(
+                      "cursor-pointer",
                       "flex w-full items-center justify-between gap-3 rounded-[10px] px-3 py-2.5 text-left",
                       i === index ? "bg-surface-3 text-ink" : "text-dim",
                     )}
@@ -317,7 +329,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
                       <span className="block truncate text-xs text-muted">{c.hint}</span>
                     </span>
                     {i === index && <IconArrowRight size={15} className="shrink-0 text-accent" />}
-                  </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -331,6 +343,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
 function PageFallback() {
   return (
     <div className="grid gap-4" role="status" aria-label="Loading page">
+      <span className="sr-only">Loading…</span>
       <Skeleton className="h-28 w-full" />
       <div className="grid gap-4 md:grid-cols-3">
         <Skeleton className="h-36" />
@@ -355,6 +368,7 @@ function readCollapsed(): boolean {
 /** The left sidebar: the project, the four destinations, the project's own pages, and a way to try a
  * cheaper model. Collapses to icons; the choice is remembered in this browser. */
 function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle: () => void; alerts: number }) {
+  const { mode: billing } = useBillingMode();
   const p = useP();
   const nav = useNav();
   const { mode } = useProject();
@@ -380,7 +394,7 @@ function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle
       aria-label="Sidebar"
     >
       <div className={cx("flex h-16 shrink-0 items-center gap-2.5 border-b border-rule px-4", collapsed && "justify-center px-0")}>
-        <Link to={user ? "/projects" : p("/")} className="flex min-w-0 items-center gap-2.5" aria-label={user ? "All projects" : "Overview"}>
+        <Link to={user ? "/projects" : p("/")} className="flex min-w-0 items-center gap-2.5" aria-label={collapsed ? (user ? "All projects" : "Overview") : `Model & Cost Memory, ${user ? "all projects" : "overview"}`}>
           <IconLogo size={28} />
           {!collapsed && <span className="truncate text-[15px] font-semibold tracking-tight">Model &amp; Cost Memory</span>}
         </Link>
@@ -448,7 +462,7 @@ function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle
           >
             <div aria-hidden className="pointer-events-none absolute inset-0 opacity-30" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.35) 1px, transparent 1px)", backgroundSize: "10px 10px" }} />
             <span className="relative grid h-8 w-8 place-items-center rounded-[9px] bg-white/20"><IconFlask size={16} /></span>
-            <p className="relative mt-3 text-sm font-semibold">Try a cheaper model</p>
+            <p className="relative mt-3 text-sm font-semibold">{billing === "subscription" ? "Try a smaller model" : "Try a cheaper model"}</p>
             <p className="relative mt-1 text-xs text-white/80">We replay your past prompts on another model to see if it does as well, within a budget you set.</p>
             <Link to={p("/retest")} className="relative mt-3 block rounded-[10px] bg-white/95 px-3 py-2 text-center text-xs font-semibold text-[var(--promo-ink)] transition-colors hover:bg-white">
               Start a trial on a new model

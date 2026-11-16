@@ -155,9 +155,9 @@ export function RetestStartPanel() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-semibold text-ink">
+              <h2 className="text-base font-semibold text-ink">
                 Monthly budget for trials on new models
-              </h3>
+              </h2>
               {isCapExhausted ? (
                 <Badge tone="bad">Budget used up</Badge>
               ) : (
@@ -226,9 +226,9 @@ export function RetestStartPanel() {
       <Card className="p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="border-b border-rule pb-4">
-            <h3 className="text-base font-semibold text-ink">
+            <h2 className="text-base font-semibold text-ink">
               Set up a trial on a new model
-            </h3>
+            </h2>
             <p className="mt-1 text-xs text-dim">
               Choose the AI task and the model to try. We replay past prompts on that model, so your live app is not affected.
             </p>

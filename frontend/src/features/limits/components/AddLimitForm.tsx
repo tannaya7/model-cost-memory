@@ -75,7 +75,7 @@ export function AddLimitForm({ onDone }: { onDone?: () => void }) {
       <div>
         <h3 className="text-base font-bold tracking-tight text-ink">Add a usage limit</h3>
         <p className="mt-1 text-xs text-dim">
-          A usage limit is a cap you or your provider set, so a mistake cannot run up a huge bill. Plans that only show a percentage are estimated from your recorded AI calls and the number you read off the plan's bar, so use outside the recorded AI calls is not counted.
+          A usage limit is a cap you or your provider set, so a mistake cannot use up more than you planned. Plans that only show a percentage are estimated from your recorded AI calls and the number you read off the plan's bar, so use outside the recorded AI calls is not counted.
         </p>
       </div>
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">

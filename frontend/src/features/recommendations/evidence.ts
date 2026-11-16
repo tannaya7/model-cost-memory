@@ -1,3 +1,4 @@
+import { confidenceWords } from "../../screens/promising";
 import type { ModelEvidence, ModelEvidenceStatus, Recommendation } from "../../shared/api/types";
 
 type Tone = "neutral" | "ok" | "warn" | "bad" | "accent";
@@ -28,12 +29,12 @@ export function range(m: ModelEvidence): string {
 /** The rule, in one sentence, from the numbers the server used. */
 export function ruleSentence(rec: Recommendation): string {
   const { confidence, margin, evidence_floor, switch_confidence } = rec.rules;
-  const pct = (x: number) => `${Math.round(x * 100)}%`;
+  const words = (x: number) => { const w = confidenceWords(x); return `${w.plain} (${w.exact})`; };
   return (
-    `We only judge a model once it has ${evidence_floor} checked answers (recent ones count more than old ones). It qualifies when we are ` +
-    `${pct(confidence)} sure it gets at most ${Math.round(margin * 100)} percentage points fewer answers right than ` +
-    `the best model; of those, we recommend the one with the lowest cost per correct answer. We only advise moving to it when we are ` +
-    `${pct(switch_confidence)} sure it is within ${Math.round(margin * 100)} points of the model you use now, ` +
+    `We only judge a model once it has ${evidence_floor} checked answers (recent ones count more than old ones). It qualifies when we have ` +
+    `${words(confidence)} that it gets at most ${Math.round(margin * 100)} percentage points fewer answers right than ` +
+    `the best model; of those, we recommend the one with the lowest cost per correct answer. We only advise moving to it with ` +
+    `${words(switch_confidence)} that it is within ${Math.round(margin * 100)} points of the model you use now, ` +
     `so the advice does not flip back and forth on everyday ups and downs.`
   );
 }

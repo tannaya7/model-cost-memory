@@ -21,7 +21,7 @@ describe("VerdictTab", () => {
   it("asks to keep the model in use on HOLD", () => {
     renderWithProviders(<VerdictTab rec={{ ...downgrade, verdict: "HOLD", recommended: downgrade.current, forecast: null }} />);
     expect(screen.getByRole("heading", { level: 2, name: "Keep using acme-large" })).toBeInTheDocument();
-    expect(screen.getByText(/No cheaper model is proven/)).toBeInTheDocument();
+    expect(screen.getByText(/No cheaper model is shown/)).toBeInTheDocument();
   });
 
   it("shows progress instead of a verdict while evidence is thin", () => {
@@ -40,7 +40,7 @@ describe("VerdictTab", () => {
     expect(screen.getAllByText(/Out of every 100 answers we checked, about/).length).toBeGreaterThan(0);
     const help = screen.getByRole("button", { name: "How we reach this recommendation" });
     await userEvent.setup().click(help);
-    expect(screen.getByRole("status")).toHaveTextContent(/within 3 points of the best model/);
+    expect(screen.getByRole("status")).toHaveTextContent(/within 3 points of both the best model and your current one/);
     expect(screen.getByRole("status")).toHaveTextContent(/we need at least 25/);
   });
 

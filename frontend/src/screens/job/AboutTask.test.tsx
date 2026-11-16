@@ -25,7 +25,7 @@ describe("What this task is", () => {
     expect(await screen.findByText(/Add a one-line description so your team knows what this task does/)).toBeInTheDocument();
     expect(await screen.findByText("acme-mini")).toBeInTheDocument();
     expect(screen.getByText(/About 1.8k tokens in and 96 tokens out/)).toBeInTheDocument();
-    expect(screen.getByText("Works like an agent")).toBeInTheDocument();
+    expect(screen.getByText("Looks like an agent")).toBeInTheDocument();
     expect(screen.getAllByText("(estimate)")).toHaveLength(1);
     expect(screen.getAllByText("(measured)").length).toBeGreaterThan(3);
   });

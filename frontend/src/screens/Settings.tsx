@@ -125,7 +125,7 @@ function PrivacySection({ project }: { project: Project }) {
   const valid = Number.isInteger(n) && n >= 1 && n <= 3650;
   return (
     <Panel id="privacy" className="scroll-mt-24 p-5 md:p-6">
-      <PanelHeader title="How long prompts and answers are kept" hint="After this many days, the text of each AI call (its prompt, answer, tool calls and answer key) is deleted each night. Whether it was correct, what it cost and how many tokens it used are kept, so our recommendations do not change. Tokens are the small pieces of text AI models are billed by." />
+      <PanelHeader title="How long prompts and answers are kept" hint="After this many days, the text of each AI call (its prompt, answer, tool calls and answer key) is deleted each night. Whether it was correct, what it cost and how many tokens it used are kept, so our recommendations do not change. Tokens are the small pieces of text AI models read and write." />
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <input id="retention" type="number" min={1} max={3650} className={cx(field, "w-28")} value={days} onChange={(e) => setDays(e.target.value)} aria-label="Days to keep run content" />
         <span className="text-sm text-dim">days</span>
@@ -392,7 +392,7 @@ function LimitsSection() {
     <Panel id="limits" className="scroll-mt-24 p-5 md:p-6">
       <PanelHeader
         title="Usage limits"
-        hint="A usage limit is a cap you or your provider set, so a mistake cannot run up a huge bill, for example a plan's 5-hour or weekly limit, a limit on one model, or an API budget. We estimate whether you will hit it before it resets, and which cheaper option would make it last."
+        hint="A usage limit is a cap you or your provider set, so a mistake cannot use up more than you planned, for example a plan's 5-hour or weekly limit, a limit on one model, or an API budget. We estimate whether you will hit it before it resets, and which cheaper option would make it last."
         actions={!adding && <Button size="sm" variant="primary" onClick={() => setAdding(true)}>Add a usage limit</Button>}
       />
       {adding && (
@@ -489,7 +489,7 @@ export default function Settings() {
     <div className="flex flex-col gap-5">
       <header>
         <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-dim">{project ? <>For <span className="text-ink">{project.name}</span>.</> : "For the project your key belongs to."}</p>
+        <p className="mt-1 text-sm text-dim">{project ? <>For <span className="text-ink [overflow-wrap:anywhere]">{project.name}</span>.</> : "For the project your key belongs to."}</p>
       </header>
       <div className="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
         <nav aria-label="Settings sections" className="hidden lg:block">
@@ -501,7 +501,7 @@ export default function Settings() {
                   onClick={(e) => { e.preventDefault(); document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
                   className={cx("block rounded-[9px] px-3 py-2 text-sm transition-colors", active === s.id ? "bg-surface-2 font-semibold text-ink" : "text-muted hover:text-dim")}
                 >
-                  {s.label}
+                  {s.id === "budget" && project?.billing_mode === "subscription" ? "Your allowance" : s.label}
                 </a>
               </li>
             ))}

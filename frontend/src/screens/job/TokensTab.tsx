@@ -1,4 +1,6 @@
 /** The job's tokens: input and output over time, average input per run, and rule-based hints to trim them. */
+import { tokensAre } from "../../features/projects/moneyWording";
+import { useBillingMode } from "../../features/projects/hooks/useBillingMode";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useReducedMotion } from "framer-motion";
 import { useDaily } from "../../features/insights/api/dailyApi";
@@ -17,6 +19,7 @@ const DAYS = 30;
 const tickDay = (d: string) => shortDate(`${d}T00:00:00Z`);
 
 export function TokensTab({ job }: { job: string }) {
+  const { mode: billing } = useBillingMode();
   const daily = useDaily({ days: DAYS * 2, job });
   const animate = !useReducedMotion();
 
@@ -86,7 +89,7 @@ export function TokensTab({ job }: { job: string }) {
 
       <Panel className="p-5">
         <h2 className="text-[15px] font-semibold tracking-tight text-ink">Where this task's tokens went</h2>
-        <p className="mb-3 mt-0.5 text-[13px] text-dim">Tokens are the small pieces of text that AI is billed by. These are this task's prompts that use the most.</p>
+        <p className="mb-3 mt-0.5 text-[13px] text-dim">{tokensAre(billing)} These are this task's prompts that use the most.</p>
         <TokensWentBody days={DAYS} job={job} limit={5} />
       </Panel>
 

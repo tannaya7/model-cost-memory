@@ -7,8 +7,10 @@ import { NoCallsYet } from "../../ui/NotEnoughData";
 import { EmptyState, ErrorState, Skeleton } from "../../ui/primitives";
 import { Shell, type Ctx, type ShellProps } from "./widgets";
 import { promptHints } from "./promptHints";
+import { useBillingMode, type BillingMode } from "../../features/projects/hooks/useBillingMode";
 
 export const MIN_TEXT_SAMPLES = 5;
+const TOKENS_HELP_SUB = "Tokens are the small pieces of text that AI reads and writes. Some providers count text they have already seen differently, so the same start in every call may help. We have not verified how your plan counts it.";
 const TOKENS_HELP = "Tokens are the small pieces of text that AI is billed by. Many providers charge much less for text they have already seen, so the same start in every call can cost less.";
 
 type Parts = { start: number; changes: number; end: number };
@@ -54,9 +56,9 @@ function AnatomyBar({ a }: { a: Parts }) {
   );
 }
 
-function GroupCard({ g }: { g: PromptGroup }) {
+function GroupCard({ g, mode }: { g: PromptGroup; mode: BillingMode }) {
   const a = anatomy(g);
-  const tips = promptHints(g);
+  const tips = promptHints(g, mode);
   const removed = g.text_samples === 0;
   return (
     <li className="rounded-[12px] border border-rule bg-surface-2 p-4">
@@ -115,6 +117,7 @@ function GroupCard({ g }: { g: PromptGroup }) {
 /** The body shared by the widget and the task's Tokens tab. */
 export function TokensWentBody({ days, job, limit }: { days: number; job?: string; limit: number }) {
   const q = usePromptGroups({ days, job, limit });
+  const { mode } = useBillingMode();
   if (q.isPending) {
     return (
       <div className="space-y-3" aria-busy="true">
@@ -136,7 +139,7 @@ export function TokensWentBody({ days, job, limit }: { days: number; job?: strin
     <>
       <ul className="space-y-3">
         {groups.map((g) => (
-          <GroupCard key={`${g.job}:${g.prompt_version ?? ""}`} g={g} />
+          <GroupCard key={`${g.job}:${g.prompt_version ?? ""}`} g={g} mode={mode} />
         ))}
       </ul>
       <p className="mt-3 text-xs text-muted">Shares are of the tokens used in the last {q.data.days} days. Tips are rule-based ideas and may not fit every prompt.</p>
@@ -145,8 +148,9 @@ export function TokensWentBody({ days, job, limit }: { days: number; job?: strin
 }
 
 export function TokensWent({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
+  const { mode } = useBillingMode();
   return (
-    <Shell shell={shell} title="Where your tokens went" help={TOKENS_HELP} hint="Which prompts use the most tokens, and what you could change.">
+    <Shell shell={shell} title="Where your tokens went" help={mode === "subscription" ? TOKENS_HELP_SUB : TOKENS_HELP} hint="Which prompts use the most tokens, and what you could change.">
       <TokensWentBody days={ctx.days} limit={3} />
     </Shell>
   );

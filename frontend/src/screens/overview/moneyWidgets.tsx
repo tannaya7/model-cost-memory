@@ -9,7 +9,7 @@ import { CountUp } from "../../shared/motion/CountUp";
 import { pct, usd } from "../../ui/format";
 import { Button, cx, EmptyState, Skeleton } from "../../ui/primitives";
 import { clearBrowserBudget, readBrowserBudget } from "./budget";
-import { monthProjection, unitCosts, wastedSpend } from "./metrics";
+import { BUDGET_FIRST_ALERT, monthProjection, unitCosts, wastedSpend } from "./metrics";
 import { DeltaPill, Shell, UnpricedChip, type Ctx, type ShellProps } from "./widgets";
 
 const dollars = (v: number) => <CountUp value={v} prefix="$" decimals={v < 100 ? 2 : 0} />;
@@ -59,7 +59,7 @@ export function MonthProjection({ shell }: { shell: ShellProps }) {
     }
   };
   const status = p.status === "none" ? null : STATUS[p.status];
-  const used80 = p.usedShare !== null && p.usedShare >= 0.8;
+  const used80 = p.usedShare !== null && p.usedShare >= BUDGET_FIRST_ALERT; // 85%, where our first warning fires (the next is at 95%)
 
   return (
     <Shell shell={shell} help="We take what you have spent this month and add your average daily spending of the last 7 days for each day left. The range uses your cheapest and dearest of those 7 days. It is an estimate, not a bill." title="Where this month's spending is heading" hint={`${p.monthLabel}. If the pace holds, you will have spent about this much by month end.`}>
@@ -108,7 +108,7 @@ export function MonthProjection({ shell }: { shell: ShellProps }) {
                 {p.status === "over"
                   ? `About ${usd(p.overBy)} above ${usd(budget!)} at this pace.`
                   : used80
-                    ? `${pct(p.usedShare!, 0)} of your monthly budget is already used.`
+                    ? `${pct(p.usedShare!, 0)} of your monthly budget is already used${p.usedShare! >= 0.95 ? ", past our 95% warning" : ""}.`
                     : `About ${pct(p.projected / budget!, 0)} of your ${usd(budget!)} budget by month end.`}
               </span>
             </div>
@@ -210,7 +210,7 @@ export function WastedSpend({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
 /* 4. What 1,000 good answers cost                                                                  */
 
 export function UnitCost({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
-  const { all, jobs } = unitCosts(ctx.cur, ctx.prev);
+  const { all, jobs } = unitCosts(ctx.cur, ctx.prev, ctx.curDone, ctx.prevDone);
   const max = Math.max(...jobs.map((j) => j.per1k ?? 0), 0.0001);
   return (
     <Shell shell={shell} help="We divide what you spent by the number of correct answers. A cheap model that is often wrong can cost more per correct answer. This is the fair way to compare." title="What 1,000 correct answers cost you" hint={`What it costs to get 1,000 right answers, last ${ctx.days} days.`}>

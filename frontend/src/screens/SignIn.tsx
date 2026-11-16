@@ -104,7 +104,7 @@ export default function SignIn() {
   const dev = Boolean(config.data?.dev_login);
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1.15fr_1fr]">
+    <main className="grid min-h-screen lg:grid-cols-[1.15fr_1fr]">
       <section className="relative hidden overflow-hidden border-r border-rule p-12 lg:flex lg:flex-col lg:justify-between">
         <div aria-hidden className="pointer-events-none absolute -left-40 top-1/3 h-[480px] w-[480px] rounded-full bg-accent/15 blur-3xl" />
         <div className="relative flex items-center justify-between gap-3">
@@ -186,6 +186,6 @@ export default function SignIn() {
           </p>
         </motion.div>
       </section>
-    </div>
+    </main>
   );
 }

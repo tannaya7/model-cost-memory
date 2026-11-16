@@ -32,11 +32,44 @@ export const isTooFew = (n: number | null | undefined, floor: number = MIN_CHECK
 
 const pc = (v: number) => `${Math.round(v * 100)}%`;
 
+/** What the API says about one model's evidence: its own pass-rate range and its freshness-weighted evidence (old runs count less).
+ * Screens use these instead of recomputing from the raw run count, which would give a narrower range than the engine. */
+export interface ApiEvidence {
+  pass_rate_low?: number | null;
+  pass_rate_high?: number | null;
+  evidence_weight?: number | null;
+}
+
+/** The engine's range when it sent one, else a Wilson range from the raw count (only for data without an API range). */
+export function rangeOf(rate: number | null | undefined, n: number | null | undefined, api?: ApiEvidence): { low: number; high: number } | null {
+  if (api && api.pass_rate_low != null && api.pass_rate_high != null) return { low: api.pass_rate_low, high: api.pass_rate_high };
+  return wilsonFromRate(rate, n);
+}
+
+/** Too few when the freshness-weighted evidence is under the floor (the engine's own test); the raw count only when no weight is given. */
+export function tooFewFor(n: number | null | undefined, api?: ApiEvidence, floor: number = MIN_CHECKED_ANSWERS): boolean {
+  return api && api.evidence_weight != null ? api.evidence_weight < floor : isTooFew(n, floor);
+}
+
 /** "93% correct, 86% to 97% (95% range), from 100 checked answers", or the too-few label. */
-export function evidenceLine(rate: number | null | undefined, n: number | null | undefined, floor: number = MIN_CHECKED_ANSWERS): string {
+export function evidenceLine(rate: number | null | undefined, n: number | null | undefined, floor: number = MIN_CHECKED_ANSWERS, api?: ApiEvidence): string {
   if (rate == null || n == null || n <= 0) return UNTESTED_LABEL;
-  const ci = wilsonFromRate(rate, n);
+  const ci = rangeOf(rate, n, api);
   const count = `${Math.round(n).toLocaleString("en")} checked ${Math.round(n) === 1 ? "answer" : "answers"}`;
-  if (isTooFew(n, floor) || !ci) return `${TOO_FEW_LABEL}: ${count} so far, we need ${floor}`;
+  if (tooFewFor(n, api, floor) || !ci) return `${TOO_FEW_LABEL}: ${count} so far, we need ${floor}`;
   return `${pc(rate)} correct, probably ${pc(ci.low)} to ${pc(ci.high)} (95% range), from ${count}`;
+}
+
+/** Newcombe's 95% interval for the difference of two pass rates (second minus first), built from their Wilson intervals
+ * (method 10 in Newcombe 1998). Two overlapping Wilson ranges do NOT mean "no difference": this is the proper test. */
+export function newcombeDifference(rate1: number, n1: number, rate2: number, n2: number): { diff: number; low: number; high: number } | null {
+  const a = wilsonInterval(rate1 * n1, n1);
+  const b = wilsonInterval(rate2 * n2, n2);
+  if (!a || !b) return null;
+  const diff = rate2 - rate1;
+  return {
+    diff,
+    low: diff - Math.sqrt((rate2 - b.low) ** 2 + (a.high - rate1) ** 2),
+    high: diff + Math.sqrt((b.high - rate2) ** 2 + (rate1 - a.low) ** 2),
+  };
 }

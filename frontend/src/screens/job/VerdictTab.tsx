@@ -9,12 +9,17 @@ import { MODEL_STATUS, pct, usd, type ModelStatus } from "../../ui/format";
 import { IconAlert, IconArrowRight, IconFlask, IconSpark } from "../../ui/icons";
 import { UNTESTED_LABEL } from "../compare/wilson";
 import { Help } from "../../ui/Help";
-import { ProgressBar } from "../../ui/NotEnoughData";
+import { TwoStageBar } from "../../ui/NotEnoughData";
+import { confidenceWords, promisingDetails, promisingLine, promisingOf, PROMISING_ACTION, PROMISING_LABEL, TRIAL_BUDGET_NOTE, twoStage } from "../promising";
 import { evidenceSoFar } from "../shared";
 import { buildWhy } from "./why";
 import { NOT_A_BENCHMARK, volumeWords, wrongAnswerWords } from "../forecastText";
+import { serverText } from "../../features/projects/moneyWording";
 import { useBillingMode } from "../../features/projects/hooks/useBillingMode";
 import { ButtonLink, ModelName, Panel, PanelHeader, Pill, Reveal } from "../../ui/primitives";
+
+/** Shown under the AI-written summary. */
+export const AI_SUMMARY_NOTE = "Written by AI from the figures below; it may be wrong.";
 
 function headline(rec: Recommendation, billing: string): { title: React.ReactNode; body: string } {
   const cur = rec.current?.model;
@@ -30,19 +35,19 @@ function headline(rec: Recommendation, billing: string): { title: React.ReactNod
     case "DOWNGRADE":
       return {
         title: <>Move to <span className="text-gradient">{to}</span></>,
-        body: `${to} gets ${pct(toStats?.weighted_pass_rate)} of answers correct, within ${points} points of the best model${
+        body: `${to} gets ${pct(toStats?.weighted_pass_rate)} of answers correct, within ${points} points of both the best model and your current one${
           billing !== "subscription" && cheaper && cheaper > 1.05 ? `, at ${cheaper >= 10 ? Math.round(cheaper) : cheaper.toFixed(1)}× less per successful answer` : ""
-        }. The system is ${Math.round(rec.rules.switch_confidence * 100)}% sure before it advises a move like this.`,
+        }. We only advise a move like this with ${confidenceWords(rec.rules.switch_confidence).plain} (${confidenceWords(rec.rules.switch_confidence).exact}).`,
       };
     case "SWITCH":
       return {
         title: <>Move to <span className="text-gradient">{to}</span></>,
-        body: `${cur} fails more often than ${to}: ${pct(curStats?.weighted_pass_rate)} against ${pct(toStats?.weighted_pass_rate)}. The better model is worth what it costs here.`,
+        body: `${cur} fails more often than ${to}: ${pct(curStats?.weighted_pass_rate)} against ${pct(toStats?.weighted_pass_rate)}. We only advise this with ${confidenceWords(rec.rules.switch_confidence).plain} (${confidenceWords(rec.rules.switch_confidence).exact}) that the difference is real.`,
       };
     case "HOLD":
       return {
         title: <>Keep using <span className="text-gradient">{cur}</span></>,
-        body: `No cheaper model is proven to do this task within ${points} points of the best. ${cur} stays the right choice until the evidence says otherwise.`,
+        body: `No cheaper model is shown to do this task within ${points} points of both the best model and ${cur}. ${cur} stays the right choice until the evidence says otherwise.`,
       };
     default:
       return {
@@ -52,7 +57,7 @@ function headline(rec: Recommendation, billing: string): { title: React.ReactNod
   }
 }
 
-function ModelCard({ label, m, highlight }: { label: string; m: ModelEvidence | undefined; highlight?: boolean }) {
+function ModelCard({ label, m, highlight, billing = "per_use" }: { label: string; m: ModelEvidence | undefined; highlight?: boolean; billing?: string }) {
   if (!m) return null;
   return (
     <div className={`rounded-[14px] border p-4 ${highlight ? "border-accent/50 bg-accent-soft/40" : "border-rule bg-surface-2/50"}`}>
@@ -68,10 +73,10 @@ function ModelCard({ label, m, highlight }: { label: string; m: ModelEvidence | 
           <dd className="mt-1 text-[11px] leading-snug text-muted">Out of every 100 answers we checked, about {Math.round((m.weighted_pass_rate ?? 0) * 100)} were right.</dd>
         </div>
         <div>
-          <dt className="text-[11px] text-muted">Cost per correct answer</dt>
+          <dt className="text-[11px] text-muted">{billing === "per_use" ? "Cost per correct answer" : "Cost per correct answer, at list prices"}</dt>
           <dd className="tabular text-lg font-semibold text-ink">{usd(m.cost_per_success_usd)}</dd>
           <dd className="tabular text-[11px] text-muted">from {m.n_runs.toLocaleString("en")} checked answers</dd>
-          <dd className="mt-1 text-[11px] leading-snug text-muted">What you pay, on average, for each right answer.</dd>
+          <dd className="mt-1 text-[11px] leading-snug text-muted">{billing === "per_use" ? "What you pay, on average, for each right answer." : billing === "both" ? "List prices, not your bill: what a per-use call would cost, on average, for each right answer." : "At list prices, not your bill: what each right answer would cost if you paid per use."}</dd>
         </div>
       </dl>
     </div>
@@ -89,6 +94,8 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
   const reference = rec.models.find((m) => m.model === rec.reference);
   const floor = reference?.weighted_pass_rate != null ? reference.weighted_pass_rate - rec.rules.margin : null;
   const f = rec.forecast;
+  const trial = promisingOf(rec);
+  const summary = serverText(rec.summary, billing, null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -98,18 +105,38 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
             <p className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.18em] text-muted">
               <IconSpark size={14} className="text-accent" /> Our recommendation
               <Help label="How we reach this recommendation">
-                We look for the cheapest model whose correct answers are within {Math.round(rec.rules.margin * 100)} points of the best model. We only suggest a move when we are {Math.round(rec.rules.switch_confidence * 100)}% sure. This is based on {rec.evidence.n_runs.toLocaleString("en")} checked answers, and we need at least {rec.rules.evidence_floor}. Nothing changes unless you decide.
+                We look for the cheapest model whose correct answers are within {Math.round(rec.rules.margin * 100)} points of both the best model and your current one. We only suggest a move with {confidenceWords(rec.rules.switch_confidence).plain} ({confidenceWords(rec.rules.switch_confidence).exact}). This is based on {rec.evidence.n_runs.toLocaleString("en")} checked answers, and we need at least {rec.rules.evidence_floor}. Nothing changes unless you decide.
               </Help>
             </p>
             <h2 className="text-[30px] font-semibold leading-tight tracking-tight md:text-[40px]">{title}</h2>
             <p className="max-w-xl text-[15px] leading-relaxed text-dim">{body}</p>
-            {rec.summary && (
-              <blockquote className="max-w-xl border-l-2 border-accent/60 pl-3 text-sm italic text-dim">“{rec.summary}”</blockquote>
+            {summary && (
+              <div className="max-w-xl">
+                <blockquote className="border-l-2 border-accent/60 pl-3 text-sm italic text-dim">“{summary}”</blockquote>
+                <p className="mt-1 pl-3 text-[11px] text-muted">{AI_SUMMARY_NOTE}</p>
+              </div>
             )}
             {rec.verdict === "INSUFFICIENT_EVIDENCE" && (
               <div className="flex max-w-md flex-col gap-2">
-                <ProgressBar n={evidenceSoFar(rec)} min={rec.rules.evidence_floor} />
+                <TwoStageBar {...twoStage(rec, evidenceSoFar(rec))} />
                 <p className="text-xs text-muted">{rec.next_step ?? "Next step: choose how answers are checked on the task page."}</p>
+              </div>
+            )}
+            {trial && (
+              <div className="flex max-w-xl flex-col gap-2 rounded-[14px] border border-rule bg-surface-2/60 p-4" data-testid="promising">
+                <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  <Pill tone="neutral" icon={false}>{PROMISING_LABEL}</Pill> <ModelName>{trial.model}</ModelName>
+                </p>
+                <p className="text-sm text-dim">{promisingLine(trial)}</p>
+                {promisingDetails(trial).map((t) => (
+                  <p key={t} className="text-xs text-muted">{t}</p>
+                ))}
+                <p className="text-[11px] text-muted">{TRIAL_BUDGET_NOTE}</p>
+                <div>
+                  <ButtonLink to={p(`/retest?job=${encodeURIComponent(rec.job)}&model=${encodeURIComponent(trial.model)}`)} size="sm">
+                    <IconFlask size={14} /> {PROMISING_ACTION}
+                  </ButtonLink>
+                </div>
               </div>
             )}
             {rec.verdict !== "INSUFFICIENT_EVIDENCE" && <p className="max-w-xl text-[11px] leading-snug text-muted">{NOT_A_BENCHMARK}</p>}
@@ -123,12 +150,18 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
           <div className="flex min-w-0 flex-col gap-3">
             {moving ? (
               <div className="grid items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
-                <ModelCard label="In use now" m={cur} />
+                <ModelCard label="In use now" m={cur} billing={billing} />
                 <IconArrowRight size={20} className="mx-auto rotate-90 text-accent sm:rotate-0" />
-                <ModelCard label="Recommended" m={to} highlight />
+                <ModelCard label="Recommended" m={to} highlight billing={billing} />
               </div>
             ) : (
-              <ModelCard label={rec.verdict === "HOLD" ? "In use and recommended" : "In use now"} m={cur ?? to} highlight={rec.verdict === "HOLD"} />
+              <ModelCard label={rec.verdict === "HOLD" ? "In use and recommended" : "In use now"} m={cur ?? to} highlight={rec.verdict === "HOLD"} billing={billing} />
+            )}
+            {!f && (rec.verdict === "DOWNGRADE" || rec.verdict === "SWITCH") && (
+              <div className="rounded-[14px] border border-rule bg-surface-2/50 p-4" data-testid="forecast-learning">
+                <p className="text-sm font-semibold text-ink">Still learning how much this task runs</p>
+                <p className="text-[13px] text-dim">Monthly figures appear once the model in use has a week of calls. Nothing is guessed before then.</p>
+              </div>
             )}
             {f && (rec.verdict === "DOWNGRADE" || rec.verdict === "SWITCH") && (
               <div className="grid grid-cols-2 gap-3">
@@ -141,7 +174,7 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
                 )}
                 {billing !== "subscription" && (
                 <div className="rounded-[14px] border border-rule bg-surface-2/50 p-4">
-                  <p className="flex items-center gap-1.5 text-[11px] text-muted">{billing === "both" ? "If you pay per use: " : ""}{f.monthly_saving_usd >= 0 ? "Saved per month" : "Extra cost per month"}
+                  <p className="flex items-center gap-1.5 text-[11px] text-muted">{billing === "both" ? "If you pay per use: " : ""}{f.monthly_saving_usd >= 0 ? "Saved per month" : "Bill would rise per month"}
                     <Help label="How these two numbers are worked out">The saving is the cost today minus the cost of the recommended model, at your usual number of AI calls. The wrong answers are what we expect on top of today, with the likely range because we only checked some of your calls.</Help>
                   </p>
                   <p className={`tabular text-2xl font-semibold ${f.monthly_saving_usd >= 0 ? "text-ok" : "text-warn"}`}>{usd(Math.abs(f.monthly_saving_usd))}</p>
@@ -171,9 +204,9 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
               </div>
             ))}
           </dl>
-          {rec.retest_candidates.length > 0 && (
+          {rec.retest_candidates.filter((m) => m !== trial?.model).length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
-              {rec.retest_candidates.map((model) => (
+              {rec.retest_candidates.filter((m) => m !== trial?.model).map((model) => (
                 <ButtonLink key={model} to={p(`/retest?job=${encodeURIComponent(rec.job)}&model=${encodeURIComponent(model)}`)} size="sm">
                   <IconFlask size={14} /> Trial {model} on past prompts
                 </ButtonLink>
@@ -206,7 +239,7 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
               </>
             }
             table={{
-              columns: ["Model", "Pass rate", "Likely range", "Cost / success", "Checked runs", "Judged"],
+              columns: ["Model", "Pass rate", "Likely range", billing === "per_use" ? "Cost / success" : "Cost / success (list price)", "Checked runs", "Judged"],
               rows: rec.models.map((m) => [
                 m.model,
                 pct(m.weighted_pass_rate),
@@ -217,14 +250,14 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
               ]),
             }}
           >
-            <CostQualityMap models={rec.models} colors={colors} recommended={rec.recommended?.model} current={rec.current?.model} floor={floor} />
+            <CostQualityMap models={rec.models} colors={colors} recommended={rec.recommended?.model} current={rec.current?.model} floor={floor} listPrice={billing !== "per_use"} />
           </ChartFrame>
         </Panel>
       </Reveal>
 
       <Reveal delay={0.12}>
         <Panel className="p-5 md:p-6">
-          <PanelHeader title="How each model was judged" hint="The rule: cheapest model whose pass rate is proven within the tolerance of the best" />
+          <PanelHeader title="How each model was judged" hint="The rule: cheapest model shown to pass within the tolerance of both the best model and your current one" />
           <ul className="mt-4 divide-y divide-rule">
             {[...rec.models]
               .sort((a, b) => (a.cost_per_success_usd ?? Infinity) - (b.cost_per_success_usd ?? Infinity))
@@ -240,10 +273,10 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
                         {m.model === rec.current?.model && <Pill tone="neutral" icon={false}>in use</Pill>}
                         {m.catalog_status !== "ACTIVE" && m.catalog_status !== "UNKNOWN" && <Pill tone="warn">{m.catalog_status.toLowerCase()}</Pill>}
                       </div>
-                      <p className="mt-1 text-xs text-dim">{m.why}</p>
+                      <p className="mt-1 text-xs text-dim">{serverText(m.why, billing, null)}</p>
                     </div>
                     <div className="flex items-center gap-4 sm:justify-end">
-                      <span className="tabular text-sm text-dim">{m.n_runs > 0 ? `${pct(m.weighted_pass_rate)} of ${m.n_runs.toLocaleString("en")}` : UNTESTED_LABEL} · {usd(m.cost_per_success_usd)}</span>
+                      <span className="tabular text-sm text-dim">{m.n_runs > 0 ? `${pct(m.weighted_pass_rate)} of ${m.n_runs.toLocaleString("en")}` : UNTESTED_LABEL} · {usd(m.cost_per_success_usd)}{billing === "per_use" ? "" : " list price"}</span>
                       <Pill tone={s.tone}>{s.label}</Pill>
                     </div>
                   </li>

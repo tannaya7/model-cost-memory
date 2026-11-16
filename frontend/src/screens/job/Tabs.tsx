@@ -18,7 +18,8 @@ import { ChartFrame } from "../../ui/charts/ChartFrame";
 import { GroupBars, QualityLines, SpendArea, type Marker } from "../../ui/charts/charts";
 import { pivot, rollingPassRate, total } from "../../ui/charts/data";
 import { colorMap } from "../../ui/charts/series";
-import { pct, timeAgo, usd } from "../../ui/format";
+import { count, pct, timeAgo, usd } from "../../ui/format";
+import { useBillingMode } from "../../features/projects/hooks/useBillingMode";
 import { IconCheck, IconFlask, IconShield } from "../../ui/icons";
 import { Button, ButtonLink, EmptyState, ErrorState, ModelName, Panel, PanelHeader, Pill, Segmented, Skeleton } from "../../ui/primitives";
 
@@ -72,7 +73,7 @@ export function QualityTab({ job, rec }: { job: string; rec: Recommendation | nu
             ) : (alerts.data ?? []).length === 0 ? (
               <div className="flex items-center gap-3 rounded-[12px] border border-rule bg-surface-2/50 p-4">
                 <span className="grid h-9 w-9 place-items-center rounded-full bg-ok-soft text-ok"><IconShield size={17} /></span>
-                <p className="text-sm text-dim">No quality drop found. Every model change is compared on the same mix of inputs, so harder inputs alone do not raise an alarm.</p>
+                <p className="text-sm text-dim">No quality drop found. Every model change is compared on the same input sizes (short, medium and long inputs are not mixed), so longer inputs alone do not raise an alarm.</p>
               </div>
             ) : (
               <>
@@ -95,12 +96,16 @@ export function QualityTab({ job, rec }: { job: string; rec: Recommendation | nu
 export function SpendTab({ job }: { job: string }) {
   const daily = useDaily({ days: 60, job });
   const points = daily.data ?? [];
-  const { rows, names } = useMemo(() => pivot(points, "model", "spend_usd", 60), [points]);
+  const { mode } = useBillingMode();
+  const sub = mode === "subscription";
+  const metric = sub ? "tokens" : "spend_usd";
+  const money = (v: number) => (sub ? `${count(v)} tokens` : usd(v));
+  const { rows, names } = useMemo(() => pivot(points, "model", metric, 60), [points, metric]);
   const colors = colorMap(names);
   const byModel = names
     .map((n) => {
       const mine = points.filter((p) => p.model === n);
-      return { model: n, spend: total(mine, "spend_usd"), runs: total(mine, "runs") };
+      return { model: n, spend: total(mine, metric), runs: total(mine, "runs") };
     })
     .sort((a, b) => b.spend - a.spend);
   const grand = byModel.reduce((s, m) => s + m.spend, 0);
@@ -111,31 +116,31 @@ export function SpendTab({ job }: { job: string }) {
         {daily.isPending ? (
           <Skeleton className="h-72" />
         ) : names.length === 0 ? (
-          <EmptyState title="No spend in the last 60 days" />
+          <EmptyState title={sub ? "No usage in the last 60 days" : "No spend in the last 60 days"} />
         ) : (
           <ChartFrame
-            title="What this job costs, per day"
-            hint="Last 60 days, stacked by model"
+            title={sub ? "Tokens this job used, per day" : mode === "both" ? "What this job costs, per day, at list prices" : "What this job costs, per day"}
+            hint={mode === "both" ? "Last 60 days, stacked by model. List prices, not your bill" : "Last 60 days, stacked by model"}
             legend={names.map((n) => ({ name: n, color: colors.get(n)! }))}
-            table={{ columns: ["Day", ...names], rows: rows.filter((r) => names.some((n) => (r[n] as number) > 0)).map((r) => [r.day, ...names.map((n) => usd(r[n] as number))]) }}
+            table={{ columns: ["Day", ...names], rows: rows.filter((r) => names.some((n) => (r[n] as number) > 0)).map((r) => [r.day, ...names.map((n) => money(r[n] as number))]) }}
           >
-            <SpendArea rows={rows} names={names} colors={colors} />
+            <SpendArea rows={rows} names={names} colors={colors} unit={sub ? "tokens" : "usd"} />
           </ChartFrame>
         )}
       </Panel>
       <Panel className="p-5">
-        <PanelHeader title="By model" hint={`${usd(grand)} over 60 days`} />
+        <PanelHeader title="By model" hint={mode === "both" ? `${usd(grand)} over 60 days, at list prices` : `${money(grand)} over 60 days`} />
         <ul className="mt-4 flex flex-col gap-3">
           {byModel.map((m) => (
             <li key={m.model}>
               <div className="flex items-baseline justify-between gap-2 text-sm">
                 <ModelName className="truncate">{m.model}</ModelName>
-                <span className="tabular font-semibold text-ink">{usd(m.spend)}</span>
+                <span className="tabular font-semibold text-ink">{money(m.spend)}</span>
               </div>
               <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-3">
                 <div className="h-full rounded-full" style={{ width: `${grand ? (m.spend / grand) * 100 : 0}%`, background: colors.get(m.model) }} />
               </div>
-              <p className="mt-1 text-[11px] text-muted">{m.runs.toLocaleString("en")} runs · {grand ? pct(m.spend / grand, 0) : "–"} of spend</p>
+              <p className="mt-1 text-[11px] text-muted">{m.runs.toLocaleString("en")} runs · {grand ? pct(m.spend / grand, 0) : "–"} {sub ? "of tokens" : "of spend"}</p>
             </li>
           ))}
         </ul>
@@ -156,6 +161,7 @@ function bars(items: Breakdown[]) {
 }
 
 export function EvidenceTab({ job, rec }: { job: string; rec: Recommendation | null }) {
+  const { mode: billing } = useBillingMode();
   const [days, setDays] = useState<"7" | "30" | "90">("30");
   const insights = useJobInsights(job, Number(days));
   const [by, setBy] = useState<"size" | "prompt">("size");
@@ -180,7 +186,7 @@ export function EvidenceTab({ job, rec }: { job: string; rec: Recommendation | n
           }
           legend={names.map((n) => ({ name: n, color: colors.get(n)! }))}
           table={{
-            columns: ["Group", "Model", "Runs", "Pass rate", "Likely range", "Cost / success"],
+            columns: ["Group", "Model", "Runs", "Pass rate", "Likely range", billing === "per_use" ? "Cost / success" : "Cost / success (list price)"],
             rows: chosen.map((b) => [b.group, b.model, b.runs.toLocaleString("en"), pct(b.pass_rate), `${pct(b.pass_rate_low)} – ${pct(b.pass_rate_high)}`, usd(b.cost_per_success_usd)]),
           }}
         >
@@ -212,6 +218,7 @@ export function EvidenceTab({ job, rec }: { job: string; rec: Recommendation | n
 
 export function RunsTab({ job, rec }: { job: string; rec: Recommendation | null }) {
   const [params, setParams] = useSearchParams();
+  const { mode: billing } = useBillingMode();
   const outcome = (["PASS", "FAIL", "UNKNOWN"].includes(params.get("outcome") ?? "") ? params.get("outcome") : "ALL") as "ALL" | "PASS" | "FAIL" | "UNKNOWN";
   const model = params.get("model") ?? "";
   const recommendation = params.get("recommendation") ?? "";
@@ -273,7 +280,7 @@ export function RunsTab({ job, rec }: { job: string; rec: Recommendation | null 
                 <th className="px-3 py-2 font-semibold">Model</th>
                 <th className="px-3 py-2 font-semibold">Result</th>
                 <th className="px-3 py-2 text-right font-semibold">Tokens</th>
-                <th className="px-3 py-2 text-right font-semibold">Cost</th>
+                <th className="px-3 py-2 text-right font-semibold" title={billing === "per_use" ? undefined : "At list prices, not your bill"}>{billing === "per_use" ? "Cost" : "List price"}</th>
                 <th className="px-3 py-2 font-semibold">Prompt</th>
               </tr>
             </thead>

@@ -1,4 +1,5 @@
 /** Overview widget: how many tokens the runs used, how they split, who used most and what that means for a token limit. */
+import { tokensAre } from "../../features/projects/moneyWording";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useReducedMotion } from "framer-motion";
 import { jobTitle } from "../../features/jobs/jobTitle";
@@ -50,6 +51,7 @@ export function TokenBars({ rows, height = 200 }: { rows: TokenDay[]; height?: n
 }
 
 export function TokenUsage({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
+  const sub = ctx.billing === "subscription";
   const limits = useLimits();
   const points = ctx.points as TokenPoint[];
   const cur = ctx.cur as TokenPoint[];
@@ -64,7 +66,7 @@ export function TokenUsage({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
   }
   if (!hasTokens(cur) && !hasTokens(points)) {
     return (
-      <Shell shell={shell} title="Token usage" hint="Tokens are the small pieces of text AI models are billed by. Longer prompts and answers use more tokens.">
+      <Shell shell={shell} title="Token usage" hint={`${tokensAre(ctx.billing ?? "per_use")} Longer prompts and answers use more tokens.`}>
         <EmptyState title="No token counts yet" hint="When your app sends AI calls, we count the tokens they use here. Start by creating an AI task and sending a call from your code." />
       </Shell>
     );
@@ -77,7 +79,7 @@ export function TokenUsage({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
   const risk = limitRisk(points, limits.data ?? []);
 
   return (
-    <Shell shell={shell} title="Token usage" help="AI is billed by tokens, the small pieces of text it reads and writes. A long question or a long answer uses more tokens, so it costs more. Here we show how many tokens each call uses." hint={`Longer questions and answers use more tokens, so they cost more. Last ${ctx.days} days.`}>
+    <Shell shell={shell} title="Token usage" help={sub ? "Tokens are the small pieces of text AI reads and writes. A long question or a long answer uses more tokens, so it uses more of your allowance. Here we show how many tokens each call uses." : "AI is billed by tokens, the small pieces of text it reads and writes. A long question or a long answer uses more tokens, so it costs more. Here we show how many tokens each call uses."} hint={sub ? `Longer questions and answers use more tokens, so they use more of your allowance. Last ${ctx.days} days.` : `Longer questions and answers use more tokens, so they cost more. Last ${ctx.days} days.`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[28px] font-semibold leading-none tracking-tight text-ink tabular">{count(t.all)}</span>
         <span className="text-sm text-dim">tokens</span>
@@ -110,7 +112,7 @@ export function TokenUsage({ ctx, shell }: { ctx: Ctx; shell: ShellProps }) {
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-muted">Saved repeats</p>
           <p className="mt-1 text-lg font-semibold text-ink tabular">{share === null ? "–" : pct(share, 0)}</p>
-          <p className="text-xs text-muted">of your input was cheaper because the start of the prompt was sent before. When the same start of a prompt is sent again, some providers charge much less for it.</p>
+          <p className="text-xs text-muted">{sub ? "of your input was text the provider had already seen: the start of the prompt was sent before." : "of your input was cheaper because the start of the prompt was sent before. When the same start of a prompt is sent again, some providers charge much less for it."}</p>
         </div>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-muted">Biggest users of tokens</p>

@@ -26,7 +26,7 @@ describe("suggestForCheckedJob", () => {
     expect(s[0].interval!.low).toBeLessThan(0.98);
     expect(s[0].reason).toMatch(/80 checked answers/);
     expect(s[2]).toMatchObject({ nChecked: null, interval: null });
-    const thin = suggestForCheckedJob({ ...run, rec: { ...rec, models: rec.models.map((m) => ({ ...m, n_runs: 10 })) } as typeof rec });
+    const thin = suggestForCheckedJob({ ...run, rec: { ...rec, models: rec.models.map((m) => ({ ...m, n_runs: 10, evidence_weight: 10 })) } as typeof rec });
     expect(thin[0].tooFew).toBe(true);
     expect(thin[0].reason).toMatch(/Not enough checked answers yet/);
   });

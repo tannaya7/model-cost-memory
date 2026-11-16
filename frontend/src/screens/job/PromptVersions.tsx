@@ -2,6 +2,7 @@
 import { usePromptVersions, type PromptVersion, type PromptVersions as Data } from "../../features/insights/api/promptVersionsApi";
 import { count, pct, shortDate, usd } from "../../ui/format";
 import { Help } from "../../ui/Help";
+import { summaryText } from "./promptCompare";
 import { ErrorState, Skeleton } from "../../ui/primitives";
 
 export const MIN_CHECKED = 25;
@@ -169,7 +170,7 @@ export function PromptVersions({ job, days = 30 }: { job: string; days?: number 
               <p className="text-[13px] font-semibold text-ink">
                 {q.data.comparison.side_by_side ? "Ran side by side" : "Ran at different times, so other things may have changed"}
               </p>
-              <p className="mt-1 text-[13px] text-ink">{q.data.comparison.summary}</p>
+              <p className="mt-1 text-[13px] text-ink">{summaryText(q.data.comparison.summary, q.data.versions, q.data.comparison.older, q.data.comparison.newer)}</p>
               <p className="mt-1 text-xs text-muted">{NOT_CHANGED}</p>
             </div>
           )}

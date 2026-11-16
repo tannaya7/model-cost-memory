@@ -15,6 +15,7 @@ import { ExamplesCard } from "./ExamplesCard";
 import { EvidenceTab, HistoryTab, QualityTab, RetestsTab, RunsTab, SpendTab } from "./Tabs";
 import { TokensTab } from "./TokensTab";
 import { VerdictTab } from "./VerdictTab";
+import { useBillingMode } from "../../features/projects/hooks/useBillingMode";
 
 const TABS = [
   { value: "verdict", label: "Recommendation" },
@@ -36,6 +37,7 @@ export default function JobWorkspace() {
   const jobs = useJobs();
   const job = jobs.data?.find((j) => j.name === jobName);
   const rec = useRecommendation(jobName);
+  const { mode: billing } = useBillingMode();
 
   if (jobs.data && !job) {
     return (
@@ -76,7 +78,7 @@ export default function JobWorkspace() {
             label="AI task views"
             value={tab}
             onChange={(t) => setParams(t === "verdict" ? {} : { tab: t }, { replace: true })}
-            options={TABS.map((t) => ({ value: t.value, label: t.label }))}
+            options={TABS.map((t) => ({ value: t.value, label: t.value === "spend" && billing === "subscription" ? "Usage" : t.label }))}
           />
         </div>
       </header>

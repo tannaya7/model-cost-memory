@@ -21,6 +21,7 @@ import { MIN_CHECKED_ANSWERS, TOO_FEW_LABEL, UNTESTED_LABEL } from "./wilson";
 import { Help } from "../../ui/Help";
 import { NotEnoughData } from "../../ui/NotEnoughData";
 import { modelLink } from "./profile/modelLinks";
+import { tokensAre } from "../../features/projects/moneyWording";
 import { useBillingMode } from "../../features/projects/hooks/useBillingMode";
 import { ProfileSuggestPanel } from "./profile/ProfileSuggestPanel";
 import type { ProfileUsage } from "./profile/types";
@@ -128,6 +129,7 @@ export default function Compare() {
   const { id: project } = useProject();
   const accountProject = useAccountProject(project === "key" || project === "demo" ? undefined : project);
   const p = useP();
+  const { mode: billing } = useBillingMode();
   const [params, setParams] = useSearchParams();
   const set = (patch: Record<string, string | null>) =>
     setParams(
@@ -264,8 +266,8 @@ export default function Compare() {
         <p className="flex flex-wrap items-center gap-2 text-sm text-dim" data-testid="evidence-line">
           <span>
             {rough
-              ? `Based on ${daysWord(account.span)} of use: ${count(account.runs)} AI calls. Still learning: we need ${MIN_DAYS_FOR_MONTH} days before we say what a month looks like. If these days were typical it would be a rough guess of ${count(actualTokens)} tokens a month (tokens are the small pieces of text AI is billed by).`
-              : `Based on ${daysWord(account.span)} of use: ${count(account.runs)} AI calls, about ${count(actualTokens)} tokens a month (tokens are the small pieces of text AI is billed by).`}
+              ? `Based on ${daysWord(account.span)} of use: ${count(account.runs)} AI calls. Still learning: we need ${MIN_DAYS_FOR_MONTH} days before we say what a month looks like. If these days were typical it would be a rough guess of ${count(actualTokens)} tokens a month (${tokensAre(billing)?.replace("Tokens are", "tokens are").replace(/\.$/, "")}).`
+              : `Based on ${daysWord(account.span)} of use: ${count(account.runs)} AI calls, about ${count(actualTokens)} tokens a month (${tokensAre(billing)?.replace("Tokens are", "tokens are").replace(/\.$/, "")}).`}
           </span>
           <Pill tone={early ? "warn" : "good"}>{early ? "Not enough history yet" : "Enough history to compare"}</Pill>
           <Help label="How to read the numbers on this page">Costs are what each model would charge for the same amount of text you use now. Correct answers come from answers we checked: we need at least {MIN_CHECKED_ANSWERS} per model before we show a range. Models you have not used are estimates.</Help>
@@ -298,7 +300,7 @@ export default function Compare() {
             </NotEnoughData>
           )}
           <Panel className="p-5">
-            <CompareChart rec={rec0} catalog={catalog} avgTokens={avgTokens} providers={providers} />
+            <CompareChart rec={rec0} catalog={catalog} avgTokens={avgTokens} providers={providers} listPrice={billing !== "per_use"} />
             {!avgTokens && <p className="mt-2 text-xs text-muted">Token counts are not recorded for this AI task yet, so models it has not used cannot be priced.</p>}
           </Panel>
           <section aria-label="Suggestions" className="flex flex-col gap-3">

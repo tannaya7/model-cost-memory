@@ -167,7 +167,7 @@ export default function NewProject() {
                   </li>
                   <li>
                     <p className="font-semibold">3. Tell it how to check an answer</p>
-                    <p className="mt-1 text-sm text-dim">On the dashboard, create the AI task and choose how a correct answer is recognised: an answer key, a JSON schema (a template the answer must match), or a label you add later. Our recommendation appears once a model has 25 checked answers.</p>
+                    <p className="mt-1 text-sm text-dim">On the dashboard, create the AI task and choose how a correct answer is recognised: an answer key, a JSON schema (a template the answer must match), or a label you add later. Our recommendation appears once a model has about 25 recent checked answers; moving to a cheaper one needs more.</p>
                   </li>
                 </ol>
                 <div className="mt-8 flex flex-wrap justify-end gap-2">

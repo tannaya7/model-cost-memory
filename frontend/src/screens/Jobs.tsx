@@ -121,13 +121,13 @@ export default function Jobs() {
                   className="panel group grid grid-cols-1 items-center gap-4 p-4 transition-all hover:border-rule-strong md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_repeat(3,minmax(0,0.8fr))_120px_24px] md:p-5"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-[15px] font-semibold text-ink">{jobTitle(job.name)}</p>
+                    <p className="truncate text-[15px] font-semibold text-ink" title={jobTitle(job.name)}>{jobTitle(job.name)}</p>
                     <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
-                      <span title="name in your code" className="rounded-md border border-rule bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-dim">{job.name}</span>
+                      <span title="name in your code" className="max-w-full break-all rounded-md border border-rule bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-dim">{job.name}</span>
                       <span>{count(job.run_count)} AI calls</span>
                     </p>
                     {job.description ? (
-                      <p className="mt-1.5 line-clamp-2 text-xs text-dim">{job.description}</p>
+                      <p className="mt-1.5 line-clamp-2 text-xs text-dim [overflow-wrap:anywhere]">{job.description}</p>
                     ) : (
                       <p className="mt-1.5 text-xs text-muted">
                         No description yet. <span className="text-accent underline">Add one</span> so your team knows what this does.

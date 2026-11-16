@@ -21,7 +21,7 @@
   /* ink */
   --color-ink: #07102b;
   --color-dim: #565f72;
-  --color-muted: #636d7f;
+  --color-muted: #5d6779;
 
   /* accent: one royal cyan, with a magenta partner for glows and the brand gradient */
   --color-accent: #0687ab;
@@ -38,9 +38,9 @@
   /* status: fixed meanings, always shown with an icon and a word */
   --color-ok: #0f7a42;
   --color-ok-soft: rgba(15, 122, 66, 0.1);
-  --color-warn: #b45309;
+  --color-warn: #a34a07;
   --color-warn-soft: rgba(217, 119, 6, 0.12);
-  --color-bad: #d42f2f;
+  --color-bad: #c02626;
   --color-bad-soft: rgba(212, 47, 47, 0.1);
   --color-skeleton: #d1ebf3;
   --tab-active: #ffffff;
@@ -126,7 +126,7 @@
 
   --color-ink: #e7f6fb;
   --color-dim: #9ca9b0;
-  --color-muted: #8a969e;
+  --color-muted: #9aa6ad;
 
   --color-accent: #5ab1c9;
   --color-accent-2: #e04aae;
@@ -215,7 +215,7 @@
 
   --color-ink: #e7f6fb;
   --color-dim: #9ca9b0;
-  --color-muted: #8a969e;
+  --color-muted: #9aa6ad;
 
   --color-accent: #5ab1c9;
   --color-accent-2: #e04aae;

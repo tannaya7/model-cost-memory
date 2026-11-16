@@ -488,15 +488,15 @@ const FIGURES = [
 ];
 
 const STEPS = [
-  { icon: IconBolt, title: "Record", text: "Three lines around the call you already make. Prompt, model, tokens and cost are sent in the background; your call never changes." },
+  { icon: IconBolt, title: "Record", text: "A few lines around the call you already make. Prompt, model, tokens and cost are sent in the background; your call never changes." },
   { icon: IconCheck, title: "Check", text: "Every answer is marked pass or fail by your rule: an answer key, a JSON schema, or a label you add later." },
   { icon: IconSpark, title: "Remember", text: "Evidence ages. Fresh runs count more, runs on a replaced model version fade faster, and new models get re-tested on your prompts." },
-  { icon: IconDollar, title: "Advise", text: "Per job: the cheapest model proven to pass within 3 points of the best, what moving saves, and the runs behind it." },
+  { icon: IconDollar, title: "Advise", text: "Per job: the cheapest model shown, at 95% confidence, to pass within 3 points of the best, what moving saves, and the runs behind it." },
 ];
 
 const FEATURES = [
   { icon: IconDollar, title: "The cheapest model that still works", text: "A verdict per job, proven on your own traffic with a confidence range, never a public benchmark. With the monthly saving and the expected change in failures." },
-  { icon: IconAlert, title: "A warning when an upgrade breaks things", text: "Every version change is compared with the one before it on the same mix of inputs, and a model that quietly gets worse under the same name is caught too. Alerts go to Slack or Discord." },
+  { icon: IconAlert, title: "A warning when an upgrade breaks things", text: "Every version change is compared with the one before it on the same mix of inputs, and in our simulations a model that quietly got worse under the same name was often caught (a 5-point drop in 77 of 100 simulations at 50 calls a day). Alerts go to Slack or Discord." },
   { icon: IconFlask, title: "New models tried for you", text: "When a cheaper model appears, a sample of your past prompts is replayed on it within a budget you set, so the evidence exists before you need it." },
   { icon: IconShield, title: "Your data has an end", text: "Prompts and answers are deleted after the retention you choose; the figures stay. Delete a project and everything in it goes." },
 ];
@@ -545,6 +545,7 @@ export default function Landing() {
     <div className="min-h-screen overflow-x-hidden">
       <Nav demo={demo} signedIn={signedIn} />
 
+      <main>
       {/* Hero */}
       <section className="relative flex min-h-[100svh] items-center pt-16">
         <motion.div aria-hidden style={{ y: glowY }} className="pointer-events-none absolute -left-40 top-0 h-[640px] w-[640px] rounded-full bg-accent/20 blur-3xl" />
@@ -568,7 +569,7 @@ export default function Landing() {
               {demo && <ButtonLink to="/p/demo" className="px-5 py-2.5">Explore the live demo</ButtonLink>}
             </motion.div>
             <motion.ul initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-sm text-dim">
-              {["Three lines in your code", "Your provider, your keys", "Free to self-host"].map((t) => (
+              {["A few lines in your code", "Your provider, your keys", "Free to self-host"].map((t) => (
                 <li key={t} className="flex items-center gap-1.5"><IconCheck size={15} className="text-ok" /> {t}</li>
               ))}
             </motion.ul>
@@ -586,17 +587,17 @@ export default function Landing() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent-ink">Simulated so far, not yet live</p>
             <h2 className="mt-2 max-w-2xl text-3xl font-semibold tracking-tight md:text-4xl">How well it did in our simulations</h2>
           </Reveal>
-          <dl className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {FIGURES.map((f, i) => (
               <Reveal key={f.label} delay={i * 0.08}>
                 <div className="panel p-6">
-                  <dd className="text-[44px] font-semibold leading-none tracking-tight"><span className="text-gradient"><Figure value={f.value} suffix={f.suffix} /></span></dd>
-                  <dt className="mt-3 text-sm font-semibold text-ink">{f.label}</dt>
+                  <p className="text-[44px] font-semibold leading-none tracking-tight"><span className="text-gradient"><Figure value={f.value} suffix={f.suffix} /></span></p>
+                  <p className="mt-3 text-sm font-semibold text-ink">{f.label}</p>
                   <p className="mt-1 text-xs text-muted">{f.note}</p>
                 </div>
               </Reveal>
             ))}
-          </dl>
+          </div>
           <p className="mt-4 text-xs text-muted">These come from computer simulations (20 to 100 scripted trials with assumed model accuracies). They have not yet been measured on live traffic. The reports are in the repository.</p>
         </div>
       </section>
@@ -611,18 +612,18 @@ export default function Landing() {
           </Reveal>
           <div className="relative mt-12">
             <motion.div aria-hidden className="absolute left-0 top-7 hidden h-px bg-gradient-to-r from-accent via-accent-2 to-ok lg:block" initial={{ width: 0 }} whileInView={{ width: "100%" }} viewport={{ once: false, amount: 0.3 }} transition={{ duration: 1.6, ease: "easeOut" }} />
-            <ol className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
               {STEPS.map(({ icon: Icon, title, text }, i) => (
                 <Reveal key={title} delay={0.15 + i * 0.15}>
-                  <li className="panel relative h-full p-6">
+                  <div className="panel relative h-full p-6">
                     <span className="grid h-14 w-14 place-items-center rounded-[16px] bg-gradient-to-br from-accent/25 to-accent-2/15 text-accent ring-1 ring-accent/30"><Icon size={24} /></span>
                     <span className="absolute right-5 top-5 font-mono text-xs text-muted">0{i + 1}</span>
                     <p className="mt-5 text-lg font-semibold">{title}</p>
                     <p className="mt-1.5 text-sm leading-relaxed text-dim">{text}</p>
-                  </li>
+                  </div>
                 </Reveal>
               ))}
-            </ol>
+            </div>
           </div>
         </div>
       </section>
@@ -662,7 +663,7 @@ export default function Landing() {
         <div className="mx-auto grid max-w-[1200px] items-center gap-10 px-4 py-20 md:px-6 lg:grid-cols-2">
           <Reveal>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent-ink">Set up</p>
-            <h2 className="mt-2 text-3xl font-semibold tracking-tight md:text-4xl">Three lines around the call you already make</h2>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight md:text-4xl">A few lines around the call you already make</h2>
             <p className="mt-4 max-w-lg text-dim">
               Sign in, create a project, and put its key in your app. The recorder only watches: it sends in the
               background, adds well under 5 ms, and never raises into your code.
@@ -675,7 +676,7 @@ export default function Landing() {
                 {["#ff5f57", "#febc2e", "#28c840"].map((c) => <span key={c} className="h-2.5 w-2.5 rounded-full" style={{ background: c }} />)}
                 <span className="ml-2 font-mono text-xs text-muted">your_app.py</span>
               </div>
-              <pre className="overflow-x-auto p-5 font-mono text-[13px] leading-relaxed text-dim"><code>
+              <pre tabIndex={0} aria-label="Example code" className="overflow-x-auto p-5 font-mono text-[13px] leading-relaxed text-dim"><code>
 <span className="text-accent">from</span> agent_memory.recorder <span className="text-accent">import</span> RunRecorder, provider_for{"\n\n"}
 <span className="text-accent">with</span> <span className="text-ink">RunRecorder</span>(job=<span className="text-ok">"invoice-extract"</span>, provider=provider_for(client.base_url)) <span className="text-accent">as</span> rec:{"\n"}
 {"    "}response = client.chat.completions.create(model=<span className="text-ok">"my-model"</span>, messages=[...]){"\n"}
@@ -693,7 +694,7 @@ export default function Landing() {
             <div aria-hidden className="pointer-events-none absolute -left-20 -top-20 h-80 w-80 rounded-full bg-accent/30 blur-3xl" />
             <div aria-hidden className="pointer-events-none absolute -bottom-24 -right-20 h-80 w-80 rounded-full bg-accent-2/20 blur-3xl" />
             <h2 className="relative mx-auto max-w-2xl text-3xl font-semibold tracking-tight md:text-5xl">Find out what your AI features <span className="text-gradient">should</span> cost</h2>
-            <p className="relative mx-auto mt-4 max-w-xl text-dim">A verdict per job appears once a model has 25 checked runs. For most jobs that is the first day.</p>
+            <p className="relative mx-auto mt-4 max-w-xl text-dim">A model gets a verdict once it has about 25 recent checked runs. Moving to a cheaper model needs proof that it is as good, which takes more runs the smaller the gap.</p>
             <div className="relative mt-8 flex flex-wrap justify-center gap-3">
               <ButtonLink to="/signin" variant="primary" className="px-6 py-3">Get started with Google <IconArrowRight size={16} /></ButtonLink>
               {demo && <ButtonLink to="/p/demo" className="px-6 py-3">See the live demo</ButtonLink>}
@@ -701,6 +702,8 @@ export default function Landing() {
           </div>
         </Reveal>
       </section>
+
+      </main>
 
       <footer className="border-t border-rule">
         <div className="mx-auto grid max-w-[1200px] gap-10 px-4 py-12 md:grid-cols-[1.4fr_1fr_1fr_1fr] md:px-6">

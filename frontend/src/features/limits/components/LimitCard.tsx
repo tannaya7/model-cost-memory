@@ -38,8 +38,8 @@ export function LimitCard({ limit }: { limit: UsageLimit }) {
   return (
     <Card className={`space-y-4 ${urgent ? "border-warn/50 shadow-[0_0_24px_-12px] shadow-warn" : ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h3 className="text-base font-bold tracking-tight text-ink">{limit.name}</h3>
+        <div className="min-w-0 [overflow-wrap:anywhere]">
+          <h3 className="text-base font-bold tracking-tight text-ink" title={limit.name}>{limit.name}</h3>
           <p className="text-xs text-dim">
             {windowLabel(limit.window_hours)} window
             {limit.model ? ` · only ${limit.model}` : ""} · resets in {hoursLabel(limit.hours_to_reset)}
@@ -49,7 +49,7 @@ export function LimitCard({ limit }: { limit: UsageLimit }) {
       </div>
 
       <div className="space-y-1.5">
-        <div className="relative h-3 overflow-hidden rounded-full bg-skeleton" aria-label={`${Math.round(share * 100)}% used`}>
+        <div role="img" className="relative h-3 overflow-hidden rounded-full bg-skeleton" aria-label={`${Math.round(share * 100)}% used`}>
           {projected !== null && projected > share && (
             <div
               className={`absolute inset-y-0 left-0 opacity-30 ${BAR[limit.state]}`}
@@ -81,7 +81,7 @@ export function LimitCard({ limit }: { limit: UsageLimit }) {
               <li key={s.job} className="flex flex-col gap-1 p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-0.5">
                   <p className="text-sm text-ink">
-                    <Link to={p(`/jobs/${encodeURIComponent(s.job)}`)} className="font-semibold hover:text-accent">
+                    <Link to={p(`/jobs/${encodeURIComponent(s.job)}`)} className="break-all font-semibold hover:text-accent">
                       {s.job}
                     </Link>{" "}
                     <span className="text-dim">({Math.round(s.share_of_use * 100)}% of recent use)</span>

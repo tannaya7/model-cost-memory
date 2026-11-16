@@ -53,8 +53,8 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: "settings",
     title: "Settings",
-    body: "Set your limits here, so a mistake in your code cannot use up more than you planned. You can also change your alerts and keys.",
-    later: "Nothing is limited until you set one.",
+    body: "Set your limits here and we warn you before you reach them. We never stop your app. You can also change your alerts and keys.",
+    later: "Nothing is watched until you set a limit.",
     target: "settings",
   },
 ];

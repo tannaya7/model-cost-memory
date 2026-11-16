@@ -1,4 +1,6 @@
 /** What a task looks like in practice (last 30 days): counted facts plus up to three real example calls. */
+import { tokensAre } from "../../features/projects/moneyWording";
+import { useBillingMode } from "../../features/projects/hooks/useBillingMode";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useDaily } from "../../features/insights/api/dailyApi";
@@ -50,6 +52,7 @@ function Example({ title, run, onOpen }: { title: string; run: Run; onOpen: (id:
 }
 
 export function ExamplesCard({ job }: { job: string }) {
+  const { mode: billing } = useBillingMode();
   const [open, setOpen] = useState<string | null>(null);
   const daily = useDaily({ job, days: 30 });
   const pass = useQuery({ queryKey: ["runs", "practice", job, "PASS"], queryFn: () => fetchRuns({ job, outcome: "PASS", limit: 20 }) });
@@ -89,7 +92,7 @@ export function ExamplesCard({ job }: { job: string }) {
               {lines.tokens && (
                 <details className="text-xs text-muted">
                   <summary className="cursor-pointer">What are tokens?</summary>
-                  <p className="mt-1">Tokens are the small pieces of text AI models are billed by. Longer prompts and answers use more tokens.</p>
+                  <p className="mt-1">{tokensAre(billing)} Longer prompts and answers use more tokens.</p>
                 </details>
               )}
               <p>

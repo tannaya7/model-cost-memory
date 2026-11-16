@@ -924,7 +924,8 @@ export interface paths {
         /**
          * Put Task Summary Consent
          * @description Switch the AI-written task summaries on or off for this project. Off by default; while off, no
-         *     sample prompt is ever sent to an outside AI service.
+         *     sample prompt is ever sent to an outside AI service. Only the signed-in owner may change it (a project
+         *     key, which an SDK holds, is refused), and switching it off deletes the project's stored summaries.
          */
         put: operations["put_task_summary_consent_v1_task_summary_consent_put"];
         post?: never;
@@ -1246,7 +1247,7 @@ export interface components {
             extra_failures_per_month: number;
             /**
              * Monthly Saving Usd
-             * @description Negative means switching costs more
+             * @description Change of the monthly bill at the same call volume: runs_per_month x (average cost per call now - on the recommended model). Negative means switching costs more
              */
             monthly_saving_usd: number;
             /**
@@ -1871,6 +1872,39 @@ export interface components {
              */
             webhook_url?: string | null;
         };
+        /**
+         * PromisingOut
+         * @description 'Worth a trial': a cheaper model that looks close to the model in use but is not proven. Never advice.
+         */
+        PromisingOut: {
+            /**
+             * Current
+             * @description The model in use that it was compared with
+             */
+            current: string;
+            /**
+             * Gap Points
+             * @description Observed candidate minus model in use, in percentage points
+             */
+            gap_points: number;
+            /**
+             * High Points
+             * @description Upper end of the range of that gap, in points
+             */
+            high_points: number;
+            /**
+             * Low Points
+             * @description Lower end of the range of that gap, in points (one-sided 95% bound)
+             */
+            low_points: number;
+            /** Model */
+            model: string;
+            /**
+             * More Needed
+             * @description About this many more checked answers on the candidate before a switch could be recommended
+             */
+            more_needed: number | null;
+        };
         /** PromptComparisonOut */
         PromptComparisonOut: {
             /** Newer */
@@ -2116,6 +2150,8 @@ export interface components {
              * @description Progress toward the evidence floor, 0..1; below 1 only when insufficient
              */
             progress: number;
+            /** @description Set only for HOLD, never together with a proven model; never counted as a saving */
+            promising?: components["schemas"]["PromisingOut"] | null;
             recommended: components["schemas"]["ModelRef"] | null;
             /**
              * Reference
@@ -2138,6 +2174,8 @@ export interface components {
              * @description Git blob hash of the prompt file used
              */
             summary_prompt_version?: string | null;
+            /** @description Set for INSUFFICIENT_EVIDENCE when two models can be compared */
+            sure_enough?: components["schemas"]["SureEnoughOut"] | null;
             /**
              * Verdict
              * @enum {string}
@@ -2286,6 +2324,12 @@ export interface components {
              * @default 0
              */
             cache_read_tokens: number;
+            /**
+             * Cache Write 1H Tokens
+             * @description The part of cache_write_tokens written to the 1-hour cache (priced higher than the 5-minute cache). Used for the cost only; not stored
+             * @default 0
+             */
+            cache_write_1h_tokens: number;
             /**
              * Cache Write Tokens
              * @default 0
@@ -2653,6 +2697,22 @@ export interface components {
              * @default 0
              */
             unpriced_runs: number;
+        };
+        /**
+         * SureEnoughOut
+         * @description Stage 2 of the progress bar: checked answers per model before a switch could be recommended.
+         */
+        SureEnoughOut: {
+            /**
+             * Have
+             * @description What the thinner of the two compared models has now
+             */
+            have: number | null;
+            /**
+             * Needed
+             * @description About this many per model, if today's observed rates held; null when it cannot be told
+             */
+            needed: number | null;
         };
         /**
          * TaskProfileOut
@@ -4713,8 +4773,6 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                "x-api-key"?: string | null;
-                authorization?: string | null;
                 "x-project-id"?: string | null;
             };
             path?: never;

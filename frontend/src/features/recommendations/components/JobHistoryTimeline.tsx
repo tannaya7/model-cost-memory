@@ -1,3 +1,4 @@
+import { useBillingMode } from "../../projects/hooks/useBillingMode";
 import { Link } from "react-router-dom";
 import type { HistoryEntry } from "../../../shared/api/types";
 import { Badge } from "../../../shared/components/Badge";
@@ -40,6 +41,7 @@ function getReasonChip(reason: HistoryEntry["supersession_reason"]) {
 }
 
 export function JobHistoryTimeline({ jobName }: { jobName: string }) {
+  const { mode: billing } = useBillingMode();
   const query = useJobHistory(jobName);
 
   return (
@@ -140,7 +142,7 @@ export function JobHistoryTimeline({ jobName }: { jobName: string }) {
                         </div>
                       </div>
                       <div>
-                        <div className="text-xs text-dim">Cost per correct answer</div>
+                        <div className="text-xs text-dim">{billing === "per_use" ? "Cost per correct answer" : "Cost per correct answer, at list prices"}</div>
                         <div className="font-mono text-base font-bold text-ink">
                           {entry.cost_per_success_usd !== null
                             ? `$${entry.cost_per_success_usd.toFixed(4)}`

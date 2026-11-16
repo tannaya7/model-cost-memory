@@ -50,7 +50,7 @@ function Alerts() {
           hint="We will tell you here if something goes wrong, like a model giving worse answers or being shut down."
         />
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {shown.map((item) => (
             <motion.div key={item.kind === "regression" ? item.alert.alert_id : item.model.model} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
               <AlertItemCard item={item} />

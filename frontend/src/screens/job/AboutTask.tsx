@@ -1,4 +1,6 @@
 /** "What this task is": what you told us, what the calls prove, and an optional AI-written summary. */
+import { tokensAre } from "../../features/projects/moneyWording";
+import { useBillingMode } from "../../features/projects/hooks/useBillingMode";
 import { useState } from "react";
 import { checkExplanation, monthLine, profileFacts, summarizeMonth } from "../../features/jobs/aboutTask";
 import { useDeleteTaskSummary, useTaskProfile, useTaskSummaryConsent, useUpdateJobDescription } from "../../features/jobs/hooks/useJobs";
@@ -13,9 +15,10 @@ const LABEL = "text-[11px] font-semibold uppercase tracking-wider text-muted";
 const MAX_DESCRIPTION = 300;
 
 export function AboutTask({ job }: { job: Job }) {
+  const { mode: billing } = useBillingMode();
   const daily = useDaily({ job: job.name, days: 30 });
   const profile = useTaskProfile(job.name);
-  const line = daily.isPending ? "Loading this month..." : monthLine(summarizeMonth(daily.data ?? []));
+  const line = daily.isPending ? "Loading this month..." : monthLine(summarizeMonth(daily.data ?? []), billing);
   return (
     <Panel className="flex flex-col gap-4 p-4 md:p-5">
       <div className="flex items-center gap-2">
@@ -62,7 +65,7 @@ export function AboutTask({ job }: { job: Job }) {
           <p className="tabular mt-2 text-sm text-ink">{line}</p>
           <details className="mt-1 text-xs text-muted">
             <summary className="cursor-pointer">What are tokens?</summary>
-            <p className="mt-1">Tokens are the small pieces of text AI models are billed by. Longer prompts and answers use more tokens.</p>
+            <p className="mt-1">{tokensAre(billing)} Longer prompts and answers use more tokens.</p>
           </details>
         </div>
       </section>
