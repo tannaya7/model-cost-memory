@@ -5,18 +5,20 @@ import { useDeleteProject } from "../hooks/useProjects";
 
 type Props = {
   projectId: string;
+  /** The short name people see (and type to confirm); the long id is never shown. */
+  projectSlug: string;
   projectName: string;
   /** Called once the project is gone, e.g. to go back to the project list. */
   onDeleted: () => void;
 };
 
-/** Deleting a project, guarded by typing its id: it removes every job, run, prompt and key for good. */
-export function DeleteProjectCard({ projectId, projectName, onDeleted }: Props) {
+/** Deleting a project, guarded by typing its short name: it removes every job, run, prompt and key for good. */
+export function DeleteProjectCard({ projectId, projectSlug, projectName, onDeleted }: Props) {
   const deleteMutation = useDeleteProject();
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const matches = typed.trim() === projectId;
+  const matches = typed.trim() === projectSlug;
 
   const handleDelete = async () => {
     setError(null);
@@ -50,7 +52,7 @@ export function DeleteProjectCard({ projectId, projectName, onDeleted }: Props) 
       ) : (
         <div role="alert" className="rounded-card border border-bad/40 bg-bad-soft p-4 space-y-3">
           <label htmlFor="delete-confirm" className="block text-sm font-semibold text-ink [overflow-wrap:anywhere]">
-            Type <span className="font-mono break-all">{projectId}</span> to confirm
+            Type <span className="font-mono break-all">{projectSlug}</span> to confirm
           </label>
           <input
             id="delete-confirm"

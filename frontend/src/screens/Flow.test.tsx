@@ -35,7 +35,7 @@ function at(path: string, routes: React.ReactNode) {
 const signedOut = new Response(JSON.stringify({ detail: "Sign in first" }), { status: 401 });
 const user = { user_id: "u1", email: "ana@example.com", name: "Ana Lima", picture_url: null };
 const project = {
-  project_id: "invoices-1a2b", name: "Invoice assistant", webhook_url: null, webhook_secret: null,
+  project_id: "invoices-1a2b", slug: "invoice-assistant", name: "Invoice assistant", webhook_url: null, webhook_secret: null,
   retest_monthly_cap_usd: 10, retest_allowed: true, key_prefix: "mcm_live_ab12", created_at: "2026-11-01T10:00:00Z",
   content_retention_days: 90,
 };
@@ -96,7 +96,7 @@ describe("projects", () => {
     stubApi({ "/v1/me": user, "/v1/projects": [project], "/v1/jobs": [{ job_id: "j", name: "invoice", run_count: 1200, runs_by_state: {} }] });
     at("/projects", <Route path="/projects" element={<Projects />} />);
     const card = await screen.findByRole("link", { name: /Invoice assistant/ });
-    expect(card).toHaveAttribute("href", "/p/invoices-1a2b");
+    expect(card).toHaveAttribute("href", "/p/invoice-assistant");
     expect(card).not.toHaveTextContent("invoices-1a2b");
     await waitFor(() => expect(card).toHaveTextContent("1,200"));
     expect(screen.getByRole("heading", { name: /Welcome back, Ana/ })).toBeInTheDocument();
@@ -124,6 +124,6 @@ describe("a new project", () => {
 
     expect(await screen.findByText(/Wrap the model call you already make/)).toBeInTheDocument();
     await u.click(screen.getByRole("button", { name: /Open the dashboard/ }));
-    expect(await screen.findByTestId("where")).toHaveTextContent("/p/invoices-1a2b");
+    expect(await screen.findByTestId("where")).toHaveTextContent("/p/invoice-assistant");
   });
 });

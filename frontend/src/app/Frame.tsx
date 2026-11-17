@@ -11,6 +11,7 @@ import { useLogout, useMe } from "../features/auth/hooks/useAuth";
 import { jobTitle } from "../features/jobs/jobTitle";
 import { useJobs } from "../features/jobs/hooks/useJobs";
 import { useProjects } from "../features/projects/hooks/useProjects";
+import { projectPath } from "../shared/projectPath";
 import {
   IconActivity,
   IconArrowRight,
@@ -110,7 +111,7 @@ function ProjectSwitcher() {
                 type="button"
                 onClick={() => {
                   setOpen(false);
-                  navigate(`/p/${encodeURIComponent(p.project_id)}`);
+                  navigate(projectPath(p));
                 }}
                 className={cx(
                   "flex w-full items-center justify-between rounded-[10px] px-3 py-2 text-left text-sm transition-colors hover:bg-surface-3",

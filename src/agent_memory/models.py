@@ -59,12 +59,20 @@ class Project(Base):
     __tablename__ = "projects"
     __table_args__ = (
         Index("idx_projects_owner", "owner_user_id"),
+        Index("uq_projects_owner_slug", "owner_user_id", "slug", unique=True,
+              postgresql_where=text("owner_user_id IS NOT NULL")),
+        Index("uq_projects_ownerless_slug", "slug", unique=True, postgresql_where=text("owner_user_id IS NULL")),
+        CheckConstraint("slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND length(slug) BETWEEN 1 AND 40",
+                        name="projects_slug_check"),
         CheckConstraint("content_retention_days BETWEEN 1 AND 3650", name="projects_retention_check"),
         CheckConstraint("billing_mode IN ('per_use','subscription','both')", name="projects_billing_mode_check"),
         CheckConstraint("monthly_budget_usd IS NULL OR monthly_budget_usd > 0", name="projects_budget_check"),
     )
 
     project_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    # The short readable name in the web address (/p/production). Stable; the API keeps using project_id.
+    # Unique per owner (0022). Rows built without one (tests, the operator script) take their own id.
+    slug: Mapped[str] = mapped_column(Text, default=lambda ctx: ctx.get_current_parameters()["project_id"])
     api_key_hash: Mapped[str] = mapped_column(Text)  # the key itself is shown once, never stored
     webhook_url: Mapped[str | None] = mapped_column(Text)
     billing_mode: Mapped[str] = mapped_column(Text, server_default=text("'per_use'"))  # (0021)

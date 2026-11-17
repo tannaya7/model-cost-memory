@@ -21,6 +21,8 @@ CREATE TABLE users (                                -- Google sign-in; no passwo
 
 CREATE TABLE projects (
     project_id    TEXT PRIMARY KEY,
+    slug          TEXT NOT NULL                     -- short readable name in the web address; stable (0022)
+        CONSTRAINT projects_slug_check CHECK (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND length(slug) BETWEEN 1 AND 40),
     api_key_hash  TEXT NOT NULL,                    -- the key itself is shown once, never stored
     webhook_url   TEXT,                             -- regression alerts; optional
     billing_mode  TEXT NOT NULL DEFAULT 'per_use'   -- how the project pays for AI (0021)
@@ -40,6 +42,8 @@ CREATE TABLE projects (
     task_summary_consent BOOLEAN NOT NULL DEFAULT false  -- opt in to an AI-written task summary (0019)
 );
 CREATE INDEX idx_projects_owner ON projects(owner_user_id);
+CREATE UNIQUE INDEX uq_projects_owner_slug ON projects(owner_user_id, slug) WHERE owner_user_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_projects_ownerless_slug ON projects(slug) WHERE owner_user_id IS NULL;
 
 CREATE TABLE provider_keys (                        -- the customer's key for re-tests, asked for when first needed
     project_id   TEXT PRIMARY KEY REFERENCES projects(project_id),

@@ -555,6 +555,8 @@ BillingMode = Literal["per_use", "subscription", "both"]
 
 class ProjectOut(Model):
     project_id: str
+    slug: str = Field(description="Short readable name used in the web address (/p/production). "
+                                  "Stable and unique per owner; the API still takes project_id")
     name: str
     webhook_url: str | None
     webhook_secret: str | None = Field(description="Verify X-MCM-Signature on webhook payloads with it")

@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import { useCreateProject, useProjects } from "../features/projects/hooks/useProjects";
+import { projectPath } from "../shared/projectPath";
 import { ApiError } from "../shared/api/apiFetch";
 import { IconArrowRight, IconCheck, IconLogo } from "../ui/icons";
 import { Button, cx, Panel } from "../ui/primitives";
@@ -68,7 +69,7 @@ export default function NewProject() {
   const [name, setName] = useState("");
   const [billing, setBilling] = useState<BillingMode>("per_use");
   const [error, setError] = useState<string | null>(null);
-  const [made, setMade] = useState<{ id: string; key: string; name: string } | null>(null);
+  const [made, setMade] = useState<{ ref: string; key: string; name: string } | null>(null);
   const [saved, setSaved] = useState(false);
   const first = (projects.data ?? []).length === 0;
 
@@ -78,7 +79,7 @@ export default function NewProject() {
     if (!name.trim()) return setError("Give the project a name");
     try {
       const result = await create.mutateAsync({ name: name.trim(), billing_mode: billing });
-      setMade({ id: result.project.project_id, key: result.api_key, name: result.project.name });
+      setMade({ ref: result.project.slug, key: result.api_key, name: result.project.name });
       setStep(1);
     } catch (err) {
       setError(err instanceof ApiError || err instanceof Error ? err.message : "Could not create the project");
@@ -171,7 +172,7 @@ export default function NewProject() {
                   </li>
                 </ol>
                 <div className="mt-8 flex flex-wrap justify-end gap-2">
-                  <Button variant="primary" onClick={() => navigate(`/p/${encodeURIComponent(made.id)}`)}>
+                  <Button variant="primary" onClick={() => navigate(projectPath(made.ref))}>
                     Open the dashboard <IconArrowRight size={16} />
                   </Button>
                 </div>

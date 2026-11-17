@@ -19,6 +19,7 @@ import { useAuthConfig, useMe } from "../features/auth/hooks/useAuth";
 import { CountUp } from "../shared/motion/CountUp";
 import { IconAlert, IconArrowRight, IconBolt, IconCheck, IconDollar, IconFlask, IconLogo, IconShield, IconSpark } from "../ui/icons";
 import { ButtonLink, cx } from "../ui/primitives";
+import { projectPath } from "../shared/projectPath";
 import { ThemeToggle } from "../ui/ThemeToggle";
 
 /* ----------------------------------------------------------------------------------------------- */
@@ -520,7 +521,7 @@ function Nav({ demo, signedIn }: { demo: boolean; signedIn: boolean }) {
         </nav>
         <div className="flex items-center gap-2">
           <ThemeToggle className="mr-1" />
-          {demo && <ButtonLink to="/p/demo" variant="ghost" size="sm" className="hidden sm:inline-flex">Live demo</ButtonLink>}
+          {demo && <ButtonLink to={projectPath("demo")} variant="ghost" size="sm" className="hidden sm:inline-flex">Live demo</ButtonLink>}
           {signedIn ? (
             <ButtonLink to="/projects" variant="primary" size="sm">Open your projects</ButtonLink>
           ) : (
@@ -566,7 +567,7 @@ export default function Landing() {
             </motion.p>
             <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="mt-8 flex flex-wrap gap-3">
               <ButtonLink to="/signin" variant="primary" className="px-5 py-2.5">Get started with Google <IconArrowRight size={16} /></ButtonLink>
-              {demo && <ButtonLink to="/p/demo" className="px-5 py-2.5">Explore the live demo</ButtonLink>}
+              {demo && <ButtonLink to={projectPath("demo")} className="px-5 py-2.5">Explore the live demo</ButtonLink>}
             </motion.div>
             <motion.ul initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-sm text-dim">
               {["A few lines in your code", "Your provider, your keys", "Free to self-host"].map((t) => (
@@ -697,7 +698,7 @@ export default function Landing() {
             <p className="relative mx-auto mt-4 max-w-xl text-dim">A model gets a verdict once it has about 25 recent checked runs. Moving to a cheaper model needs proof that it is as good, which takes more runs the smaller the gap.</p>
             <div className="relative mt-8 flex flex-wrap justify-center gap-3">
               <ButtonLink to="/signin" variant="primary" className="px-6 py-3">Get started with Google <IconArrowRight size={16} /></ButtonLink>
-              {demo && <ButtonLink to="/p/demo" className="px-6 py-3">See the live demo</ButtonLink>}
+              {demo && <ButtonLink to={projectPath("demo")} className="px-6 py-3">See the live demo</ButtonLink>}
             </div>
           </div>
         </Reveal>
@@ -713,7 +714,7 @@ export default function Landing() {
           </div>
           {[
             { title: "Product", links: [["How it works", "#how"], ["What you get", "#what"], ["Results", "#numbers"], ["Set up", "#setup"]] },
-            { title: "Get in", links: [["Sign in", "/signin"], ["Use a project key", "/key"], ...(demo ? [["Live demo", "/p/demo"]] : [])] },
+            { title: "Get in", links: [["Sign in", "/signin"], ["Use a project key", "/key"], ...(demo ? [["Live demo", projectPath("demo")]] : [])] },
             { title: "Project", links: [["Source code", "https://github.com/tannaya7/model-cost-memory"], ["Architecture", "https://github.com/tannaya7/model-cost-memory/blob/POC/docs/ARCHITECTURE.md"], ["Measured results", "https://github.com/tannaya7/model-cost-memory/tree/POC/reports"]] },
           ].map((col) => (
             <div key={col.title}>

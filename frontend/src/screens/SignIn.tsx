@@ -8,6 +8,7 @@ import { setActiveProject, setApiKey } from "../shared/api/apiFetch";
 import { queryClient } from "../shared/api/queryClient";
 import { IconAlert, IconDollar, IconLogo, IconShield } from "../ui/icons";
 import { ThemeToggle } from "../ui/ThemeToggle";
+import { projectPath } from "../shared/projectPath";
 import { Button } from "../ui/primitives";
 
 function safeNext(next: string | null): string {
@@ -181,7 +182,7 @@ export default function SignIn() {
           <p className="mt-8 border-t border-rule pt-5 text-xs text-muted">
             Have a project key? <Link to="/key" className="font-semibold text-accent hover:underline">Use it instead</Link>
             {config.data?.demo_project_id && (
-              <> or <Link to="/p/demo" className="font-semibold text-accent hover:underline">explore the demo</Link></>
+              <> or <Link to={projectPath("demo")} className="font-semibold text-accent hover:underline">explore the demo</Link></>
             )}
           </p>
         </motion.div>

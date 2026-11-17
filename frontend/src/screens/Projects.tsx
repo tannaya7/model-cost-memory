@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useLogout, useMe } from "../features/auth/hooks/useAuth";
 import { useProjects } from "../features/projects/hooks/useProjects";
+import { projectPath } from "../shared/projectPath";
 import { apiFetch } from "../shared/api/apiFetch";
 import type { Job, Project } from "../shared/api/types";
 import { count, shortDate } from "../ui/format";
@@ -48,7 +49,7 @@ function ProjectCard({ project, jobs, index }: { project: Project; jobs: Job[] |
   return (
     <motion.li className="min-w-0" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}>
       <Link
-        to={`/p/${encodeURIComponent(project.project_id)}`}
+        to={projectPath(project)}
         className="panel group flex h-full flex-col gap-5 p-6 transition-all hover:-translate-y-0.5 hover:border-rule-strong"
       >
         <div className="flex items-start justify-between gap-3">

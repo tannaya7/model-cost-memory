@@ -66,6 +66,7 @@ const mockUiFlags: { tour_seen?: boolean; first_results_seen?: boolean } = {};
 const projects: Project[] = [
   {
     project_id: "00000000-0000-0000-0000-000000000001",
+    slug: "production",
     name: "production",
     webhook_url: "https://alerts.example.com/webhook",
     webhook_secret: "whsec_mock_secret",
@@ -79,6 +80,7 @@ const projects: Project[] = [
   },
   {
     project_id: "00000000-0000-0000-0000-000000000002",
+    slug: "staging",
     name: "staging",
     webhook_url: null,
     webhook_secret: "whsec_mock_secret",
@@ -92,6 +94,7 @@ const projects: Project[] = [
   },
   {
     project_id: "00000000-0000-0000-0000-000000000003",
+    slug: "research",
     name: "research",
     webhook_url: null,
     webhook_secret: "whsec_mock_secret",
@@ -105,6 +108,7 @@ const projects: Project[] = [
   },
   {
     project_id: "00000000-0000-0000-0000-000000000004",
+    slug: "assistant",
     name: "assistant",
     webhook_url: null,
     webhook_secret: "whsec_mock_secret",
@@ -117,6 +121,17 @@ const projects: Project[] = [
     created_at: "2026-10-05T00:00:00Z",
   },
 ];
+
+/** Same rules as the server: lowercase a-z, 0-9, single hyphens, 3 to 40 characters; -2, -3 on a clash. */
+const RESERVED_SLUGS = new Set(["new", "key", "use-key", "settings", "api", "admin", "www", "demo"]);
+function uniqueMockSlug(name: string): string {
+  const folded = name.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  let base = folded.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/g, "");
+  if (base.length < 3) base = "project";
+  let slug = base;
+  for (let n = 2; RESERVED_SLUGS.has(slug) || projects.some((p) => p.slug === slug); n++) slug = `${base.slice(0, 40 - String(n).length - 1).replace(/-+$/g, "")}-${n}`;
+  return slug;
+}
 
 // In-memory jobs list seeded from jobs.sample.json
 const extraJobs = [
@@ -1381,6 +1396,7 @@ export const handlers = [
     const keyPrefix = apiKey.slice(0, 12);
     const newProject: Project = {
       project_id: crypto.randomUUID(),
+      slug: uniqueMockSlug(name),
       name,
       webhook_url: null,
       webhook_secret: "whsec_mock_secret",

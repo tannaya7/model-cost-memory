@@ -143,7 +143,7 @@ async def patch_ui_flags(
 
 def _project_out(p: Project) -> ProjectOut:
     return ProjectOut(
-        project_id=p.project_id, name=p.name or p.project_id, webhook_url=p.webhook_url,
+        project_id=p.project_id, slug=p.slug, name=p.name or p.project_id, webhook_url=p.webhook_url,
         webhook_secret=p.webhook_secret, retest_monthly_cap_usd=float(p.retest_monthly_cap_usd),
         retest_allowed=p.retest_allowed, key_prefix=p.key_prefix, created_at=p.created_at,
         content_retention_days=p.content_retention_days,

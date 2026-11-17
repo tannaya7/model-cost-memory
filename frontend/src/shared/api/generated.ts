@@ -1825,6 +1825,11 @@ export interface components {
             /** Retest Monthly Cap Usd */
             retest_monthly_cap_usd: number;
             /**
+             * Slug
+             * @description Short readable name used in the web address (/p/production). Stable and unique per owner; the API still takes project_id
+             */
+            slug: string;
+            /**
              * Store Tool Arguments
              * @description Whether this project keeps the inputs of tool calls (off by default; they can hold private data). Used only to notice an agent repeating the same step
              * @default false

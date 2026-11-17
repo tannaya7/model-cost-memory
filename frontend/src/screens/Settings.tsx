@@ -538,7 +538,7 @@ export default function Settings() {
           <StatusSection />
           {project && (
             <div id="danger" className="scroll-mt-24">
-              <DeleteProjectCard projectId={project.project_id} projectName={project.name} onDeleted={() => navigate("/projects", { replace: true })} />
+              <DeleteProjectCard projectId={project.project_id} projectSlug={project.slug} projectName={project.name} onDeleted={() => navigate("/projects", { replace: true })} />
             </div>
           )}
         </div>

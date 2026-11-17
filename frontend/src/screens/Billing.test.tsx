@@ -238,7 +238,7 @@ describe("New project: how do you pay for AI?", () => {
     vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
       calls.push({ method, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-      if (method === "POST") return json({ project: { project_id: "p1", name: "Bot", billing_mode: "subscription" }, api_key: "mcm_live_abcdef" }, 201);
+      if (method === "POST") return json({ project: { project_id: "p1", slug: "bot", name: "Bot", billing_mode: "subscription" }, api_key: "mcm_live_abcdef" }, 201);
       return json([]);
     }));
     const user = userEvent.setup();

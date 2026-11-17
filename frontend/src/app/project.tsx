@@ -6,8 +6,9 @@
 import { createContext, useContext } from "react";
 import { Navigate, Outlet, useLocation, useParams } from "react-router-dom";
 import { useAuthConfig, useMe } from "../features/auth/hooks/useAuth";
-import { useProject as useProjectDetail } from "../features/projects/hooks/useProjects";
+import { useProject as useProjectDetail, useProjects } from "../features/projects/hooks/useProjects";
 import { Link } from "react-router-dom";
+import { findProject, projectPath } from "../shared/projectPath";
 import { ApiError, getActiveProject, hasApiKey, setActiveProject } from "../shared/api/apiFetch";
 import { queryClient } from "../shared/api/queryClient";
 import { Skeleton } from "../ui/primitives";
@@ -15,11 +16,12 @@ import { Frame } from "./Frame";
 
 export type ProjectMode = "owned" | "key" | "demo";
 
-const ProjectContext = createContext<{ id: string; mode: ProjectMode }>({ id: "", mode: "owned" });
+/** id is the real project id (headers, API); ref is the short name shown in the address. */
+const ProjectContext = createContext<{ id: string; ref: string; mode: ProjectMode }>({ id: "", ref: "", mode: "owned" });
 
 /** Puts a screen inside a project without the router (tests, previews). */
-export function WithProject({ id, children }: { id: string; children: React.ReactNode }) {
-  return <ProjectContext.Provider value={{ id, mode: modeOf(id) }}>{children}</ProjectContext.Provider>;
+export function WithProject({ id, slug, children }: { id: string; slug?: string; children: React.ReactNode }) {
+  return <ProjectContext.Provider value={{ id, ref: slug ?? id, mode: modeOf(id) }}>{children}</ProjectContext.Provider>;
 }
 
 export function useProject() {
@@ -28,8 +30,8 @@ export function useProject() {
 
 /** Links inside the current project: p("/jobs") is "/p/<project>/jobs", p("/") its overview. */
 export function useP() {
-  const { id } = useContext(ProjectContext);
-  return (path = "/") => `/p/${encodeURIComponent(id)}${path === "/" ? "" : path}`;
+  const { ref } = useContext(ProjectContext);
+  return (path = "/") => projectPath(ref, path);
 }
 
 function modeOf(id: string): ProjectMode {
@@ -37,7 +39,7 @@ function modeOf(id: string): ProjectMode {
 }
 
 /** Point every request at this project before anything below it fetches. */
-function useScope(id: string, mode: ProjectMode) {
+function applyScope(id: string, mode: ProjectMode) {
   const header = mode === "owned" ? id : "";
   if (getActiveProject() !== header) {
     setActiveProject(header);
@@ -66,15 +68,20 @@ function Waiting() {
   );
 }
 
-/** /p/:projectId/... : the project's dashboard, for its owner, a project key, or the public demo. */
+/** /p/:projectRef/... : the project's dashboard, for its owner, a project key, or the public demo.
+ *  projectRef is the short name (/p/production); an old link with the long id is sent to the short name.
+ *  The name is looked up among the signed-in person's own projects only, and the API still checks ownership. */
 export function ProjectScope() {
-  const { projectId = "" } = useParams();
+  const { projectRef = "" } = useParams();
   const location = useLocation();
-  const mode = modeOf(projectId);
+  const mode = modeOf(projectRef);
   const me = useMe();
   const config = useAuthConfig();
-  useScope(projectId, mode);
-  const detail = useProjectDetail(mode === "owned" && me.data ? projectId : undefined);
+  const projects = useProjects(mode === "owned" && Boolean(me.data));
+  const found = mode === "owned" && projects.data ? findProject(projects.data, projectRef) : undefined;
+  const id = mode === "owned" ? found?.project_id ?? "" : projectRef;
+  if (id) applyScope(id, mode);
+  const detail = useProjectDetail(id && mode === "owned" ? id : undefined);
 
   const next = encodeURIComponent(location.pathname + location.search);
   if (mode === "key" && !hasApiKey()) return <Navigate to={`/signin?next=${next}`} replace />;
@@ -83,10 +90,17 @@ export function ProjectScope() {
     if (me.isPending) return <Waiting />;
     const signedOut = me.isError && me.error instanceof ApiError && me.error.status === 401;
     if (signedOut || (!me.data && !me.isError)) return <Navigate to={`/signin?next=${next}`} replace />;
+    if (projects.isPending) return <Waiting />;
+    if (!found) return <ProjectMissing />;
+    if (found.slug && found.slug !== projectRef) {
+      // An old link with the long id: show the short name in the address instead.
+      const rest = location.pathname.replace(/^\/p\/[^/]+/, "");
+      return <Navigate to={`${projectPath(found)}${rest}${location.search}${location.hash}`} replace />;
+    }
     if (detail.isError && detail.error instanceof ApiError && detail.error.status === 404) return <ProjectMissing />;
   }
   return (
-    <ProjectContext.Provider value={{ id: projectId, mode }}>
+    <ProjectContext.Provider value={{ id, ref: projectRef, mode }}>
       <Frame />
     </ProjectContext.Provider>
   );
@@ -107,7 +121,10 @@ export function RequireUser() {
 export function LegacyRedirect({ to }: { to?: string }) {
   const location = useLocation();
   const active = getActiveProject();
-  const base = active ? `/p/${encodeURIComponent(active)}` : null;
-  if (!base) return <Navigate to="/projects" replace />;
-  return <Navigate to={`${base}${to ?? location.pathname + location.search + location.hash}`} replace />;
+  const projects = useProjects(Boolean(active));
+  if (!active) return <Navigate to="/projects" replace />;
+  if (projects.isPending) return <Waiting />;
+  const found = projects.data ? findProject(projects.data, active) : undefined;
+  if (!found) return <Navigate to="/projects" replace />;
+  return <Navigate to={`${projectPath(found)}${to ?? location.pathname + location.search + location.hash}`} replace />;
 }

@@ -1783,6 +1783,11 @@
             "title": "Retest Monthly Cap Usd",
             "type": "number"
           },
+          "slug": {
+            "description": "Short readable name used in the web address (/p/production). Stable and unique per owner; the API still takes project_id",
+            "title": "Slug",
+            "type": "string"
+          },
           "store_tool_arguments": {
             "default": false,
             "description": "Whether this project keeps the inputs of tool calls (off by default; they can hold private data). Used only to notice an agent repeating the same step",
@@ -1815,6 +1820,7 @@
         },
         "required": [
           "project_id",
+          "slug",
           "name",
           "webhook_url",
           "webhook_secret",
