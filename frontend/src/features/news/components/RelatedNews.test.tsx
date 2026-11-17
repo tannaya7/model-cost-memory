@@ -39,7 +39,9 @@ describe("RelatedNews", () => {
     const urls = answer([]);
     const { container } = renderWithProviders(<RelatedNews filters={{ model: "acme-mini" }} />);
     await vi.waitFor(() => expect(urls).toHaveLength(1));
-    expect(container).toBeEmptyDOMElement();
+    // The test wrapper carries the (empty) notification area, so check for the absence of any news content.
+    expect(container.textContent?.trim()).toBe("");
+    expect(container.querySelector("a, h2, h3, h4, section, article, li")).toBeNull();
   });
 
   it("says so where the section always shows", async () => {

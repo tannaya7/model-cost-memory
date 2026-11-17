@@ -131,6 +131,10 @@ body::after {
 }
 
 /* The landing scene: the neon edges breathe and a few specks twinkle. */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 @keyframes scene-pulse {
   0%, 100% { opacity: 0.55; }
   50% { opacity: 1; }

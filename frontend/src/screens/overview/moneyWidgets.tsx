@@ -1,13 +1,16 @@
 /** Three widgets about what the money is doing: where the month will end against a budget, how much went
  * on wrong answers, and what a good answer costs. All figures are estimates from recorded runs at list
  * prices, and each widget says so. */
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { parseBudget, useMonthlyBudget } from "../../features/projects/hooks/useBudget";
+import { useMonthlyBudget } from "../../features/projects/hooks/useBudget";
 import { useDaily } from "../../features/insights/api/dailyApi";
 import { CountUp } from "../../shared/motion/CountUp";
 import { pct, usd } from "../../ui/format";
 import { Button, cx, EmptyState, Skeleton } from "../../ui/primitives";
+import { useToast } from "../../ui/Toast";
+import { BudgetEditor } from "./BudgetEditor";
+import { exactUsd } from "./budgetAnalysis";
 import { clearBrowserBudget, readBrowserBudget } from "./budget";
 import { BUDGET_FIRST_ALERT, monthProjection, unitCosts, wastedSpend } from "./metrics";
 import { DeltaPill, ownsUnpriced, Shell, UnpricedChip, type Ctx, type ShellProps } from "./widgets";
@@ -19,12 +22,12 @@ const dollars = (v: number) => <CountUp value={v} prefix="$" decimals={v < 100 ?
 
 const STATUS = {
   ok: { text: "On track", cls: "bg-ok-soft text-ok" },
-  close: { text: "Close to your monthly budget", cls: "bg-warn-soft text-warn" },
-  over: { text: "Over your monthly budget", cls: "bg-bad-soft text-bad" },
+  close: { text: "Close to your monthly limit", cls: "bg-warn-soft text-warn" },
+  over: { text: "Over your monthly limit", cls: "bg-bad-soft text-bad" },
 } as const;
 
 /** How the month-end estimate is worked out: shown behind a "?" wherever the estimate appears. */
-export const FORECAST_HELP = "We take what you have spent this month and add your average daily spending of the last 7 days for each day left, at list prices. The range uses your cheapest and dearest of those 7 days. Days are counted in UTC. It is an estimate, not a bill. Your monthly budget is saved on your account. We warn you as you near it, and nothing is ever blocked.";
+export const FORECAST_HELP = "We take what you have spent this month and add your average daily spending of the last 7 days for each day left, at list prices. The range uses your cheapest and dearest of those 7 days. Days are counted in UTC. It is an estimate, not a bill. Your monthly limit is saved on your account. We warn you as you near it, and nothing is ever blocked.";
 
 /** The month-end estimate and the optional budget. `embedded` gives just the content, for use inside another card. */
 export function MonthProjection({ shell, ctx, embedded }: { shell: ShellProps; ctx?: Pick<Ctx, "unpricedOwner">; embedded?: boolean }) {
@@ -32,8 +35,7 @@ export function MonthProjection({ shell, ctx, embedded }: { shell: ShellProps; c
   const { projectId } = account;
   const daily = useDaily({ days: 40 }); // the month so far, and the 7 days before today
   const budget = account.budget;
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
+  const toast = useToast();
   const [problem, setProblem] = useState<string | null>(null);
   const [moved, setMoved] = useState(false);
   // A limit an earlier version kept in this browser: offered once if the account has none.
@@ -41,26 +43,14 @@ export function MonthProjection({ shell, ctx, embedded }: { shell: ShellProps; c
 
   const p = monthProjection(daily.data ?? [], new Date(), budget);
   const scale = Math.max(budget ?? 0, p.projected, p.mtd, 0.01) * 1.08;
-  const store = async (v: number | null) => {
-    setProblem(null);
-    const err = await account.save(v);
-    if (err) setProblem(err);
-    return !err;
-  };
-  const save = async (e: FormEvent) => {
-    e.preventDefault();
-    const r = parseBudget(draft);
-    if ("error" in r) return setProblem(r.error);
-    if (await store(r.value)) setEditing(false);
-  };
-  const clear = async () => {
-    if (await store(null)) setEditing(false);
-  };
   const moveToAccount = async () => {
-    if (browserBudget !== null && (await store(browserBudget))) {
-      clearBrowserBudget(projectId);
-      setMoved(true);
-    }
+    if (browserBudget === null) return;
+    setProblem(null);
+    const err = await account.save(browserBudget);
+    if (err) return setProblem(err);
+    clearBrowserBudget(projectId);
+    setMoved(true);
+    toast({ message: `Limit set to ${exactUsd(browserBudget)}` });
   };
   const status = p.status === "none" ? null : STATUS[p.status];
   const used80 = p.usedShare !== null && p.usedShare >= BUDGET_FIRST_ALERT; // 85%, where our first warning fires (the next is at 95%)
@@ -105,7 +95,7 @@ export function MonthProjection({ shell, ctx, embedded }: { shell: ShellProps; c
           </div>
 
           <div>
-            <div className="relative h-3 rounded-full bg-surface-3" role="img" aria-label={`${usd(p.mtd)} spent so far, ${usd(p.projected)} expected by month end${budget ? `, budget ${usd(budget)}` : ""}`}>
+            <div className="relative h-3 rounded-full bg-surface-3" role="img" aria-label={`${usd(p.mtd)} spent so far, ${usd(p.projected)} expected by month end${budget ? `, limit ${usd(budget)}` : ""}`}>
               <motion.div className="absolute inset-y-0 left-0 rounded-full bg-accent/30" initial={{ width: 0 }} animate={{ width: `${(p.projected / scale) * 100}%` }} transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }} />
               <motion.div className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-accent to-accent-2" initial={{ width: 0 }} animate={{ width: `${(p.mtd / scale) * 100}%` }} transition={{ duration: 0.9, delay: 0.1, ease: [0.22, 1, 0.36, 1] }} />
               {budget && <span aria-hidden className="absolute -bottom-1.5 -top-1.5 w-0.5 rounded bg-ink" style={{ left: `${(budget / scale) * 100}%` }} />}
@@ -119,15 +109,15 @@ export function MonthProjection({ shell, ctx, embedded }: { shell: ShellProps; c
                 {p.status === "over"
                   ? `About ${usd(p.overBy)} above ${usd(budget!)} at this pace.`
                   : used80
-                    ? `${pct(p.usedShare!, 0)} of your monthly budget is already used${p.usedShare! >= 0.95 ? ", past our 95% warning" : ""}.`
-                    : `About ${pct(p.projected / budget!, 0)} of your ${usd(budget!)} budget by month end.`}
+                    ? `${pct(p.usedShare!, 0)} of your monthly limit is already used${p.usedShare! >= 0.95 ? ", past our 95% warning" : ""}.`
+                    : `About ${pct(p.projected / budget!, 0)} of your ${usd(budget!)} limit by month end.`}
               </span>
             </div>
           )}
 
           <div className="mt-auto flex flex-col gap-2 border-t border-rule pt-3">
             {!account.canEdit ? (
-              budget ? <p className="text-xs text-dim">Budget {usd(budget)} a month</p> : null
+              budget ? <p className="text-xs text-dim">Limit {usd(budget)} a month</p> : null
             ) : browserBudget !== null ? (
               <div className="flex flex-wrap items-center gap-2 text-xs text-dim">
                 <span>Saved in this browser only. Save it to your account?</span>
@@ -135,27 +125,8 @@ export function MonthProjection({ shell, ctx, embedded }: { shell: ShellProps; c
                 <Button size="sm" variant="primary" onClick={moveToAccount} disabled={account.saving}>Save to my account</Button>
                 {problem && <span role="alert" className="basis-full text-[11px] text-bad">{problem}</span>}
               </div>
-            ) : !budget && !editing ? (
-              <button type="button" onClick={() => setEditing(true)} className="self-start rounded-[9px] border border-rule bg-surface-2 px-3 py-1.5 text-[13px] font-semibold text-accent-ink transition-colors hover:border-accent hover:underline">Set a monthly budget</button>
-            ) : editing || !budget ? (
-              <form onSubmit={save} className="flex flex-wrap items-center gap-2">
-                <label htmlFor={`budget-${shell.id}`} className="text-xs text-dim">{budget ? "Monthly budget" : "Set a monthly budget"}</label>
-                <span className="basis-full text-[11px] text-muted">Optional. We warn you as you get close. We never stop your spending.</span>
-                <span className="flex items-center rounded-[9px] border border-rule bg-surface-2 px-2 focus-within:border-accent">
-                  <span className="text-sm text-muted">$</span>
-                  <input id={`budget-${shell.id}`} inputMode="decimal" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={budget ? String(budget) : "e.g. 500"} className="w-24 bg-transparent px-1.5 py-1.5 text-sm text-ink outline-none placeholder:text-muted" />
-                </span>
-                <Button size="sm" variant="primary" type="submit" disabled={account.saving || !draft.trim()}>Save</Button>
-                <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
-                {problem && <span role="alert" className="basis-full text-[11px] text-bad">{problem}</span>}
-              </form>
             ) : (
-              <div className="flex items-center gap-3 text-xs text-dim">
-                <span>Budget {usd(budget)} a month</span>
-                {problem && <span role="alert" className="text-bad">{problem}</span>}
-                <button type="button" onClick={() => { setDraft(String(budget)); setEditing(true); }} className="font-semibold text-accent-ink hover:underline">Change</button>
-                <button type="button" onClick={clear} className="font-semibold text-muted hover:text-bad hover:underline">Remove</button>
-              </div>
+              <BudgetEditor id={`budget-${shell.id}`} />
             )}
           </div>
         </div>

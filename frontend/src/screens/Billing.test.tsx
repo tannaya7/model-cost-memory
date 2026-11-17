@@ -17,6 +17,7 @@ import { MONEY_ALERT_FALLBACK } from "../features/projects/moneyWording";
 import Overview from "./Overview";
 import Settings, { BillingSection } from "./Settings";
 import NewProject from "./NewProject";
+import { payModeChange } from "../features/projects/payModeChange";
 
 afterEach(() => {
   localStorage.clear();
@@ -205,7 +206,30 @@ describe("Settings: how you pay for AI", () => {
     expect(screen.getByText(/Claude Pro or Max, ChatGPT Plus, Copilot, Cursor/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "About how you pay for AI" })).toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: /Monthly subscription/ }));
-    await waitFor(() => expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ billing_mode: "subscription" }));
+    // a review panel, no request yet
+    expect(screen.getByText(/Switching to Monthly subscription turns off dollar limits and projected-over alerts\. Screens will show allowance windows instead\. Spend figures are still estimates from recorded calls at list prices, not your bill\. Your saved limit of \$50 is kept and returns if you switch back\./)).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Switch to Monthly subscription" }));
+    await waitFor(() => expect(calls.filter((c) => c.method === "PATCH").map((c) => c.body)).toEqual([{ billing_mode: "subscription" }]));
+    expect((await screen.findByText("Pay mode changed to Monthly subscription")).closest("[role=status]")).not.toBeNull();
+  });
+
+  it("Keep Pay per use drops the draft and sends nothing", async () => {
+    const { project, calls } = account("per_use");
+    const user = userEvent.setup();
+    renderWithProviders(<WithProject id="acme"><BillingSection project={project} /></WithProject>);
+    await user.click(screen.getByRole("radio", { name: /Both/ }));
+    await user.click(screen.getByRole("button", { name: "Keep Pay per use" }));
+    expect(screen.getByRole("radio", { name: /Pay per use/ })).toBeChecked();
+    expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(0);
+  });
+
+  it("says what really changes for each move", () => {
+    expect(payModeChange("per_use", "both", 50)).toMatch(/keeps dollar figures but labels them as list prices rather than your bill, and also shows your allowance.*Your limit warnings stay on\./);
+    expect(payModeChange("subscription", "per_use", 50)).toMatch(/turns dollar figures, the spending limit and projected-over alerts back on.*Your saved limit of \$50 starts warning again\./);
+    expect(payModeChange("subscription", "both", null)).not.toMatch(/saved limit/);
+    expect(payModeChange("both", "per_use", null)).toMatch(/shows dollar figures as what you pay/);
+    expect(payModeChange("both", "subscription", null)).toMatch(/^Switching to Monthly subscription turns off dollar limits/);
   });
 
   it("per use keeps the spending limit box", async () => {

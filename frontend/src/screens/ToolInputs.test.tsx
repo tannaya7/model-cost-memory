@@ -44,30 +44,50 @@ describe("Settings: keep the inputs of tool calls", () => {
     expect(calls.filter((c) => c.method !== "GET")).toHaveLength(0);
   });
 
-  it("turns on with only that field and shows the on state", async () => {
+  it("turning it on is a draft: nothing is sent until Apply, then one PATCH and a toast", async () => {
     const { project, calls } = account(false);
     const user = userEvent.setup();
     mount(project);
     await user.click(screen.getByRole("switch"));
-    await waitFor(() => expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ store_tool_arguments: true }));
+    expect(screen.getByText(/stores the tool inputs your app sends, and they may contain private data/)).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Turn on" }));
+    await waitFor(() => expect(calls.filter((c) => c.method === "PATCH").map((c) => c.body)).toEqual([{ store_tool_arguments: true }]));
+    expect((await screen.findByText("Tool inputs are now kept")).closest("[role=status]")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
   });
 
-  it("shows the on state and turns off", async () => {
+  it("Discard puts the switch back and sends nothing", async () => {
+    const { project, calls } = account(false);
+    const user = userEvent.setup();
+    mount(project);
+    await user.click(screen.getByRole("switch"));
+    await user.click(screen.getByRole("button", { name: "Keep it off" }));
+    expect(screen.getByRole("switch")).not.toBeChecked();
+    expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(0);
+  });
+
+  it("shows the on state and turns off only after Apply", async () => {
     const { project, calls } = account(true);
     const user = userEvent.setup();
     mount(project);
     expect(screen.getByRole("switch")).toBeChecked();
     expect(screen.getByText(/stops storing new inputs/)).toBeInTheDocument();
     await user.click(screen.getByRole("switch"));
+    expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Turn off" }));
     await waitFor(() => expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ store_tool_arguments: false }));
   });
 
-  it("shows Saving while the change is in flight and an error if it fails", async () => {
+  it("keeps the choice and shows an alert if applying fails", async () => {
     const { project } = account(false, { failPatch: true });
     const user = userEvent.setup();
     mount(project);
     await user.click(screen.getByRole("switch"));
+    await user.click(screen.getByRole("button", { name: "Turn on" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not save that");
+    expect(screen.getByRole("switch")).toBeChecked();
+    expect(screen.getByRole("button", { name: "Turn on" })).toBeEnabled();
   });
 
   it("asks before deleting stored inputs, then says how many calls were cleaned", async () => {

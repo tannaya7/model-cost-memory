@@ -1,27 +1,30 @@
 /** Settings: one page, one section per decision, with a section menu beside it. */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { AddLimitForm } from "../features/limits/components/AddLimitForm";
 import { LimitCard } from "../features/limits/components/LimitCard";
 import { useLimits } from "../features/limits/hooks/useLimits";
 import { ApiKeyRevealBox } from "../features/projects/components/ApiKeyRevealBox";
 import { DeleteProjectCard } from "../features/projects/components/DeleteProjectCard";
-import { parseBudget } from "../features/projects/hooks/useBudget";
 import { usePatchProject, useProject, useRegenerateProjectKey } from "../features/projects/hooks/useProjects";
 import { ProviderKeyForm } from "../features/retest/components/ProviderKeyForm";
 import { useDeleteProviderKey, useRetestLimits } from "../features/retest/hooks/useRetest";
 import { ProjectKeySettings } from "../features/settings/components/ProjectKeySettings";
-import { ApiError } from "../shared/api/apiFetch";
 import { useProject as useProjectScope } from "../app/project";
 import { useNavigate } from "react-router-dom";
 import type { Project } from "../shared/api/types";
 import { useHealth } from "../features/health/api";
 import { useDeleteToolInputs } from "../features/projects/hooks/useToolInputs";
+import { ApiError } from "../shared/api/apiFetch";
 import { Help } from "../ui/Help";
 import { BillingChoice } from "../features/projects/components/BillingChoice";
 import type { BillingMode } from "../features/projects/hooks/useBillingMode";
+import { billingTitle, payModeChange } from "../features/projects/payModeChange";
 import { usd } from "../ui/format";
 import { IconCheck } from "../ui/icons";
+import { ApplyBar } from "../ui/ApplyBar";
+import { useDraftSection } from "../ui/useDraftSection";
+import { BudgetEditor } from "./overview/BudgetEditor";
 import { Button, cx, EmptyState, Panel, PanelHeader, Pill, Skeleton } from "../ui/primitives";
 
 const SECTIONS = [
@@ -41,56 +44,46 @@ const SECTIONS = [
 const field =
   "w-full rounded-[10px] border border-rule bg-surface-2 px-3 py-2 text-sm text-ink outline-none transition-colors placeholder:text-muted focus:border-accent";
 
-function SaveRow({ saving, saved, error, dirty, onSave }: { saving: boolean; saved: boolean; error: string | null; dirty: boolean; onSave: () => void }) {
-  return (
-    <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-      {error && <p className="text-xs text-bad">{error}</p>}
-      {saved && <span className="flex items-center gap-1 text-xs text-ok"><IconCheck size={14} /> Saved</span>}
-      <Button variant="primary" size="sm" onClick={onSave} disabled={saving || !dirty}>{saving ? "Saving…" : "Save"}</Button>
-    </div>
-  );
-}
-
-/** One form row of the project: edits a single field and saves it on its own. */
-function useFieldSave(project: Project) {
+/** Sends one PATCH to the project and throws if it fails. Used by every section's Apply. */
+function useProjectSave(project: { project_id: string }) {
   const patch = usePatchProject();
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const save = async (input: Parameters<typeof patch.mutateAsync>[0]["input"]) => {
-    setError(null);
-    setSaved(false);
-    try {
-      await patch.mutateAsync({ id: project.project_id, input });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
-    } catch (e) {
-      setError(e instanceof ApiError || e instanceof Error ? e.message : "Could not save");
-    }
-  };
-  return { save, saving: patch.isPending, saved, error };
+  return useCallback((input: Parameters<typeof patch.mutateAsync>[0]["input"]) => patch.mutateAsync({ id: project.project_id, input }), [patch.mutateAsync, project.project_id]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-function ProjectSection({ project }: { project: Project }) {
-  const [name, setName] = useState(project.name);
-  const s = useFieldSave(project);
+export function ProjectSection({ project }: { project: Project }) {
+  const send = useProjectSave(project);
+  const d = useDraftSection<string>({
+    saved: project.name,
+    equal: (a, b) => a.trim() === b || a.trim().length === 0,
+    save: (name) => send({ name: name.trim() }),
+    success: "Settings applied",
+  });
   return (
     <Panel id="project" className="scroll-mt-24 p-5 md:p-6">
       <PanelHeader title="Project" hint={<>Your app's SDK sends its AI calls to this project id: <span className="font-mono text-ink">{project.project_id}</span>.</>} />
-      <label htmlFor="project-name" className="mt-4 block text-xs font-semibold text-dim">Name</label>
-      <input id="project-name" className={cx(field, "mt-1.5 max-w-md")} value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
-      <SaveRow saving={s.saving} saved={s.saved} error={s.error} dirty={name.trim() !== project.name && name.trim().length > 0} onSave={() => s.save({ name: name.trim() })} />
+      <form onSubmit={(e) => { e.preventDefault(); void d.apply(); }}>
+        <label htmlFor="project-name" className="mt-4 block text-xs font-semibold text-dim">Name</label>
+        <input id="project-name" className={cx(field, "mt-1.5 max-w-md")} value={d.value} onChange={(e) => d.change(e.target.value)} maxLength={100} />
+        <ApplyBar dirty={d.dirty} applying={d.applying} error={d.error} onApply={d.apply} onDiscard={d.discard} />
+      </form>
     </Panel>
   );
 }
 
-function AlertsSection({ project }: { project: Project }) {
-  const [url, setUrl] = useState(project.webhook_url ?? "");
-  const s = useFieldSave(project);
+export function AlertsSection({ project }: { project: Project }) {
+  const send = useProjectSave(project);
+  const d = useDraftSection<string>({
+    saved: project.webhook_url ?? "",
+    equal: (a, b) => a.trim() === b,
+    validate: (u) => (u.trim() && !u.trim().startsWith("https://") ? "Use an address that starts with https://." : null),
+    save: (u) => send({ webhook_url: u.trim() || null }),
+    success: "Settings applied",
+  });
   return (
     <Panel id="alerts" className="scroll-mt-24 p-5 md:p-6">
       <PanelHeader title="Where alerts go" hint="Paste a Slack, Discord, Google Chat or Mattermost webhook. Leave empty to see alerts here only." />
       <label htmlFor="webhook" className="mt-4 block text-xs font-semibold text-dim">Webhook URL</label>
-      <input id="webhook" type="url" className={cx(field, "mt-1.5")} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://hooks.slack.com/services/…" />
+      <input id="webhook" type="url" className={cx(field, "mt-1.5")} value={d.value} onChange={(e) => d.change(e.target.value)} placeholder="https://hooks.slack.com/services/…" />
       {project.webhook_secret && (
         <details className="mt-2 text-xs text-muted">
           <summary className="cursor-pointer font-semibold text-accent">For developers: check a message came from us</summary>
@@ -107,39 +100,36 @@ function AlertsSection({ project }: { project: Project }) {
           </div>
         </details>
       )}
-      <SaveRow
-        saving={s.saving}
-        saved={s.saved}
-        error={s.error}
-        dirty={url.trim() !== (project.webhook_url ?? "")}
-        onSave={() => {
-          if (url.trim() && !url.trim().startsWith("https://")) return;
-          void s.save({ webhook_url: url.trim() || null });
-        }}
-      />
+      <ApplyBar dirty={d.dirty} applying={d.applying} error={d.error} onApply={d.apply} onDiscard={d.discard} />
     </Panel>
   );
 }
 
-function PrivacySection({ project }: { project: Project }) {
-  const [days, setDays] = useState(String(project.content_retention_days));
-  const s = useFieldSave(project);
-  const n = Number(days);
-  const valid = Number.isInteger(n) && n >= 1 && n <= 3650;
+export function PrivacySection({ project }: { project: Project }) {
+  const send = useProjectSave(project);
+  const okDays = (t: string) => Number.isInteger(Number(t)) && Number(t) >= 1 && Number(t) <= 3650;
+  const d = useDraftSection<string>({
+    saved: String(project.content_retention_days),
+    equal: (a, b) => !okDays(a) || Number(a) === Number(b),
+    save: (t) => send({ content_retention_days: Number(t) }),
+    success: "Settings applied",
+  });
+  const days = d.value;
+  const valid = okDays(days);
   return (
     <Panel id="privacy" className="scroll-mt-24 p-5 md:p-6">
       <PanelHeader title={<span className="inline-flex items-center gap-1.5">How long prompts and answers are kept <Help label="About keeping prompts and answers">Tokens are the small pieces of text AI models read and write. After this many days the text of each AI call (prompt, answer, tool calls, answer key) is deleted each night. Whether it was correct, what it cost and how many tokens it used are kept, so our recommendations do not change.</Help></span>} hint="The text of each AI call is deleted after this many days." />
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <input id="retention" type="number" min={1} max={3650} className={field.replace("w-full", "w-28")} value={days} onChange={(e) => setDays(e.target.value)} aria-label="Days to keep AI call content" />
+        <input id="retention" type="number" min={1} max={3650} className={field.replace("w-full", "w-28")} value={days} onChange={(e) => d.change(e.target.value)} aria-label="Days to keep AI call content" />
         <span className="text-sm text-dim">days</span>
-        {[30, 90, 365].map((d) => (
-          <button key={d} type="button" onClick={() => setDays(String(d))} className={cx("rounded-full border px-3 py-1 text-xs font-semibold", Number(days) === d ? "border-accent text-accent" : "border-rule text-muted hover:text-dim")}>
-            {d}
+        {[30, 90, 365].map((n) => (
+          <button key={n} type="button" onClick={() => d.change(String(n))} className={cx("rounded-full border px-3 py-1 text-xs font-semibold", Number(days) === n ? "border-accent text-accent" : "border-rule text-muted hover:text-dim")}>
+            {n}
           </button>
         ))}
       </div>
       {!valid && <p className="mt-2 text-xs text-bad">Between 1 and 3650 days.</p>}
-      <SaveRow saving={s.saving} saved={s.saved} error={s.error} dirty={valid && n !== project.content_retention_days} onSave={() => s.save({ content_retention_days: n })} />
+      <ApplyBar dirty={d.dirty} applying={d.applying} error={d.error} onApply={d.apply} onDiscard={d.discard} />
     </Panel>
   );
 }
@@ -147,10 +137,15 @@ function PrivacySection({ project }: { project: Project }) {
 function RetestsSection({ project }: { project: Project | null }) {
   const limits = useRetestLimits();
   const removeKey = useDeleteProviderKey();
-  const [cap, setCap] = useState(project ? String(project.retest_monthly_cap_usd) : "");
-  const [allowed, setAllowed] = useState(project?.retest_allowed ?? true);
+  const send = useProjectSave(project ?? { project_id: "" });
+  const d = useDraftSection<{ cap: string; allowed: boolean }>({
+    saved: { cap: project ? String(project.retest_monthly_cap_usd) : "", allowed: project?.retest_allowed ?? true },
+    equal: (a, b) => Number(a.cap) === Number(b.cap) && a.allowed === b.allowed,
+    save: (v) => send({ retest_monthly_cap_usd: Number(v.cap), retest_allowed: v.allowed }),
+    success: "Settings applied",
+  });
+  const { cap, allowed } = d.value;
   const [editingKey, setEditingKey] = useState(false);
-  const s = useFieldSave(project ?? ({ project_id: "" } as Project));
   const l = limits.data;
   const share = l && l.monthly_cap_usd > 0 ? Math.min(1, l.spent_this_month_usd / l.monthly_cap_usd) : 0;
   return (
@@ -171,10 +166,10 @@ function RetestsSection({ project }: { project: Project | null }) {
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <label className="block">
             <span className="text-xs font-semibold text-dim">Monthly budget for trials (USD)</span>
-            <input type="number" min={0} max={10000} className={cx(field.replace("w-full", "w-40"), "mt-1.5 block")} value={cap} onChange={(e) => setCap(e.target.value)} />
+            <input type="number" min={0} max={10000} className={cx(field.replace("w-full", "w-40"), "mt-1.5 block")} value={cap} onChange={(e) => d.change({ ...d.value, cap: e.target.value })} />
           </label>
           <label className="flex items-start gap-3 rounded-[12px] border border-rule bg-surface-2/50 p-3">
-            <input type="checkbox" checked={allowed} onChange={(e) => setAllowed(e.target.checked)} className="mt-1 h-4 w-4 accent-[var(--color-accent)]" />
+            <input type="checkbox" checked={allowed} onChange={(e) => d.change({ ...d.value, allowed: e.target.checked })} className="mt-1 h-4 w-4 accent-[var(--color-accent)]" />
             <span>
               <span className="block text-sm font-semibold text-ink">Allow trials on new models</span>
               <span className="text-xs text-dim">Past prompts are sent to the provider of the model being tested.</span>
@@ -182,15 +177,7 @@ function RetestsSection({ project }: { project: Project | null }) {
           </label>
         </div>
       )}
-      {project && (
-        <SaveRow
-          saving={s.saving}
-          saved={s.saved}
-          error={s.error}
-          dirty={Number(cap) !== project.retest_monthly_cap_usd || allowed !== project.retest_allowed}
-          onSave={() => s.save({ retest_monthly_cap_usd: Number(cap), retest_allowed: allowed })}
-        />
-      )}
+      {project && <ApplyBar dirty={d.dirty} applying={d.applying} error={d.error} onApply={d.apply} onDiscard={d.discard} />}
       <div className="mt-5 border-t border-rule pt-5">
         <p className="text-sm font-semibold text-ink">Provider key</p>
         {limits.isPending ? (
@@ -251,21 +238,15 @@ export function KeysSection({ project, mode }: { project: Project | null; mode: 
   );
 }
 
-/** How the project pays for AI. Changes only wording and which alerts fire, never a stored figure. */
+/** How the project pays for AI. A choice is only a draft until Apply: it rewrites the wording on every screen. */
 export function BillingSection({ project }: { project: Project }) {
-  const patch = usePatchProject();
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const choose = async (next: BillingMode) => {
-    setError(null);
-    setSaved(false);
-    try {
-      await patch.mutateAsync({ id: project.project_id, input: { billing_mode: next } });
-      setSaved(true);
-    } catch (e) {
-      setError(e instanceof ApiError || e instanceof Error ? e.message : "Could not save");
-    }
-  };
+  const send = useProjectSave(project);
+  const savedMode = (project.billing_mode ?? "per_use") as BillingMode;
+  const d = useDraftSection<BillingMode>({
+    saved: savedMode,
+    save: (mode) => send({ billing_mode: mode }),
+    success: (mode) => `Pay mode changed to ${billingTitle(mode)}`,
+  });
   return (
     <Panel id="billing" className="scroll-mt-24 p-5 md:p-6">
       <PanelHeader
@@ -273,10 +254,19 @@ export function BillingSection({ project }: { project: Project }) {
         hint="Pick what is closest. You can change it any time."
       />
       <div className="mt-3">
-        <BillingChoice value={(project.billing_mode ?? "per_use") as BillingMode} onChange={(v) => void choose(v)} disabled={patch.isPending} name="settings-billing-mode" />
+        <BillingChoice value={d.value} onChange={d.change} disabled={d.applying} name="settings-billing-mode" />
       </div>
-      <p className="mt-2 text-xs text-muted">{patch.isPending ? "Saving…" : saved ? "Saved." : "Nothing is recomputed when you change this."}</p>
-      {error && <p role="alert" className="mt-2 text-xs text-bad">{error}</p>}
+      <ApplyBar
+        dirty={d.dirty}
+        applying={d.applying}
+        error={d.error}
+        onApply={d.apply}
+        onDiscard={d.discard}
+        applyLabel={`Switch to ${billingTitle(d.value)}`}
+        applyingLabel="Switching…"
+        discardLabel={`Keep ${billingTitle(savedMode)}`}
+        review={<><span className="font-semibold text-ink">What will change.</span> {payModeChange(savedMode, d.value, project.monthly_budget_usd ?? null)}</>}
+      />
     </Panel>
   );
 }
@@ -294,55 +284,31 @@ function SubscriptionLimitPointer() {
 /** The most the person wants their AI calls to cost each month; we only warn, never block. */
 export function BudgetSection({ project }: { project: Project }) {
   const current = project.monthly_budget_usd ?? null;
-  const [text, setText] = useState(current === null ? "" : String(current));
-  const [problem, setProblem] = useState<string | null>(null);
-  const s = useFieldSave(project);
-  const onSave = async () => {
-    const r = parseBudget(text);
-    if ("error" in r) return setProblem(r.error);
-    setProblem(null);
-    await s.save({ monthly_budget_usd: r.value });
-  };
-  const onRemove = async () => {
-    setProblem(null);
-    await s.save({ monthly_budget_usd: null });
-    setText("");
-  };
   return (
     <Panel id="budget" className="scroll-mt-24 p-5 md:p-6">
-      <PanelHeader title={<span className="inline-flex items-center gap-1.5">Monthly spending limit <Help label="About the spending limit">We warn you at 85% and 95%, and if the month looks like it will go over. The spend is an estimate from your recorded calls at list prices.</Help></span>} hint="The most you want your AI calls to cost each month. We only warn, never block." />
+      <PanelHeader title={<span className="inline-flex items-center gap-1.5">Monthly spending limit <Help label="About the spending limit">We warn you at 85% and 95%, and if the month looks like it will go over. The spend is an estimate from your recorded calls at list prices.</Help></span>} hint="The most you want your AI calls to cost each month." />
       <p className="mt-3 text-sm text-ink">Current limit: <span className="font-semibold">{current === null ? "Not set" : `$${current.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(current) ? 0 : 2 })} a month`}</span></p>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className="flex items-center rounded-[10px] border border-rule bg-surface-2 px-3 focus-within:border-accent">
-          <span className="text-sm text-muted">$</span>
-          <input id="monthly-budget" inputMode="decimal" className="w-32 bg-transparent px-1.5 py-2 text-sm text-ink outline-none placeholder:text-muted" value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g. 500" aria-label="Monthly spending limit in US dollars" />
-        </span>
-        <span className="text-sm text-dim">a month</span>
-        <Button variant="primary" size="sm" onClick={onSave} disabled={s.saving}>{s.saving ? "Saving…" : "Save"}</Button>
-        {current !== null && <Button variant="ghost" size="sm" onClick={onRemove} disabled={s.saving}>Remove</Button>}
-        {s.saved && <span className="flex items-center gap-1 text-xs text-ok"><IconCheck size={14} /> Saved</span>}
+      <div className="mt-3">
+        <BudgetEditor id="monthly-budget" alwaysOpen />
       </div>
-      {(problem || s.error) && <p role="alert" className="mt-2 text-xs text-bad">{problem ?? s.error}</p>}
     </Panel>
   );
 }
 
 /** Off by default. When on, the project keeps the inputs of tool calls, only to spot an agent repeating a step. */
 export function ToolInputsSection({ project }: { project: Project }) {
-  const on = project.store_tool_arguments === true;
-  const patch = usePatchProject();
+  const send = useProjectSave(project);
+  const d = useDraftSection<boolean>({
+    saved: project.store_tool_arguments === true,
+    save: (next) => send({ store_tool_arguments: next }),
+    success: (next) => (next ? "Tool inputs are now kept" : "Tool inputs are no longer kept"),
+  });
+  const on = d.value;
+  const savedOn = project.store_tool_arguments === true;
   const wipe = useDeleteToolInputs();
   const [error, setError] = useState<string | null>(null);
   const [cleared, setCleared] = useState<number | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const toggle = async (next: boolean) => {
-    setError(null);
-    try {
-      await patch.mutateAsync({ id: project.project_id, input: { store_tool_arguments: next } });
-    } catch (e) {
-      setError(e instanceof ApiError || e instanceof Error ? e.message : "Could not save");
-    }
-  };
   const remove = async () => {
     setError(null);
     setConfirming(false);
@@ -362,9 +328,19 @@ export function ToolInputsSection({ project }: { project: Project }) {
         <span className="font-semibold">Warning:</span> tool inputs may contain private data, such as customer names, file contents or secrets. Leave this off unless you are comfortable with that being stored.
       </p>
       <label className="mt-3 flex items-center gap-3 text-sm text-ink">
-        <input type="checkbox" role="switch" className="h-4 w-4" checked={on} disabled={patch.isPending} onChange={(e) => void toggle(e.target.checked)} aria-label="Keep the inputs of tool calls so loops are easier to spot" />
-        <span>{patch.isPending ? "Saving…" : on ? "On: new tool inputs are stored" : "Off: tool inputs are not stored"}</span>
+        <input type="checkbox" role="switch" className="h-4 w-4" checked={on} disabled={d.applying} onChange={(e) => d.change(e.target.checked)} aria-label="Keep the inputs of tool calls so loops are easier to spot" />
+        <span>{on ? "On: new tool inputs are stored" : "Off: tool inputs are not stored"}</span>
       </label>
+      <ApplyBar
+        dirty={d.dirty}
+        applying={d.applying}
+        error={d.error}
+        onApply={d.apply}
+        onDiscard={d.discard}
+        applyLabel={on ? "Turn on" : "Turn off"}
+        discardLabel={savedOn ? "Keep it on" : "Keep it off"}
+        review={on ? "Turning this on stores the tool inputs your app sends, and they may contain private data. They are deleted after your retention period." : "Turning this off stops storing new inputs. Inputs already stored stay until you delete them below or your retention period ends."}
+      />
       <p className="mt-2 text-xs text-muted">
         {on
           ? "Your app also has to send them (the recorder option send_tool_arguments). Turning this off stops storing new inputs; ones already stored stay until you delete them below or your retention period ends."

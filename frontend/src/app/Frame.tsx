@@ -32,6 +32,7 @@ import { ThemeToggle } from "../ui/ThemeToggle";
 import { useModalFocus } from "../ui/useModalFocus";
 import { TourHost } from "../features/guide/TourHost";
 import { cx, Skeleton } from "../ui/primitives";
+import { ToastProvider } from "../ui/Toast";
 
 /** Which part of the tour points at which item (the tour looks for data-tour="..."). */
 const TOUR_TARGET: Record<string, string> = { Overview: "overview", "AI tasks": "tasks", Compare: "compare", Activity: "activity", Settings: "settings" };
@@ -519,6 +520,7 @@ export function Frame() {
 
   return (
     <MotionConfig reducedMotion="user">
+      <ToastProvider>
       <div className="min-h-screen md:flex">
         <Sidebar collapsed={collapsed} onToggle={toggle} alerts={alerts} />
 
@@ -610,6 +612,7 @@ export function Frame() {
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         <TourHost replay={tour} onReplayDone={() => setTour(false)} />
       </div>
+      </ToastProvider>
     </MotionConfig>
   );
 }

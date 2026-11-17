@@ -1431,7 +1431,11 @@ export const handlers = [
       content_retention_days?: number;
       store_tool_arguments?: boolean;
       billing_mode?: string | null;
+      monthly_budget_usd?: number | null;
     };
+    if (body.monthly_budget_usd !== undefined) {
+      (project as unknown as { monthly_budget_usd: number | null }).monthly_budget_usd = body.monthly_budget_usd;
+    }
     if (body.name !== undefined) {
       const name = body.name.trim();
       if (name.length < 1 || name.length > 60) {

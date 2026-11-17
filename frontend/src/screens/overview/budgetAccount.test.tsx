@@ -38,30 +38,36 @@ function account(budget: number | null) {
 const shell = { id: "projection" } as never;
 
 describe("Settings: monthly spending limit", () => {
-  it("shows Not set, validates, saves and removes", async () => {
+  it("sends nothing until Apply, rejects bad amounts beside the field, then applies once and shows the analysis", async () => {
     const { patches, project } = account(null);
     const user = userEvent.setup();
     renderWithProviders(<WithProject id="acme"><BudgetSection project={project} /></WithProject>);
     expect(screen.getByText("Not set")).toBeInTheDocument();
     const box = screen.getByLabelText("Monthly spending limit in US dollars");
+    expect(box).toHaveAttribute("type", "text");
+    expect(box).toHaveAttribute("inputmode", "decimal");
+    expect(screen.getByText("The limit only warns, it never blocks.")).toBeInTheDocument();
     await user.type(box, "-5");
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Apply" }));
     expect(screen.getByRole("alert")).toHaveTextContent("Type an amount above zero");
     expect(patches).toHaveLength(0);
     await user.clear(box);
-    await user.type(box, "500");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(await screen.findByText("Saved")).toBeInTheDocument();
-    expect(patches).toEqual([{ monthly_budget_usd: 500 }]);
+    await user.type(box, "$1,200.50");
+    expect(patches).toHaveLength(0); // typing alone sends nothing
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+    expect((await screen.findByText("Limit set to $1,200.50")).closest("[role=status]")).not.toBeNull();
+    expect(patches).toEqual([{ monthly_budget_usd: 1200.5 }]);
+    expect(await screen.findByRole("region", { name: "What this limit means" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Apply" })).toBeNull(); // the bar closed
   });
 
-  it("clears a saved limit", async () => {
+  it("removes a saved limit and says so", async () => {
     const { patches, project } = account(500);
     const user = userEvent.setup();
     renderWithProviders(<WithProject id="acme"><BudgetSection project={project} /></WithProject>);
     expect(screen.getByText("$500 a month")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Remove" }));
-    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Remove limit" }));
+    expect((await screen.findByText("Limit removed")).closest("[role=status]")).not.toBeNull();
     expect(patches).toEqual([{ monthly_budget_usd: null }]);
   });
 });
@@ -70,7 +76,7 @@ describe("Month projection widget", () => {
   it("uses the budget on the account", async () => {
     account(500);
     renderWithProviders(<WithProject id="acme"><MonthProjection shell={shell} /></WithProject>);
-    expect(await screen.findByText(/Budget \$500 a month/)).toBeInTheDocument();
+    expect(await screen.findByText(/Limit \$500 a month/)).toBeInTheDocument();
     expect(screen.queryByText(/Saved in this browser only/)).not.toBeInTheDocument();
   });
 
@@ -81,7 +87,7 @@ describe("Month projection widget", () => {
     renderWithProviders(<WithProject id="acme"><MonthProjection shell={shell} /></WithProject>);
     expect(await screen.findByText("Saved in this browser only. Save it to your account?")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save to my account" }));
-    expect(await screen.findByText(/Set a monthly budget|Budget \$300 a month/)).toBeInTheDocument();
+    expect((await screen.findByText("Limit set to $300")).closest("[role=status]")).not.toBeNull();
     expect(patches).toEqual([{ monthly_budget_usd: 300 }]);
     expect(localStorage.getItem("mcm_budget_acme")).toBeNull();
   });

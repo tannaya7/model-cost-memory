@@ -110,7 +110,7 @@ describe("Overview", () => {
     expect(await screen.findByRole("heading", { level: 2, name: "What am I spending?" })).toBeInTheDocument();
   });
 
-  it("shows the three money widgets and offers to set a monthly budget", async () => {
+  it("shows the three money widgets and offers to set a monthly limit", async () => {
     const day = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
     const point = (n: number, spend: number, failed: number) => ({ day: day(n), job: "invoice-extract", model: "acme-large", runs: 10, passed: 10 - failed, failed, spend_usd: spend });
     stubApi({
@@ -129,8 +129,8 @@ describe("Overview", () => {
     expect(await screen.findByText("estimate")).toBeInTheDocument();
     expect(screen.getByText(/likely \$.* to \$/)).toBeInTheDocument();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Set a monthly budget" }));
-    expect(await screen.findByLabelText("Set a monthly budget")).toBeInTheDocument();
-    expect(screen.getByText(/We never stop your spending/)).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Set a monthly limit" }));
+    expect(await screen.findByLabelText("Monthly spending limit in US dollars")).toBeInTheDocument();
+    expect(screen.getByText("The limit only warns, it never blocks.")).toBeInTheDocument();
   });
 });
