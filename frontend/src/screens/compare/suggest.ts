@@ -2,7 +2,7 @@
  * Measured figures come from the job's recommendation evidence; models never run on this job are only
  * ever "worth testing", priced from the catalog and the job's average tokens per run (an estimate). */
 import type { Model, Recommendation } from "../../shared/api/types";
-import { evidenceLine, isTooFew, wilsonFromRate } from "./wilson";
+import { evidenceLine, rangeOf, tooFewFor } from "./wilson";
 
 export type SuggestionLabel = "Cheapest proven" | "Best quality" | "Worth testing";
 
@@ -81,12 +81,12 @@ export function suggestForCheckedJob(input: SuggestInput): Suggestion[] {
       provider: providerOf(cheapest.model),
       monthlyCostUsd: cost,
       fitsBudget: fits(cost),
-      reason: `${evidenceLine(cheapest.weighted_pass_rate, cheapest.n_runs)}. On this evidence it costs the least of the models that looked good enough.`,
+      reason: `${evidenceLine(cheapest.weighted_pass_rate, cheapest.n_runs, undefined, cheapest)}. On this evidence it costs the least of the models that looked good enough.`,
       evidence: "measured",
       passRate: cheapest.weighted_pass_rate,
       nChecked: cheapest.n_runs,
-      interval: wilsonFromRate(cheapest.weighted_pass_rate, cheapest.n_runs),
-      tooFew: isTooFew(cheapest.n_runs),
+      interval: rangeOf(cheapest.weighted_pass_rate, cheapest.n_runs, cheapest),
+      tooFew: tooFewFor(cheapest.n_runs, cheapest),
     });
   }
 
@@ -102,12 +102,12 @@ export function suggestForCheckedJob(input: SuggestInput): Suggestion[] {
       provider: providerOf(best.model),
       monthlyCostUsd: cost,
       fitsBudget: fits(cost),
-      reason: `${evidenceLine(best.weighted_pass_rate, best.n_runs)}. The highest rate we measured, but the ranges of other models may overlap it.`,
+      reason: `${evidenceLine(best.weighted_pass_rate, best.n_runs, undefined, best)}. The highest rate we measured, but the ranges of other models may overlap it.`,
       evidence: "measured",
       passRate: best.weighted_pass_rate,
       nChecked: best.n_runs,
-      interval: wilsonFromRate(best.weighted_pass_rate, best.n_runs),
-      tooFew: isTooFew(best.n_runs),
+      interval: rangeOf(best.weighted_pass_rate, best.n_runs, best),
+      tooFew: tooFewFor(best.n_runs, best),
     });
   }
 

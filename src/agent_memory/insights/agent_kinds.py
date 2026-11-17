@@ -151,7 +151,7 @@ def detect_loop(steps: list[Step]) -> Loop | None:
     thumb, not measured."""
     if len(steps) < LOOP_REPEATS:
         return None
-    best: tuple[int, list[Step]] | None = None
+    best: tuple[int, list[Step], tuple[str, str]] | None = None
     size = min(LOOP_WINDOW, len(steps))
     for i in range(len(steps) - size + 1):
         window = steps[i : i + size]
@@ -163,10 +163,14 @@ def detect_loop(steps: list[Step]) -> Loop | None:
             if all(outs) and len(set(outs)) > len(outs) / 2:
                 continue  # results keep changing: progress, not a loop
             if best is None or n > best[0]:
-                best = (n, repeated)
+                best = (n, repeated, sig)
     if best is None:
         return None
-    n, repeated = best
+    _, _, sig = best
+    # The window only finds the loop; the size reported is the whole trace's count of that step (a run of
+    # 20 identical steps is 20 repeats and 20 steps' cost, not the 7 the window holds).
+    repeated = [s for s in steps if _signature(s) == sig]
+    n = len(repeated)
     first = repeated[0]
     what = "the " + (" and ".join(sorted(set(first.tool_names))) + " tool") if first.tool_names else "the same question"
     return Loop(

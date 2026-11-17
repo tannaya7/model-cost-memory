@@ -21,7 +21,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -37,20 +37,43 @@ MIN_SAMPLES = 3
 MAX_SAMPLES = 5
 SAMPLE_CHARS = 600  # per prompt and per answer
 SCAN_ROWS = 200
+PROJECT_DAILY_LIMIT = 50  # task summaries one project may start a day, so it cannot use the whole server limit
 DELETED = "deleted"  # prompt_version of a row the user deleted: not written again until the samples change
 
+# Applied in this order: the most specific shapes first, so a connection string or a JWT is masked whole.
+_CONNECTION = re.compile(r"\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis|amqps?|mssql)://\S+", re.I)
+_CREDENTIAL_URL = re.compile(r"\b[a-z][a-z0-9+.-]*://[^\s/@]+@\S+", re.I)
+_JWT = re.compile(r"\beyJ[\w-]{5,}\.[\w-]{5,}\.[\w-]*")
+_BEARER = re.compile(r"\b(?:Bearer|Basic)\s+[\w.~+/=-]{6,}", re.I)
+_KEY_VALUE = re.compile(
+    r"\b([\w-]*(?:password|passwd|pwd|secret|token|api[_-]?key|apikey|authorization|credential)[\w-]*)"
+    r"(\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^\s,;&]+)", re.I)
+_AWS = re.compile(r"\b(?:AKIA|ASIA|AGPA|AIDA|AROA|ANPA)[A-Z0-9]{12,}\b")
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+_EMAIL_OBFUSCATED = re.compile(
+    r"[\w.+-]+\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\{\s*at\s*\}|\s+at\s+)\s*[\w-]+"
+    r"(?:\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\{\s*dot\s*\}|\s+dot\s+|\.)\s*[\w-]+)+", re.I)
 _URL = re.compile(r"https?://\S+|www\.\S+")
 _SECRET = re.compile(r"\b(?:sk|pk|key|token|ghp|xox[a-z])[-_][A-Za-z0-9_-]{8,}\b|\b[A-Za-z0-9_-]{32,}\b")
+_LONG_RUN = re.compile(r"\b(?=[0-9A-Fa-f]*\d)[0-9A-Fa-f]{16,}\b")  # long digit or hex runs: ids, hashes, keys
 _NUMBER = re.compile(r"\+?\d[\d\s().-]{6,}\d")
 
 
 def sanitize(text: str) -> str:
-    """Replace emails, links, secret-looking tokens and long numbers (phones, cards, ids) with placeholders,
-    then cut to SAMPLE_CHARS. Names and free text cannot be recognised; the user is told that."""
+    """Replace emails (also written "a [at] b [dot] com"), links, connection strings, tokens, passwords and
+    other key=value secrets, cloud keys, JWTs and long numbers (phones, cards, ids) with placeholders, then
+    cut to SAMPLE_CHARS. Names, addresses and free text cannot be recognised; the user is told that."""
+    text = _CONNECTION.sub("[secret]", text)
+    text = _CREDENTIAL_URL.sub("[secret]", text)
+    text = _JWT.sub("[secret]", text)
+    text = _BEARER.sub("[secret]", text)
+    text = _KEY_VALUE.sub(lambda m: f"{m.group(1)}{m.group(2)}[secret]", text)
+    text = _AWS.sub("[secret]", text)
     text = _EMAIL.sub("[email]", text)
+    text = _EMAIL_OBFUSCATED.sub("[email]", text)
     text = _URL.sub("[link]", text)
     text = _SECRET.sub("[secret]", text)
+    text = _LONG_RUN.sub("[number]", text)
     text = _NUMBER.sub("[number]", text)
     return " ".join(text.split())[:SAMPLE_CHARS]
 
@@ -104,6 +127,12 @@ async def _claim(session: AsyncSession, job: Job, fp: str, version: str, setting
                                    .where(TaskSummary.attempted_at >= day))).scalar_one()
     if used >= settings.summary_daily_limit:
         log.info("task summary skipped: daily limit reached")
+        return False
+    mine = (await session.execute(
+        select(func.coalesce(func.sum(TaskSummary.attempts), 0)).join(Job, Job.job_id == TaskSummary.job_id)
+        .where(Job.project_id == job.project_id, TaskSummary.attempted_at >= day))).scalar_one()
+    if mine >= min(PROJECT_DAILY_LIMIT, settings.summary_daily_limit):
+        log.info("task summary skipped: this project's daily share is used")
         return False
     stmt = insert(TaskSummary).values(job_id=job.job_id, fingerprint=fp, prompt_version=version, attempts=1,
                                       attempted_at=now)
@@ -186,3 +215,13 @@ async def delete_summary(session: AsyncSession, job: Job) -> None:
     """Remove the stored text. A marker stays so the same samples are not summarised again; the caller commits."""
     await session.execute(update(TaskSummary).where(TaskSummary.job_id == job.job_id)
                           .values(summary=None, prompt_version=DELETED))
+
+
+async def delete_project_summaries(session: AsyncSession, project_id: str, job_ids=None) -> int:
+    """Delete every stored summary of a project (or only those of `job_ids`): they were written from prompt
+    text, so they go when consent is switched off or that text is removed. The caller commits."""
+    jobs = select(Job.job_id).where(Job.project_id == project_id)
+    if job_ids is not None:
+        jobs = jobs.where(Job.job_id.in_(list(job_ids)))
+    result = await session.execute(delete(TaskSummary).where(TaskSummary.job_id.in_(jobs)))
+    return result.rowcount or 0

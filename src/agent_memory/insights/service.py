@@ -114,6 +114,8 @@ class Breakdown:
 
 
 def _band(tokens_in: int) -> str:
+    """Band of the whole input size: uncached + cache reads + cache writes (F22), so a heavily cached
+    100k-token prompt is not 'under 8k'."""
     return next(name for name, low, high in BANDS if tokens_in >= low and (high is None or tokens_in < high))
 
 
@@ -136,7 +138,8 @@ async def job_insights(
     since = (now or datetime.now(UTC)) - timedelta(days=days)
     rows = (
         await session.execute(
-            select(Run.model, Run.model_version, Run.tokens_in, Run.prompt_version, Run.outcome, Run.cost_usd)
+            select(Run.model, Run.model_version, Run.tokens_in + Run.cache_read_tokens + Run.cache_write_tokens,
+                   Run.prompt_version, Run.outcome, Run.cost_usd)
             .where(Run.job_id == job.job_id, Run.outcome.in_(("PASS", "FAIL")), Run.invalid_at.is_(None),
                    Run.created_at >= since)
         )
@@ -146,7 +149,7 @@ async def job_insights(
     by_prompt: dict = {}
     for r in rows:
         model = family_key(r.model, r.model_version)
-        for groups, group in ((overall, "all"), (by_band, _band(r.tokens_in)),
+        for groups, group in ((overall, "all"), (by_band, _band(r[2])),
                               (by_prompt, r.prompt_version or "unversioned")):
             runs, passed, cost, priced = groups.get((model, group), (0, 0, 0.0, 0))
             known = r.cost_usd is not None

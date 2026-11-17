@@ -46,10 +46,13 @@ export interface TokenPeriods {
 }
 
 export function tokenPeriods(points: TokenPoint[], days: number, today: Date = new Date()): TokenPeriods {
-  const { cur, prev } = periods(points as DayPoint[], days, today);
+  const { cur, prev, curDone, prevDone } = periods(points as DayPoint[], days, today);
   const c = totals(cur as TokenPoint[]);
   const p = totals(prev as TokenPoint[]);
-  return { cur: c, prev: p, change: p.all > 0 ? (c.all - p.all) / p.all : null };
+  // The percent change compares completed days only: today is partial.
+  const cd = totals(curDone as TokenPoint[]);
+  const pd = totals(prevDone as TokenPoint[]);
+  return { cur: c, prev: p, change: pd.all > 0 ? (cd.all - pd.all) / pd.all : null };
 }
 
 /** True when any point carries token counts (older servers send none). */

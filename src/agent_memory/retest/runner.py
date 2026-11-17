@@ -278,6 +278,7 @@ async def run_retest(
             model_version=parsed.get("model_version") or model,
             tokens_in=parsed.get("tokens_in", 0), tokens_out=parsed.get("tokens_out", 0),
             cache_read_tokens=parsed.get("cache_read_tokens", 0), cache_write_tokens=parsed.get("cache_write_tokens", 0),
+            cache_write_1h_tokens=parsed.get("cache_write_1h_tokens", 0),
             latency_ms=latency, output=parsed.get("output"), expected=src.expected,
         )
         # Recording the run and releasing its reservation happen together, so the cap check never

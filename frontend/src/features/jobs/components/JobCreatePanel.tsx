@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,6 +8,7 @@ import { ApiError } from "../../../shared/api/apiFetch";
 import type { JobCreate } from "../../../shared/api/types";
 import { CHECK_KIND_LABELS } from "../checkKinds";
 import { jobTitle } from "../jobTitle";
+import { useModalFocus } from "../../../ui/useModalFocus";
 
 const jobFormSchema = z
   .object({
@@ -124,18 +125,7 @@ export function JobCreatePanel({
   const selectedKind = watch("check_kind");
   const typedName = (watch("name") ?? "").trim();
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    }
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isOpen, onClose]);
+  const dialogRef = useModalFocus<HTMLDivElement>(isOpen, onClose, "#job-name");
 
   const mutation = useMutation({
     mutationFn: (data: JobCreate) => createJob(data),
@@ -192,10 +182,12 @@ export function JobCreatePanel({
 
       {/* Slide-over Drawer */}
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="job-create-title"
-        className="relative z-50 flex h-full w-full max-w-3xl flex-col border-l border-rule bg-surface shadow-2xl overflow-y-auto"
+        className="relative z-50 flex h-full w-full max-w-3xl flex-col border-l border-rule bg-surface shadow-2xl overflow-y-auto focus:outline-none"
       >
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-rule bg-surface px-6 py-4">
@@ -321,6 +313,7 @@ export function JobCreatePanel({
                         <input
                           type="text"
                           placeholder="e.g. total"
+                          aria-label={`Field ${index + 1} to compare with the right answer`}
                           {...register(`fields.${index}.name` as const)}
                           className="flex-1 rounded-md border border-rule bg-surface px-2.5 py-1.5 text-xs text-ink placeholder:text-dim focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                         />

@@ -42,4 +42,12 @@ describe("promptHints", () => {
     expect(promptHints(g).find((h) => h.id === "cache-helping")!.text).toBe("Good: about 30% of what you send is already read from cache.");
     expect(ids(group({ cache_read_share: 0.29 }))).toEqual([]);
   });
+  it("a subscription gets allowance-neutral wording, per use is unchanged", () => {
+    const g = group({ repeated_start_share: 0.3, avg_tokens_in: 1000, avg_tokens_out: 1500 });
+    const sub = promptHints(g, "subscription").map((h) => h.text).join(" ");
+    expect(sub).toContain("Some providers count text they have already seen differently, so keeping the start of the prompt the same may help. We have not verified how your plan counts it.");
+    expect(sub).not.toMatch(/charge|cost|cheaper|\$/i);
+    expect(promptHints(g, "both")[0].text).toBe(promptHints(g)[0].text);
+    expect(promptHints(g)[0].text).toContain("Many providers charge much less");
+  });
 });

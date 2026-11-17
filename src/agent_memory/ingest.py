@@ -132,7 +132,8 @@ async def record_run(
     provider = body.provider.strip().lower() if body.provider else None
     price = await find_price(session, body.model, body.model_version, provider)
     if price is not None:
-        cost = compute_cost(price, body.tokens_in, body.tokens_out, body.cache_read_tokens, body.cache_write_tokens)
+        cost = compute_cost(price, body.tokens_in, body.tokens_out, body.cache_read_tokens, body.cache_write_tokens,
+                            body.cache_write_1h_tokens)
     else:
         # No catalog price and no cost sent: unknown, not free. Storing 0 would make the model win
         # every cost comparison.

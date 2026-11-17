@@ -8,6 +8,7 @@ import { setActiveProject, setApiKey } from "../shared/api/apiFetch";
 import { queryClient } from "../shared/api/queryClient";
 import { IconAlert, IconDollar, IconLogo, IconShield } from "../ui/icons";
 import { ThemeToggle } from "../ui/ThemeToggle";
+import { projectPath } from "../shared/projectPath";
 import { Button } from "../ui/primitives";
 
 function safeNext(next: string | null): string {
@@ -104,7 +105,7 @@ export default function SignIn() {
   const dev = Boolean(config.data?.dev_login);
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1.15fr_1fr]">
+    <main className="grid min-h-screen lg:grid-cols-[1.15fr_1fr]">
       <section className="relative hidden overflow-hidden border-r border-rule p-12 lg:flex lg:flex-col lg:justify-between">
         <div aria-hidden className="pointer-events-none absolute -left-40 top-1/3 h-[480px] w-[480px] rounded-full bg-accent/15 blur-3xl" />
         <div className="relative flex items-center justify-between gap-3">
@@ -181,11 +182,11 @@ export default function SignIn() {
           <p className="mt-8 border-t border-rule pt-5 text-xs text-muted">
             Have a project key? <Link to="/key" className="font-semibold text-accent hover:underline">Use it instead</Link>
             {config.data?.demo_project_id && (
-              <> or <Link to="/p/demo" className="font-semibold text-accent hover:underline">explore the demo</Link></>
+              <> or <Link to={projectPath("demo")} className="font-semibold text-accent hover:underline">explore the demo</Link></>
             )}
           </p>
         </motion.div>
       </section>
-    </div>
+    </main>
   );
 }

@@ -5,7 +5,8 @@ Behind several processes each would count on its own, so the limits would loosen
 
 - **Request rate** (`RateLimitMiddleware`): a token bucket per caller on `/v1/*` and `/auth/*`. A caller is
   its project key when it sends one (the SDK can send a burst of runs, so keys get a higher rate), and
-  otherwise its IP address (the web app, the demo, anyone probing). Over the limit: 429 with Retry-After.
+  otherwise its IP address (the web app, the demo, anyone probing). A request with a key is also counted
+  against its IP's keyed bucket, so inventing a new key per request gains nothing. Over the limit: 429 with Retry-After.
 - **Body size**: a request body over MAX_BODY_BYTES is refused with 413, whether or not it declares its
   length. Caddy refuses larger bodies first (deploy/Caddyfile); this covers a server without it.
 - **Runs per day** (`DailyRuns`): a project may record at most `runs_per_day_per_project` runs per UTC
@@ -103,6 +104,11 @@ class RateLimitMiddleware:
         rate = settings.rate_limit_key_per_minute if keyed else settings.rate_limit_ip_per_minute
         if rate > 0:
             wait = self.buckets.take(key, rate)
+            if keyed and wait == 0:
+                # The key is only claimed here (it is checked later, against the database), so a caller
+                # cannot get a fresh bucket by sending a new random key each time: every keyed request also
+                # spends from its IP's bucket, which allows the key rate (an SDK's burst) but no more.
+                wait = self.buckets.take("ipkeyed:" + client_ip(scope), rate)
             if wait > 0:
                 await _send_json(send, 429, "Too many requests; slow down and try again shortly",
                                  [(b"retry-after", str(max(1, math.ceil(wait))).encode())])

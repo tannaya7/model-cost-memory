@@ -77,12 +77,26 @@ body {
   color: transparent;
 }
 
+/* Small text and small button labels use a derived shade of the brand so they pass 4.5:1 (exact royal cyan stays for fills, charts, logo and large text). */
+.text-accent, .hover\:text-accent:hover, .focus-visible\:text-accent:focus-visible { color: var(--color-accent-ink); }
+.bg-accent.text-on-accent { background-color: var(--color-accent-fill); }
+
 /* A panel: one raised surface with a hairline and a faint top light. */
 .panel {
   background: linear-gradient(180deg, var(--panel-light), transparent 40%), var(--color-surface);
   border: 1px solid var(--color-rule);
   border-radius: var(--radius);
   box-shadow: var(--shadow-panel);
+}
+
+
+/* Sideways-scrolling areas show a soft edge where more content waits (hides itself at the ends). */
+.scroll-hint-x {
+  background:
+    linear-gradient(to right, var(--hint-bg, var(--color-surface)) 30%, transparent) left center / 36px 100% no-repeat local,
+    linear-gradient(to left, var(--hint-bg, var(--color-surface)) 30%, transparent) right center / 36px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(8, 20, 30, 0.16), transparent) left center / 12px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(8, 20, 30, 0.16), transparent) right center / 12px 100% no-repeat scroll;
 }
 
 /* Frosted glass, for cards that float over the landing scene. */
@@ -117,6 +131,10 @@ body::after {
 }
 
 /* The landing scene: the neon edges breathe and a few specks twinkle. */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 @keyframes scene-pulse {
   0%, 100% { opacity: 0.55; }
   50% { opacity: 1; }

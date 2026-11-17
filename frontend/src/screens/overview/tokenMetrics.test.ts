@@ -22,7 +22,7 @@ describe("tokenMetrics", () => {
     expect(r.change).toBeNull();
     const x = tokenPeriods(points, 5, today);
     expect(x.prev.all).toBe(1100);
-    expect(x.change).toBeCloseTo((5300 - 1100) / 1100);
+    expect(x.change).toBeCloseTo((3200 - 1100) / 1100); // completed days only: today (Nov 10) is partial
   });
   it("builds a daily series with empty days", () => {
     const rows = dailySeries(points, 3, today);

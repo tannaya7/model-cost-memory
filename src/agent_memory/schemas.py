@@ -212,6 +212,11 @@ class RunCreate(Model):
     tokens_out: int = Field(default=0, ge=0, le=MAX_TOKENS, description="Output tokens, thinking included")
     cache_read_tokens: int = Field(default=0, ge=0, le=MAX_TOKENS)
     cache_write_tokens: int = Field(default=0, ge=0, le=MAX_TOKENS)
+    cache_write_1h_tokens: int = Field(
+        default=0, ge=0, le=MAX_TOKENS,
+        description="The part of cache_write_tokens written to the 1-hour cache (priced higher than the "
+                    "5-minute cache). Used for the cost only; not stored",
+    )
     cost_usd: float | None = Field(
         default=None, ge=0, le=10_000,
         description="Used only when the model catalog has no price; otherwise the server computes it",
@@ -332,6 +337,26 @@ class RecommendationEvidence(Model):
     )
 
 
+class PromisingOut(Model):
+    """'Worth a trial': a cheaper model that looks close to the model in use but is not proven. Never advice."""
+
+    model: str
+    current: str = Field(description="The model in use that it was compared with")
+    gap_points: float = Field(description="Observed candidate minus model in use, in percentage points")
+    low_points: float = Field(description="Lower end of the range of that gap, in points (one-sided 95% bound)")
+    high_points: float = Field(description="Upper end of the range of that gap, in points")
+    more_needed: int | None = Field(
+        description="About this many more checked answers on the candidate before a switch could be recommended")
+
+
+class SureEnoughOut(Model):
+    """Stage 2 of the progress bar: checked answers per model before a switch could be recommended."""
+
+    needed: int | None = Field(
+        description="About this many per model, if today's observed rates held; null when it cannot be told")
+    have: float | None = Field(description="What the thinner of the two compared models has now")
+
+
 class RecommendationOut(Model):
     """The cheapest model that does this job properly, with the evidence behind it."""
 
@@ -354,6 +379,10 @@ class RecommendationOut(Model):
     warnings: list[str]
     next_step: str | None
     computed_at: datetime
+    promising: PromisingOut | None = Field(
+        default=None, description="Set only for HOLD, never together with a proven model; never counted as a saving")
+    sure_enough: SureEnoughOut | None = Field(
+        default=None, description="Set for INSUFFICIENT_EVIDENCE when two models can be compared")
 
 
 class SpendOut(Model):
@@ -367,8 +396,8 @@ class SpendOut(Model):
 class ForecastOut(Model):
     """What switching would change per month, if next month looks like the last 30 days."""
 
-    runs_per_month: int = Field(description="Production runs in the last 30 days")
-    monthly_saving_usd: float = Field(description="Negative means switching costs more")
+    runs_per_month: int = Field(description="Production runs in the last 30 days on the model in use (not the candidate), the volume the saving is priced on")
+    monthly_saving_usd: float = Field(description="Change of the monthly bill at the same call volume: runs_per_month x (average cost per call now - on the recommended model). Negative means switching costs more")
     extra_failures_per_month: float = Field(description="Negative means fewer failures")
     extra_failures_low: float = Field(description="Lower end of the interval, in failures per month")
     extra_failures_high: float
@@ -521,8 +550,13 @@ class DevLogin(Model):
     name: str | None = Field(default=None, max_length=100)
 
 
+BillingMode = Literal["per_use", "subscription", "both"]
+
+
 class ProjectOut(Model):
     project_id: str
+    slug: str = Field(description="Short readable name used in the web address (/p/production). "
+                                  "Stable and unique per owner; the API still takes project_id")
     name: str
     webhook_url: str | None
     webhook_secret: str | None = Field(description="Verify X-MCM-Signature on webhook payloads with it")
@@ -537,11 +571,15 @@ class ProjectOut(Model):
     store_tool_arguments: bool = Field(
         default=False, description="Whether this project keeps the inputs of tool calls (off by default; they can "
                                    "hold private data). Used only to notice an agent repeating the same step")
+    billing_mode: BillingMode = Field(
+        default="per_use", description="How this project pays for AI: per_use (each call costs money), "
+                                       "subscription (a flat fee with a usage allowance) or both")
     created_at: datetime
 
 
 class ProjectCreate(Model):
     name: str = Field(min_length=1, max_length=100)
+    billing_mode: BillingMode | None = Field(default=None, description="Optional; defaults to per_use")
 
 
 class ProjectCreated(Model):
@@ -561,6 +599,9 @@ class ProjectPatch(Model):
     content_retention_days: int | None = Field(
         default=None, ge=1, le=3650,
         description="Days a run keeps its prompt, output, tool calls and answer key (1 to 3650)")
+    billing_mode: BillingMode | None = Field(
+        default=None, description="How you pay for AI: per_use, subscription or both. Changes wording and which "
+                                  "alerts fire; no stored figure changes")
     store_tool_arguments: bool | None = Field(
         default=None, description="Keep the inputs of tool calls from now on (true) or stop storing new ones (false). "
                                   "Already-stored inputs stay until deleted or the retention period ends")
@@ -814,3 +855,38 @@ class PromptsOut(Model):
     days: int
     total_tokens: int
     groups: list[PromptGroupOut]
+
+
+class PromptVersionOut(Model):
+    label: str
+    kind: Literal["tagged", "detected", "untagged"]
+    first_seen: datetime
+    last_seen: datetime
+    calls: int
+    typical_tokens_in: float = Field(description="Median input tokens per call")
+    typical_tokens_out: float = Field(description="Median output tokens per call")
+    cache_read_share: float | None = Field(description="cache_read / (cache_read + tokens_in); null when both are 0")
+    priced_calls: int
+    unpriced_calls: int
+    cost_per_call: float | None = Field(description="List-price cost, priced calls only; null when none were priced")
+    checked: int = Field(description="Calls whose answer was checked (correct or wrong)")
+    correct_rate: float | None = Field(description="Null below 25 checked answers")
+    rate_low: float | None
+    rate_high: float | None
+    start_preview: str | None = Field(description="Detected versions only: the start of the prompt (120 characters)")
+
+
+class PromptComparisonOut(Model):
+    older: str
+    newer: str
+    side_by_side: bool = Field(description="True when the two versions' time ranges overlap")
+    summary: str = Field(description="Facts only; no verdict and no cause")
+
+
+class PromptVersionsOut(Model):
+    job: str
+    days: int
+    source: Literal["tagged", "detected", "none"]
+    reason: Literal["no_calls", "text_not_kept", "no_change", "unstable"] | None
+    versions: list[PromptVersionOut]
+    comparison: PromptComparisonOut | None

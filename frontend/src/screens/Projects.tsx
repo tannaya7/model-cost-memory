@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useLogout, useMe } from "../features/auth/hooks/useAuth";
 import { useProjects } from "../features/projects/hooks/useProjects";
+import { projectPath } from "../shared/projectPath";
 import { apiFetch } from "../shared/api/apiFetch";
 import type { Job, Project } from "../shared/api/types";
 import { count, shortDate } from "../ui/format";
@@ -46,15 +47,15 @@ function TopBar() {
 function ProjectCard({ project, jobs, index }: { project: Project; jobs: Job[] | undefined; index: number }) {
   const runs = jobs?.reduce((s, j) => s + j.run_count, 0);
   return (
-    <motion.li initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}>
+    <motion.li className="min-w-0" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}>
       <Link
-        to={`/p/${encodeURIComponent(project.project_id)}`}
+        to={projectPath(project)}
         className="panel group flex h-full flex-col gap-5 p-6 transition-all hover:-translate-y-0.5 hover:border-rule-strong"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-lg font-semibold tracking-tight text-ink">{project.name}</p>
-            <p className="mt-0.5 truncate font-mono text-xs text-muted">{project.project_id}</p>
+            <p className="truncate text-lg font-semibold tracking-tight text-ink" title={project.name}>{project.name}</p>
+            <p className="mt-0.5 text-xs text-muted">since {shortDate(project.created_at)}</p>
           </div>
           <IconArrowRight size={18} className="mt-1 shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-accent" />
         </div>
@@ -73,7 +74,6 @@ function ProjectCard({ project, jobs, index }: { project: Project; jobs: Job[] |
             <IconBell size={12} /> {project.webhook_url ? "Alerts to webhook" : "Alerts in app only"}
           </Pill>
           <Pill tone="neutral" icon={false}><IconShield size={12} /> Prompts kept {project.content_retention_days} d</Pill>
-          <span className="ml-auto text-xs text-muted">since {shortDate(project.created_at)}</span>
         </div>
       </Link>
     </motion.li>
@@ -99,8 +99,8 @@ export default function Projects() {
       <TopBar />
       <main className="mx-auto flex max-w-[1200px] flex-col gap-8 px-4 py-10 md:px-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
+          <div className="min-w-0">
+            <h1 className="text-3xl font-semibold tracking-tight [overflow-wrap:anywhere] md:text-4xl">
               {user?.name ? <>Welcome back, <span className="text-gradient">{user.name.split(" ")[0]}</span></> : "Your projects"}
             </h1>
             <p className="mt-1.5 text-dim">A project is one app or product that uses AI. Open one to see what it spends, how its answers are doing and how much you could save.</p>
@@ -109,7 +109,7 @@ export default function Projects() {
         </div>
 
         {projects.isPending ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-56" />)}</div>
+          <div role="status" className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"><span className="sr-only">Loading your projects…</span>{[0, 1, 2].map((i) => <Skeleton key={i} className="h-56" />)}</div>
         ) : projects.isError ? (
           <ErrorState error={projects.error} onRetry={() => projects.refetch()} />
         ) : (

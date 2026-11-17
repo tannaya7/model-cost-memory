@@ -66,6 +66,7 @@ const mockUiFlags: { tour_seen?: boolean; first_results_seen?: boolean } = {};
 const projects: Project[] = [
   {
     project_id: "00000000-0000-0000-0000-000000000001",
+    slug: "production",
     name: "production",
     webhook_url: "https://alerts.example.com/webhook",
     webhook_secret: "whsec_mock_secret",
@@ -73,11 +74,13 @@ const projects: Project[] = [
     retest_allowed: true,
     content_retention_days: 90,
     store_tool_arguments: false,
+    billing_mode: "per_use",
     key_prefix: "mcm_live_prod",
     created_at: "2026-09-01T00:00:00Z",
   },
   {
     project_id: "00000000-0000-0000-0000-000000000002",
+    slug: "staging",
     name: "staging",
     webhook_url: null,
     webhook_secret: "whsec_mock_secret",
@@ -85,13 +88,131 @@ const projects: Project[] = [
     retest_allowed: false,
     content_retention_days: 90,
     store_tool_arguments: false,
+    billing_mode: "subscription",
     key_prefix: "mcm_live_stag",
     created_at: "2026-09-15T00:00:00Z",
   },
+  {
+    project_id: "00000000-0000-0000-0000-000000000003",
+    slug: "research",
+    name: "research",
+    webhook_url: null,
+    webhook_secret: "whsec_mock_secret",
+    retest_monthly_cap_usd: 10,
+    retest_allowed: true,
+    content_retention_days: 90,
+    store_tool_arguments: false,
+    billing_mode: "both",
+    key_prefix: "mcm_live_rese",
+    created_at: "2026-10-01T00:00:00Z",
+  },
+  {
+    project_id: "00000000-0000-0000-0000-000000000004",
+    slug: "assistant",
+    name: "assistant",
+    webhook_url: null,
+    webhook_secret: "whsec_mock_secret",
+    retest_monthly_cap_usd: 10,
+    retest_allowed: true,
+    content_retention_days: 90,
+    store_tool_arguments: false,
+    billing_mode: "subscription",
+    key_prefix: "mcm_live_assi",
+    created_at: "2026-10-05T00:00:00Z",
+  },
 ];
 
+/** Same rules as the server: lowercase a-z, 0-9, single hyphens, 3 to 40 characters; -2, -3 on a clash. */
+const RESERVED_SLUGS = new Set(["new", "key", "use-key", "settings", "api", "admin", "www", "demo"]);
+function uniqueMockSlug(name: string): string {
+  const folded = name.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  let base = folded.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/g, "");
+  if (base.length < 3) base = "project";
+  let slug = base;
+  for (let n = 2; RESERVED_SLUGS.has(slug) || projects.some((p) => p.slug === slug); n++) slug = `${base.slice(0, 40 - String(n).length - 1).replace(/-+$/g, "")}-${n}`;
+  return slug;
+}
+
 // In-memory jobs list seeded from jobs.sample.json
-const jobs: Job[] = [...(initialJobs as Job[])];
+const extraJobs = [
+  { check_config: { fields: ["clauses"] }, check_kind: "ANSWER_KEY", description: "Summarise a contract in plain words", job_id: "00000000-0000-0000-0000-000000001004", name: "contract-summary", retest_consent: true, run_count: 640, runs_by_state: { CHECKED: 420, INDEXED: 220 } },
+  { check_config: { fields: ["category"] }, check_kind: "ANSWER_KEY", description: "Sort incoming email into folders", job_id: "00000000-0000-0000-0000-000000001005", name: "email-triage", retest_consent: true, run_count: 300, runs_by_state: { CHECKED: 140, INDEXED: 160 } },
+] as unknown as Job[];
+const jobs: Job[] = [...(initialJobs as Job[]), ...extraJobs];
+
+// One demo history for every screen. The project is 30 days old; every number a screen shows for a task
+// (calls on the AI tasks list, the task page, the spend list, the profile, the Overview) is a sum of
+// these rows, so the same task always shows the same count.
+const HISTORY_DAYS = 30;
+const hash01 = (key: string) => {
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619);
+  return ((h >>> 0) % 100000) / 100000;
+};
+type FixturePlan = { job: string; model: string; perDay: number; pass: number; cost: number; from: number; to: number; inTok: number; outTok: number; cache: number };
+// invoice-extract moves from acme-large to acme-mini three weeks ago; acme-large's new version dips for a week.
+const DAILY_PLAN: FixturePlan[] = [
+  { job: "invoice-extract", model: "acme-large", perDay: 120, pass: 0.975, cost: 0.031, from: HISTORY_DAYS, to: 21, inTok: 3400, outTok: 520, cache: 0.35 },
+  { job: "invoice-extract", model: "acme-large", perDay: 35, pass: 0.97, cost: 0.031, from: 21, to: 0, inTok: 3400, outTok: 520, cache: 0.35 },
+  { job: "invoice-extract", model: "acme-mini", perDay: 90, pass: 0.962, cost: 0.003, from: 21, to: 0, inTok: 3300, outTok: 480, cache: 0.5 },
+  { job: "invoice-extract", model: "acme-mini", perDay: 12, pass: 0.955, cost: 0.003, from: HISTORY_DAYS, to: 21, inTok: 3300, outTok: 480, cache: 0.5 },
+  { job: "ticket-classify", model: "mini", perDay: 18, pass: 0.88, cost: 0.0011, from: 14, to: 0, inTok: 900, outTok: 130, cache: 0 },
+  { job: "receipt-scan", model: "acme-mini", perDay: 26, pass: 0.985, cost: 0.0024, from: HISTORY_DAYS, to: 0, inTok: 1800, outTok: 260, cache: 0.2 },
+  { job: "contract-summary", model: "acme-large", perDay: 24, pass: 0.96, cost: 0.02, from: HISTORY_DAYS, to: 0, inTok: 2600, outTok: 420, cache: 0.3 },
+  { job: "email-triage", model: "acme-large", perDay: 14, pass: 0.9, cost: 0.012, from: HISTORY_DAYS, to: 0, inTok: 700, outTok: 60, cache: 0 },
+];
+type DailyRow = { d: number; day: string; job: string; model: string; runs: number; passed: number; failed: number; spend_usd: number; tokens_in: number; tokens_out: number; cache_read_tokens: number; cache_write_tokens: number; unpriced_runs: number; failed_spend_usd: number };
+function buildDailyFixture(): DailyRow[] {
+  const out: DailyRow[] = [];
+  const today = new Date();
+  for (let d = HISTORY_DAYS - 1; d >= 0; d--) {
+    const day = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - d)).toISOString().slice(0, 10);
+    const weekday = new Date(day).getUTCDay();
+    const merged = new Map<string, DailyRow>();
+    for (const p of DAILY_PLAN) {
+      if (d >= p.from || d < p.to) continue;
+      const r = (k: string) => hash01(`${p.job}|${p.model}|${p.from}|${d}|${k}`);
+      const runs = Math.round(p.perDay * (weekday === 0 || weekday === 6 ? 0.55 : 1) * (0.85 + r("n") * 0.3));
+      const dip = p.model === "acme-large" && p.job === "invoice-extract" && d < 12 && d >= 5 ? 0.06 : 0;
+      const rate = Math.min(0.999, p.pass - dip + (r("p") - 0.5) * 0.02);
+      const passed = Math.round(runs * rate);
+      const unknown = Math.round(runs * 0.01);
+      const failed = Math.max(0, runs - passed - unknown);
+      const inputTotal = Math.round(runs * p.inTok * (0.9 + r("i") * 0.2));
+      const cacheRead = Math.round(inputTotal * p.cache * (0.8 + r("c") * 0.4));
+      const key = `${p.job}|${p.model}`;
+      const prev = merged.get(key) ?? { d, day, job: p.job, model: p.model, runs: 0, passed: 0, failed: 0, spend_usd: 0, tokens_in: 0, tokens_out: 0, cache_read_tokens: 0, cache_write_tokens: 0, unpriced_runs: 0, failed_spend_usd: 0 };
+      merged.set(key, {
+        ...prev,
+        runs: prev.runs + runs,
+        passed: prev.passed + passed,
+        failed: prev.failed + failed,
+        spend_usd: Math.round((prev.spend_usd + runs * p.cost * (0.9 + r("s") * 0.2)) * 100) / 100,
+        tokens_in: prev.tokens_in + inputTotal - cacheRead,
+        tokens_out: prev.tokens_out + Math.round(runs * p.outTok * (0.9 + r("o") * 0.2)),
+        cache_read_tokens: prev.cache_read_tokens + cacheRead,
+        cache_write_tokens: prev.cache_write_tokens + (p.cache > 0 ? Math.round(inputTotal * 0.05) : 0),
+        // receipt-scan runs on a model with no listed price part of the time: those runs have no cost.
+        unpriced_runs: prev.unpriced_runs + (p.job === "receipt-scan" ? Math.round(runs * 0.05) : 0),
+        failed_spend_usd: Math.round((prev.failed_spend_usd + failed * p.cost * 1.15) * 100) / 100,
+      });
+    }
+    out.push(...merged.values());
+  }
+  return out;
+}
+const DAILY_FIXTURE = buildDailyFixture();
+function fixtureTotals(job: string) {
+  const mine = DAILY_FIXTURE.filter((r) => r.job === job);
+  const sum = (f: (r: DailyRow) => number) => mine.reduce((a, r) => a + f(r), 0);
+  return { calls: sum((r) => r.runs), spend: Math.round(sum((r) => r.spend_usd) * 100) / 100, checked: sum((r) => r.passed + r.failed), unpriced: sum((r) => r.unpriced_runs), tokensIn: sum((r) => r.tokens_in), tokensOut: sum((r) => r.tokens_out), cacheRead: sum((r) => r.cache_read_tokens), cacheWrite: sum((r) => r.cache_write_tokens) };
+}
+// The AI tasks list reads its call counts from the same history.
+for (const j of jobs) {
+  const t = fixtureTotals(j.name);
+  j.run_count = t.calls;
+  j.runs_by_state = t.calls ? { CHECKED: Math.min(t.checked, t.calls), INDEXED: Math.max(0, t.calls - t.checked) } : {};
+}
 const retests = new Map<string, RetestStatus>();
 let mockProviderKey: RetestLimits["provider_key"] = null;
 
@@ -535,7 +656,8 @@ export const handlers = [
         progress: 0.44,
         retest_candidates: [],
         warnings: [],
-        next_step: "Record more runs, or run a re-test to gather evidence sooner",
+        next_step: "Record more AI calls, or start a trial to gather evidence sooner",
+        sure_enough: { needed: 380, have: 11 },
       };
       return HttpResponse.json(rec);
     }
@@ -558,6 +680,30 @@ export const handlers = [
       return HttpResponse.json(rec);
     }
 
+    if (jobName === "contract-summary" || jobName === "email-triage") {
+      // Same two models for both: the one in use, and a cheaper one. contract-summary is "worth a trial"
+      // (close, not proven); email-triage is plainly unsure (the cheaper model may be a lot worse).
+      const big = { ...base.models[0], model: "acme-large", model_version: "acme-large-2026-09", n_runs: 420, failures: 17, evidence_weight: 300, effective_n: 280, weighted_pass_rate: 0.96, pass_rate_low: 0.93, pass_rate_high: 0.977, mean_cost_usd: 0.03, cost_per_success_usd: 0.03125, status: "GOOD_ENOUGH" as const, eligible: true, why: "Highest pass rate we can be sure of" };
+      const promisingJob = jobName === "contract-summary";
+      const small = { ...base.models[1], model: "acme-mini", model_version: "acme-mini-2026-09", n_runs: promisingJob ? 260 : 120, failures: promisingJob ? 12 : 14, evidence_weight: promisingJob ? 190 : 100, effective_n: promisingJob ? 180 : 90, weighted_pass_rate: promisingJob ? 0.953 : 0.883, pass_rate_low: promisingJob ? 0.91 : 0.81, pass_rate_high: promisingJob ? 0.977 : 0.93, mean_cost_usd: 0.002, cost_per_success_usd: promisingJob ? 0.0021 : 0.00227, status: "UNSURE" as const, eligible: false, why: "Not yet sure it is within 3 points of acme-large, the model in use; a trial would settle it" };
+      const rec: Recommendation = {
+        ...base,
+        job: jobName,
+        verdict: "HOLD",
+        current: { model: big.model, model_version: big.model_version },
+        recommended: { model: big.model, model_version: big.model_version },
+        reference: big.model,
+        models: [big, small],
+        evidence: { n_runs: big.n_runs + small.n_runs, evidence_weight: 490, floor: 25, failing_runs: [] },
+        retest_candidates: [small.model],
+        forecast: null,
+        warnings: [`Not yet sure ${small.model} is within 3 points of ${big.model}, the model in use; a trial of ${small.model} would settle it`],
+        next_step: `Try ${small.model} in a trial: not enough evidence yet`,
+        promising: promisingJob ? { model: small.model, current: big.model, gap_points: -0.7, low_points: -4.8, high_points: 2.1, more_needed: 340 } : null,
+      };
+      return HttpResponse.json(rec);
+    }
+
     return HttpResponse.json({ detail: "Job not found" }, { status: 404 });
   }),
 
@@ -573,7 +719,7 @@ export const handlers = [
       return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
     }
     const name = decodeURIComponent(String(params.job));
-    const calls = runs.filter((r) => r.job === name).length;
+    const calls = fixtureTotals(name).calls;
     const summary = {
       state: !summaryConsent ? "off" : summaryDeleted ? "deleted" : "ready",
       text: summaryConsent && !summaryDeleted
@@ -642,11 +788,12 @@ export const handlers = [
       return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
     }
 
-    const spendData: SpendInsight[] = [
-      { job: "invoice-extract", runs: 964, spend_usd: 18.42, share: 0.785, unpriced_runs: 0 },
-      { job: "ticket-classify", runs: 120, spend_usd: 3.85, share: 0.164, unpriced_runs: 0 },
-      { job: "receipt-scan", runs: 180, spend_usd: 1.18, share: 0.051, unpriced_runs: 12 },
-    ];
+    const names = [...new Set(DAILY_FIXTURE.map((r) => r.job))];
+    const grand = names.reduce((acc, n) => acc + fixtureTotals(n).spend, 0);
+    const spendData: SpendInsight[] = names
+      .map((n) => ({ job: n, t: fixtureTotals(n) }))
+      .sort((x, y) => y.t.spend - x.t.spend)
+      .map(({ job, t }) => ({ job, runs: t.calls, spend_usd: t.spend, share: grand ? Math.round((t.spend / grand) * 1000) / 1000 : 0, unpriced_runs: t.unpriced }));
 
     return HttpResponse.json(spendData);
   }),
@@ -796,6 +943,46 @@ export const handlers = [
     });
   }),
 
+  // GET /v1/insights/prompt-versions: one task's prompt versions side by side.
+  http.get("/v1/insights/prompt-versions", async ({ request }) => {
+    await delay(250);
+    const url = new URL(request.url);
+    const job = url.searchParams.get("job") ?? "";
+    const days = Number(url.searchParams.get("days") ?? 30);
+    const v = (label: string, kind: "tagged" | "detected", from: number, to: number, o: Record<string, unknown>) => ({
+      label, kind, first_seen: new Date(Date.now() - from * 86_400_000).toISOString(), last_seen: new Date(Date.now() - to * 86_400_000).toISOString(),
+      calls: 0, typical_tokens_in: 0, typical_tokens_out: 0, cache_read_share: null, priced_calls: 0, unpriced_calls: 0, cost_per_call: null,
+      checked: 0, correct_rate: null, rate_low: null, rate_high: null, start_preview: null, ...o,
+    });
+    if (job === "receipt-scan") {
+      return HttpResponse.json({
+        job, days, source: "tagged", reason: null,
+        versions: [
+          v("Version v1", "tagged", 28, 1, { calls: Math.round(fixtureTotals("receipt-scan").calls * 0.64), typical_tokens_in: 1840, typical_tokens_out: 210, cache_read_share: 0.41, priced_calls: Math.round(fixtureTotals("receipt-scan").calls * 0.64), cost_per_call: 0.0123, checked: 120, correct_rate: 0.93, rate_low: 0.87, rate_high: 0.96 }),
+          v("Version v2", "tagged", 20, 0, { calls: fixtureTotals("receipt-scan").calls - Math.round(fixtureTotals("receipt-scan").calls * 0.64), typical_tokens_in: 1250, typical_tokens_out: 205, cache_read_share: 0.12, priced_calls: Math.round((fixtureTotals("receipt-scan").calls - Math.round(fixtureTotals("receipt-scan").calls * 0.64)) * 0.83), unpriced_calls: (fixtureTotals("receipt-scan").calls - Math.round(fixtureTotals("receipt-scan").calls * 0.64)) - Math.round((fixtureTotals("receipt-scan").calls - Math.round(fixtureTotals("receipt-scan").calls * 0.64)) * 0.83), cost_per_call: 0.0118, checked: 75, correct_rate: 0.92, rate_low: 0.84, rate_high: 0.96 }),
+        ],
+        comparison: {
+          older: "Version v1", newer: "Version v2", side_by_side: true,
+          summary: "Version v2 sends about 32% fewer input tokens than Version v1. It gets back about the same output tokens. The cached share went down from 41% to 12%. The list-price cost per call is about the same. Correct answers look about the same, but only 75 were checked.",
+        },
+      });
+    }
+    if (job === "invoice-extract") {
+      return HttpResponse.json({
+        job, days, source: "detected", reason: null,
+        versions: [
+          v("Detected version 1", "detected", 29, 12, { calls: Math.round(fixtureTotals("invoice-extract").calls * 0.53), typical_tokens_in: 1900, typical_tokens_out: 140, cache_read_share: 0, priced_calls: Math.round(fixtureTotals("invoice-extract").calls * 0.53), cost_per_call: 0.0061, checked: 18, start_preview: "You are an accounting assistant. Read the invoice below and return the vendor, invoice number, date and total as JSON." }),
+          v("Detected version 2", "detected", 12, 0, { calls: fixtureTotals("invoice-extract").calls - Math.round(fixtureTotals("invoice-extract").calls * 0.53), typical_tokens_in: 2350, typical_tokens_out: 190, cache_read_share: 0, priced_calls: fixtureTotals("invoice-extract").calls - Math.round(fixtureTotals("invoice-extract").calls * 0.53), cost_per_call: 0.0079, checked: 14, start_preview: "You are an accounting assistant. Read the invoice carefully, think step by step, then return the vendor, invoice number, date and total as JSON." }),
+        ],
+        comparison: {
+          older: "Detected version 1", newer: "Detected version 2", side_by_side: false,
+          summary: "Detected version 2 sends about 24% more input tokens than Detected version 1. It gets back about 36% more output tokens. The list-price cost per call is about 30% higher. There are not enough checked answers yet to compare correct answers.",
+        },
+      });
+    }
+    return HttpResponse.json({ job, days, source: "none", reason: "no_change", versions: [], comparison: null });
+  }),
+
   // GET /v1/insights/prompts: the prompts that use the most tokens, and how much of each is the same every call.
   http.get("/v1/insights/prompts", async ({ request }) => {
     await delay(250);
@@ -804,9 +991,9 @@ export const handlers = [
     const limit = Math.min(10, Math.max(1, Number(url.searchParams.get("limit") ?? 3)));
     const days = Number(url.searchParams.get("days") ?? 30);
     const all = [
-      { job: "invoice-extract", prompt_version: null, calls: 2840, tokens_in: 5_210_000, tokens_out: 690_000, cache_read_tokens: 0, cache_write_tokens: 0, text_samples: 50, repeated_start_share: 0.62, repeated_end_share: 0.05, repeated_start_preview: "You are an accounting assistant. Read the invoice below and return the vendor, invoice number, date and total as JSON…" },
-      { job: "receipt-scan", prompt_version: "v2", calls: 640, tokens_in: 910_000, tokens_out: 210_000, cache_read_tokens: 380_000, cache_write_tokens: 40_000, text_samples: 50, repeated_start_share: 0.18, repeated_end_share: 0.36, repeated_start_preview: null },
-      { job: "ticket-classify", prompt_version: null, calls: 3100, tokens_in: 620_000, tokens_out: 95_000, cache_read_tokens: 0, cache_write_tokens: 0, text_samples: 3, repeated_start_share: null, repeated_end_share: null, repeated_start_preview: null },
+      { job: "invoice-extract", prompt_version: null, calls: fixtureTotals("invoice-extract").calls, tokens_in: fixtureTotals("invoice-extract").calls * 1835, tokens_out: fixtureTotals("invoice-extract").calls * 243, cache_read_tokens: 0, cache_write_tokens: 0, text_samples: 50, repeated_start_share: 0.62, repeated_end_share: 0.05, repeated_start_preview: "You are an accounting assistant. Read the invoice below and return the vendor, invoice number, date and total as JSON…" },
+      { job: "receipt-scan", prompt_version: "v2", calls: fixtureTotals("receipt-scan").calls, tokens_in: fixtureTotals("receipt-scan").calls * 1422, tokens_out: fixtureTotals("receipt-scan").calls * 328, cache_read_tokens: fixtureTotals("receipt-scan").calls * 594, cache_write_tokens: fixtureTotals("receipt-scan").calls * 62, text_samples: 50, repeated_start_share: 0.18, repeated_end_share: 0.36, repeated_start_preview: null },
+      { job: "ticket-classify", prompt_version: null, calls: fixtureTotals("ticket-classify").calls, tokens_in: fixtureTotals("ticket-classify").calls * 200, tokens_out: fixtureTotals("ticket-classify").calls * 31, cache_read_tokens: 0, cache_write_tokens: 0, text_samples: 3, repeated_start_share: null, repeated_end_share: null, repeated_start_preview: null },
     ].map((g) => ({ ...g, total_tokens: g.tokens_in + g.tokens_out + g.cache_read_tokens + g.cache_write_tokens }));
     const total = all.reduce((sum, g) => sum + g.total_tokens, 0);
     const groups = all
@@ -831,55 +1018,9 @@ export const handlers = [
       return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
     }
     const url = new URL(request.url);
-    const days = Number(url.searchParams.get("days") ?? 60);
+    const days = Number(url.searchParams.get("days") ?? 30);
     const onlyJob = url.searchParams.get("job");
-    let seed = 7;
-    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    const plan: Array<{ job: string; model: string; perDay: number; pass: number; cost: number; from: number; to: number; inTok: number; outTok: number; cache: number }> = [
-      { job: "invoice-extract", model: "acme-large", perDay: 120, pass: 0.975, cost: 0.031, from: days, to: 21, inTok: 3400, outTok: 520, cache: 0.35 },
-      { job: "invoice-extract", model: "acme-large", perDay: 35, pass: 0.97, cost: 0.031, from: 21, to: 0, inTok: 3400, outTok: 520, cache: 0.35 },
-      { job: "invoice-extract", model: "acme-mini", perDay: 90, pass: 0.962, cost: 0.003, from: 21, to: 0, inTok: 3300, outTok: 480, cache: 0.5 },
-      { job: "invoice-extract", model: "acme-mini", perDay: 12, pass: 0.955, cost: 0.003, from: 45, to: 21, inTok: 3300, outTok: 480, cache: 0.5 },
-      { job: "ticket-classify", model: "mini", perDay: 18, pass: 0.88, cost: 0.0011, from: 14, to: 0, inTok: 900, outTok: 130, cache: 0 },
-      { job: "receipt-scan", model: "acme-mini", perDay: 26, pass: 0.985, cost: 0.0024, from: days, to: 0, inTok: 1800, outTok: 260, cache: 0.2 },
-    ];
-    const out: Array<{ day: string; job: string; model: string; runs: number; passed: number; failed: number; spend_usd: number; tokens_in: number; tokens_out: number; cache_read_tokens: number; cache_write_tokens: number; unpriced_runs: number; failed_spend_usd: number }> = [];
-    const today = new Date();
-    for (let d = days - 1; d >= 0; d--) {
-      const day = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - d)).toISOString().slice(0, 10);
-      const merged = new Map<string, { runs: number; passed: number; failed: number; spend_usd: number; tokens_in: number; tokens_out: number; cache_read_tokens: number; cache_write_tokens: number; unpriced_runs: number; failed_spend_usd: number }>();
-      for (const p of plan) {
-        if (d >= p.from || d < p.to || (onlyJob && p.job !== onlyJob)) continue;
-        const weekday = new Date(day).getUTCDay();
-        const runs = Math.round(p.perDay * (weekday === 0 || weekday === 6 ? 0.55 : 1) * (0.85 + rand() * 0.3));
-        const dip = p.model === "acme-large" && d < 12 && d >= 5 ? 0.06 : 0;
-        const rate = Math.min(0.999, p.pass - dip + (rand() - 0.5) * 0.02);
-        const passed = Math.round(runs * rate);
-        const unknown = Math.round(runs * 0.01);
-        const key = `${p.job}|${p.model}`;
-        const prev = merged.get(key) ?? { runs: 0, passed: 0, failed: 0, spend_usd: 0, tokens_in: 0, tokens_out: 0, cache_read_tokens: 0, cache_write_tokens: 0, unpriced_runs: 0, failed_spend_usd: 0 };
-        const inputTotal = Math.round(runs * p.inTok * (0.9 + rand() * 0.2));
-        const cacheRead = Math.round(inputTotal * p.cache * (0.8 + rand() * 0.4));
-        merged.set(key, {
-          runs: prev.runs + runs,
-          passed: prev.passed + passed,
-          failed: prev.failed + Math.max(0, runs - passed - unknown),
-          spend_usd: Math.round((prev.spend_usd + runs * p.cost * (0.9 + rand() * 0.2)) * 100) / 100,
-          tokens_in: prev.tokens_in + inputTotal - cacheRead,
-          tokens_out: prev.tokens_out + Math.round(runs * p.outTok * (0.9 + rand() * 0.2)),
-          cache_read_tokens: prev.cache_read_tokens + cacheRead,
-          cache_write_tokens: prev.cache_write_tokens + (p.cache > 0 ? Math.round(inputTotal * 0.05) : 0),
-          // receipt-scan runs on a model with no listed price part of the time: those runs have no cost.
-          unpriced_runs: prev.unpriced_runs + (p.job === "receipt-scan" ? Math.round(runs * 0.05) : 0),
-          // what the failed answers actually cost (a failed answer tends to be a longer, dearer one)
-          failed_spend_usd: Math.round((prev.failed_spend_usd + Math.max(0, runs - passed - unknown) * p.cost * 1.15) * 100) / 100,
-        });
-      }
-      for (const [key, v] of merged) {
-        const [job, model] = key.split("|");
-        out.push({ day, job, model, ...v });
-      }
-    }
+    const out = DAILY_FIXTURE.filter((r) => r.d < days && (!onlyJob || r.job === onlyJob)).map(({ d: _d, ...row }) => row);
     return HttpResponse.json(isEmptyProject(request) ? [] : out);
   }),
 
@@ -982,7 +1123,7 @@ export const handlers = [
             suggested: "sonnet-5@low",
             share_of_use: 0.72,
             reduction: 0.81,
-            note: "Shown within 3 points of opus-5-5@medium at 99% confidence; it uses 81% less of this limit per run",
+            note: "Shown within 3 points of opus-5-5@medium with very high confidence (about 99.5%, one-sided); it uses 81% less of this limit per run",
           },
         ],
         hours_to_full_after: null,
@@ -1240,8 +1381,11 @@ export const handlers = [
     if (!isMockSignedIn(request)) {
       return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
     }
-    const body = (await request.json().catch(() => ({}))) as { name?: string };
+    const body = (await request.json().catch(() => ({}))) as { name?: string; billing_mode?: string };
     const name = (body.name || "").trim();
+    if (body.billing_mode !== undefined && !["per_use", "subscription", "both"].includes(body.billing_mode)) {
+      return HttpResponse.json({ detail: "billing_mode must be per_use, subscription or both" }, { status: 422 });
+    }
     if (name.length < 1 || name.length > 60) {
       return HttpResponse.json(
         { detail: "Name must be between 1 and 60 characters" },
@@ -1252,6 +1396,7 @@ export const handlers = [
     const keyPrefix = apiKey.slice(0, 12);
     const newProject: Project = {
       project_id: crypto.randomUUID(),
+      slug: uniqueMockSlug(name),
       name,
       webhook_url: null,
       webhook_secret: "whsec_mock_secret",
@@ -1259,6 +1404,7 @@ export const handlers = [
       retest_allowed: true,
       content_retention_days: 90,
       store_tool_arguments: false,
+      billing_mode: (body.billing_mode as Project["billing_mode"]) ?? "per_use",
       key_prefix: keyPrefix,
       created_at: new Date().toISOString(),
     };
@@ -1284,7 +1430,12 @@ export const handlers = [
       retest_allowed?: boolean;
       content_retention_days?: number;
       store_tool_arguments?: boolean;
+      billing_mode?: string | null;
+      monthly_budget_usd?: number | null;
     };
+    if (body.monthly_budget_usd !== undefined) {
+      (project as unknown as { monthly_budget_usd: number | null }).monthly_budget_usd = body.monthly_budget_usd;
+    }
     if (body.name !== undefined) {
       const name = body.name.trim();
       if (name.length < 1 || name.length > 60) {
@@ -1333,6 +1484,12 @@ export const handlers = [
         return HttpResponse.json({ detail: "store_tool_arguments must be true or false" }, { status: 422 });
       }
       project.store_tool_arguments = body.store_tool_arguments;
+    }
+    if (body.billing_mode !== undefined && body.billing_mode !== null) {
+      if (!["per_use", "subscription", "both"].includes(body.billing_mode)) {
+        return HttpResponse.json({ detail: "billing_mode must be per_use, subscription or both" }, { status: 422 });
+      }
+      project.billing_mode = body.billing_mode as Project["billing_mode"];
     }
     return HttpResponse.json(project);
   }),

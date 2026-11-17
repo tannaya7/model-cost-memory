@@ -6,7 +6,7 @@ import type { Model, Recommendation } from "../../shared/api/types";
 import { ChartFrame, TooltipCard } from "../../ui/charts/ChartFrame";
 import { pct, usd } from "../../ui/format";
 import { estimateRunCost, untestedModels } from "./suggest";
-import { isTooFew, TOO_FEW_LABEL, UNTESTED_LABEL, wilsonFromRate } from "./wilson";
+import { rangeOf, tooFewFor, TOO_FEW_LABEL, UNTESTED_LABEL, type ApiEvidence } from "./wilson";
 
 interface Pt {
   model: string;
@@ -14,6 +14,7 @@ interface Pt {
   y: number;
   tested: boolean;
   runs?: number;
+  api?: ApiEvidence;
 }
 
 
@@ -28,9 +29,9 @@ function Dot(props: { cx?: number; cy?: number; payload?: Pt }) {
 }
 
 /** "81.0% (72% to 88%)", or the plain too-few label when under about 30 checked answers. */
-function rateWithRange(rate: number, n: number | undefined): string {
-  if (isTooFew(n)) return `${pct(rate)}. ${TOO_FEW_LABEL}`;
-  const ci = wilsonFromRate(rate, n);
+function rateWithRange(rate: number, n: number | undefined, api?: ApiEvidence): string {
+  if (tooFewFor(n, api)) return `${pct(rate)}. ${TOO_FEW_LABEL}`;
+  const ci = rangeOf(rate, n, api);
   return ci ? `${pct(rate)} (${pct(ci.low, 0)} to ${pct(ci.high, 0)})` : pct(rate);
 }
 
@@ -39,7 +40,9 @@ export function CompareChart({
   catalog,
   avgTokens,
   providers,
+  listPrice = false,
 }: {
+  listPrice?: boolean;
   rec: Recommendation;
   catalog: Model[];
   avgTokens: { in: number; out: number } | null;
@@ -49,7 +52,7 @@ export function CompareChart({
   const providerOf = (model: string) => catalog.find((c) => c.model === model || c.model.startsWith(model))?.provider;
   const tested: Pt[] = rec.models
     .filter((m) => m.cost_per_success_usd && m.weighted_pass_rate !== null && okProvider(providerOf(m.model)))
-    .map((m) => ({ model: m.model, x: (m.cost_per_success_usd as number) * 1000, y: m.weighted_pass_rate as number, tested: true, runs: m.n_runs }));
+    .map((m) => ({ model: m.model, x: (m.cost_per_success_usd as number) * 1000, y: m.weighted_pass_rate as number, tested: true, runs: m.n_runs, api: m }));
   const reference = rec.models.find((m) => m.model === rec.reference);
   const floor = reference?.weighted_pass_rate != null ? reference.weighted_pass_rate - rec.rules.margin : null;
   const lower = Math.max(0, Math.floor((Math.min(...tested.map((p) => p.y), floor ?? 1) - 0.06) * 20) / 20);
@@ -70,19 +73,19 @@ export function CompareChart({
   const useLog = allPositive && xMax / xMin > 8;
 
   const rows = [
-    ...tested.map((p) => [p.model, "Measured", usd(p.x), rateWithRange(p.y, p.runs), `${p.runs?.toLocaleString("en")} checked answers`]),
+    ...tested.map((p) => [p.model, "Measured", usd(p.x), rateWithRange(p.y, p.runs, p.api), `${p.runs?.toLocaleString("en")} checked answers`]),
     ...untested.map((p) => [p.model, "Estimate", usd(p.x), UNTESTED_LABEL, "none yet"]),
   ];
 
   return (
     <ChartFrame
       title="Cost against quality"
-      hint="Each dot is a model. Further left is cheaper, higher is more correct answers. Filled dots were measured on this AI task. Hollow dots have not been used on it: their cost is an estimate from list prices and we have not tested how many answers they get right."
+      hint="Left is cheaper, higher is more correct answers. Filled dots were measured; hollow dots are estimates from list prices, not tested."
       legend={[
         { name: "Measured on this AI task", color: "var(--color-accent)" },
         { name: "Not tested (estimated cost)", color: "var(--color-dim)", dashed: true },
       ]}
-      table={{ columns: ["Model", "Source", "Cost per 1,000 answers", "Correct answers", "Checked answers"], rows }}
+      table={{ columns: ["Model", "Source", listPrice ? "List price per 1,000 answers" : "Cost per 1,000 answers", "Correct answers", "Checked answers"], rows }}
     >
       <div style={{ height: 320 }} className="w-full">
         <ResponsiveContainer>
@@ -99,7 +102,7 @@ export function CompareChart({
               tick={{ fill: "var(--chart-tick)", fontSize: 11 }}
               axisLine={{ stroke: "var(--chart-axis)" }}
               tickLine={false}
-              label={{ value: "cost per 1,000 answers (cheaper to the left)", position: "insideBottom", offset: -16, fill: "var(--chart-tick)", fontSize: 11 }}
+              label={{ value: listPrice ? "list price per 1,000 answers, not your bill (further left uses less)" : "cost per 1,000 answers (cheaper to the left)", position: "insideBottom", offset: -16, fill: "var(--chart-tick)", fontSize: 11 }}
             />
             <YAxis
               type="number"
@@ -126,12 +129,12 @@ export function CompareChart({
                     rows={
                       p.tested
                         ? [
-                            { label: "Cost per 1,000 good answers", value: usd(p.x) },
-                            { label: "Correct answers", value: rateWithRange(p.y, p.runs) },
+                            { label: listPrice ? "List price per 1,000 good answers" : "Cost per 1,000 good answers", value: usd(p.x) },
+                            { label: "Correct answers", value: rateWithRange(p.y, p.runs, p.api) },
                             { label: "Checked answers", value: p.runs?.toLocaleString("en") ?? "–" },
                           ]
                         : [
-                            { label: "Estimated cost per 1,000 answers", value: usd(p.x) },
+                            { label: listPrice ? "Estimated list price per 1,000 answers" : "Estimated cost per 1,000 answers", value: usd(p.x) },
                             { label: "Correct answers", value: UNTESTED_LABEL },
                           ]
                     }
@@ -144,12 +147,12 @@ export function CompareChart({
           </ScatterChart>
         </ResponsiveContainer>
       </div>
-      <div className="overflow-auto rounded-[12px] border border-rule">
+      <div className="scroll-hint-x overflow-auto rounded-[12px] border border-rule">
         <table className="w-full border-collapse text-left text-xs">
           <thead className="bg-surface-2">
             <tr>
-              {["Model", "Source", "Cost per 1,000 answers", "Correct answers", "Checked answers"].map((c) => (
-                <th key={c} className="px-3 py-2 font-semibold uppercase tracking-wider text-muted">{c}</th>
+              {["Model", "Source", listPrice ? "List price per 1,000 answers" : "Cost per 1,000 answers", "Correct answers", "Checked answers"].map((c) => (
+                <th key={c} className={`${c === "Source" ? "hidden sm:table-cell " : ""}whitespace-nowrap px-3 py-2 font-semibold uppercase tracking-wider text-muted${c.includes("per 1,000") ? " text-right" : ""}`}>{c}</th>
               ))}
             </tr>
           </thead>
@@ -157,7 +160,7 @@ export function CompareChart({
             {rows.map((r, i) => (
               <tr key={i} className="border-t border-rule">
                 {r.map((cell, j) => (
-                  <td key={j} className={j === 0 ? "px-3 py-1.5 font-mono text-ink" : "px-3 py-1.5 text-dim"}>{cell}</td>
+                  <td key={j} className={j === 0 ? "whitespace-nowrap px-3 py-1.5 font-mono text-ink" : j === 1 ? "hidden px-3 py-1.5 text-dim sm:table-cell" : j === 2 ? "whitespace-nowrap px-3 py-1.5 text-right text-dim" : "px-3 py-1.5 text-dim"}>{cell}{j === 0 && <span className="block font-sans text-[10px] text-muted sm:hidden">{r[1]}</span>}</td>
                 ))}
               </tr>
             ))}

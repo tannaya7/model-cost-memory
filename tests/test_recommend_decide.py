@@ -1,5 +1,6 @@
 """The verdict rules, without a database. Model names and prices are made up."""
 
+import pytest
 from datetime import date
 
 from agent_memory.recommend.engine import ModelInput, decide
@@ -127,10 +128,11 @@ def test_advising_a_switch_needs_99_percent_and_keeping_the_advice_needs_95():
     new = decide(evidence, "big", **RULES, switch_confidence=0.99)
     assert (new.verdict, new.recommended.model) == ("HOLD", "big")
     assert new.warnings == ["mini is likely within 3 points of big, the model in use, but advising a switch needs "
-                            "99% confidence; a re-test of mini would settle it"]
+                            "very high confidence (about 99.5%, one-sided); a re-test of mini would settle it"]
     assert new.retest_candidates == ["mini"]
     assert (by_name(new)["mini"].status, by_name(new)["mini"].eligible) == ("UNSURE", False)
-    assert by_name(new)["mini"].why == ("Within 3 points of big at 95%, not yet at the 99% a switch needs; "
+    assert by_name(new)["mini"].why == ("Within 3 points of big with high confidence (about 97.5%, one-sided), not yet the "
+                                        "very high confidence (about 99.5%, one-sided) a switch needs; "
                                         "a re-test would settle it")
 
     kept = decide(evidence, "big", **RULES, switch_confidence=0.99, advised="mini")
@@ -144,3 +146,41 @@ def test_advising_a_switch_needs_99_percent_and_keeping_the_advice_needs_95():
 def test_a_switch_confidence_no_higher_than_the_confidence_changes_nothing():
     evidence = [model("big", 0.99, 400, 0.03), model("mini", 0.98, 400, 0.001)]
     assert decide(evidence, "big", **RULES, switch_confidence=0.95).verdict == "DOWNGRADE"
+
+
+def test_f8_no_downgrade_when_the_model_in_use_has_no_price():
+    d = decide([model("cur", 0.95, 600, None), model("cheap", 0.95, 600, 0.001)], "cur", **RULES)
+    assert d.verdict == "HOLD" and d.recommended.model == "cur"
+    assert any("No price is known for cur" in w for w in d.warnings)
+
+
+def test_f11_a_negligible_saving_is_not_advised():
+    d = decide([model("cur", 0.99, 3000, 0.0100000), model("cheap", 0.99, 3000, 0.0099999)], "cur", **RULES)
+    assert d.verdict == "HOLD"
+    d2 = decide([model("cur", 0.99, 3000, 0.01), model("cheap", 0.99, 3000, 0.009)], "cur", **RULES)
+    assert d2.verdict == "DOWNGRADE"
+
+
+def test_f12_a_single_model_that_fails_everything_gets_the_right_warning():
+    d = decide([model("only", 0.0, 100, 0.01)], "only", **RULES)
+    assert d.verdict == "HOLD"
+    assert any("passed none" in w for w in d.warnings) and not any("No price is known" in w for w in d.warnings)
+
+
+def test_f9_the_saving_is_the_change_in_the_bill_at_the_same_volume():
+    from agent_memory.recommend.engine import forecast
+    d = decide([model("cur", 0.5, 400, 0.001), model("good", 0.97, 400, 0.01)], "cur", **RULES)
+    assert d.verdict == "SWITCH"
+    f = forecast(d, 1000, confidence=0.95)
+    assert f.monthly_saving_usd == pytest.approx(-9.0)  # the bill rises by 1000 x (0.01 - 0.001)
+    assert f.extra_failures_per_month == pytest.approx(-470.0)
+
+
+def test_f10_volume_is_scaled_for_a_young_job_and_withheld_under_7_days():
+    from datetime import UTC, datetime, timedelta
+    from agent_memory.recommend.engine import monthly_volume
+    now = datetime(2026, 11, 16, tzinfo=UTC)
+    assert monthly_volume(300, now - timedelta(days=3), now) is None  # still learning
+    assert monthly_volume(100, now - timedelta(days=10), now) == 300
+    assert monthly_volume(500, now - timedelta(days=45), now) == 500
+    assert monthly_volume(5, None, now) is None

@@ -36,7 +36,7 @@ export function RelatedNews({
   return (
     <div className="space-y-2" aria-label={title}>
       <div className="flex items-baseline justify-between gap-2">
-        <h4 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-dim">{title}</h4>
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-dim">{title}</h3>
         {allLink && (
           <Link to={p("/activity?tab=news")} className="text-xs font-semibold text-accent hover:underline">
             All AI news →

@@ -15,10 +15,11 @@ import {
 export const projectsKey = ["projects"] as const;
 export const projectDetailKey = (id: string) => ["projects", id] as const;
 
-export function useProjects() {
+export function useProjects(enabled = true) {
   return useQuery({
     queryKey: projectsKey,
     queryFn: fetchProjects,
+    enabled,
   });
 }
 

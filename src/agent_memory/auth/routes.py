@@ -18,7 +18,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, Response
-from sqlalchemy import Text, cast, select
+from sqlalchemy import Text, cast, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +32,8 @@ from ..alerts.notifier import retry_given_up_alerts
 from ..security import generate_webhook_secret
 from ..urls import UnsafeUrl, check_outbound
 from .access import current_user, owned_project
+
+MAX_PROJECTS_PER_USER = 50  # generous: a person has a handful; this stops runaway creation
 
 log = logging.getLogger("agent_memory.auth")
 router = APIRouter()
@@ -141,12 +143,13 @@ async def patch_ui_flags(
 
 def _project_out(p: Project) -> ProjectOut:
     return ProjectOut(
-        project_id=p.project_id, name=p.name or p.project_id, webhook_url=p.webhook_url,
+        project_id=p.project_id, slug=p.slug, name=p.name or p.project_id, webhook_url=p.webhook_url,
         webhook_secret=p.webhook_secret, retest_monthly_cap_usd=float(p.retest_monthly_cap_usd),
         retest_allowed=p.retest_allowed, key_prefix=p.key_prefix, created_at=p.created_at,
         content_retention_days=p.content_retention_days,
         monthly_budget_usd=float(p.monthly_budget_usd) if p.monthly_budget_usd is not None else None,
         store_tool_arguments=bool(p.store_tool_arguments),
+        billing_mode=p.billing_mode or "per_use",
     )
 
 
@@ -163,10 +166,16 @@ async def new_project(
     body: ProjectCreate, user: User = Depends(current_user), session: AsyncSession = Depends(get_session)
 ) -> ProjectCreated:
     """Create a project you own. Its key is in the response once; copy it into the SDK."""
+    owned = (await session.execute(
+        select(func.count()).select_from(Project).where(Project.owner_user_id == user.user_id))).scalar_one()
+    if owned >= MAX_PROJECTS_PER_USER:
+        raise HTTPException(409, f"You already have {MAX_PROJECTS_PER_USER} projects, which is the most "
+                                 "one account can have. Delete one you no longer use first.")
     for _ in range(3):  # the slug has a random suffix; retry the rare collision
         try:
             project, key = await create_project(session, slug_for(body.name), name=body.name.strip(),
-                                                owner_user_id=user.user_id)
+                                                owner_user_id=user.user_id,
+                                                billing_mode=body.billing_mode or "per_use")
             return ProjectCreated(project=_project_out(project), api_key=key)
         except ProjectExists:
             continue
@@ -210,6 +219,8 @@ async def patch_project(
         project.content_retention_days = body.content_retention_days
     if "store_tool_arguments" in sent and body.store_tool_arguments is not None:
         project.store_tool_arguments = body.store_tool_arguments
+    if "billing_mode" in sent and body.billing_mode is not None:
+        project.billing_mode = body.billing_mode
     await session.commit()
     return _project_out(project)
 

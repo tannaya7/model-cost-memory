@@ -31,6 +31,7 @@ from .models import (
     RecommendationSummary,
     Retest,
     Run,
+    TaskSummary,
     UsageLimit,
 )
 
@@ -61,11 +62,18 @@ async def clear_old_content(session: AsyncSession, *, now: datetime | None = Non
             update(Run).where(Run.run_id.in_(due))
             .values(prompt=None, output=None, tool_calls=None, expected=None, embedding=None,
                     content_removed_at=now)
+            .returning(Run.job_id)
             .execution_options(synchronize_session=False)
         )
+        job_ids = result.scalars().all()
+        cleared, cleared_jobs = len(job_ids), set(job_ids)
+        # A task summary was written from the oldest stored prompts, which are the first to be cleared:
+        # it goes with them (the next summary, if the project still consents, uses the remaining text).
+        if cleared_jobs:
+            await session.execute(delete(TaskSummary).where(TaskSummary.job_id.in_(cleared_jobs)))
         await session.commit()
-        total += result.rowcount
-        if result.rowcount < batch:
+        total += cleared
+        if cleared < batch:
             break
     if total:
         log.info("cleared old run content", extra={"runs": total})
@@ -83,6 +91,7 @@ async def delete_project(session: AsyncSession, project_id: str) -> bool:
     await session.execute(delete(OutboxRow).where(OutboxRow.run_id.in_(runs)))
     await session.execute(delete(FlowEvent).where(FlowEvent.project_id == project_id))
     await session.execute(delete(RecommendationSummary).where(RecommendationSummary.job_id.in_(jobs)))
+    await session.execute(delete(TaskSummary).where(TaskSummary.job_id.in_(jobs)))
     await session.execute(delete(Alert).where(Alert.job_id.in_(jobs)))
     await session.execute(update(Recommendation).where(Recommendation.job_id.in_(jobs))
                           .values(superseded_by_id=None))

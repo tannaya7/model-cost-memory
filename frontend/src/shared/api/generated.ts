@@ -254,6 +254,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/insights/prompt-versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Prompt Versions
+         * @description One job's prompt versions side by side: calls, tokens, cached share, list-price cost and checked answers.
+         *     Versions are the `prompt_version` values you sent, or, when you sent none, detected from where the start of
+         *     the stored prompt text changed and stayed changed. Production runs only. Shows what changed, not why.
+         */
+        get: operations["get_prompt_versions_v1_insights_prompt_versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/insights/prompts": {
         parameters: {
             query?: never;
@@ -902,7 +924,8 @@ export interface paths {
         /**
          * Put Task Summary Consent
          * @description Switch the AI-written task summaries on or off for this project. Off by default; while off, no
-         *     sample prompt is ever sent to an outside AI service.
+         *     sample prompt is ever sent to an outside AI service. Only the signed-in owner may change it (a project
+         *     key, which an SDK holds, is refused), and switching it off deletes the project's stored summaries.
          */
         put: operations["put_task_summary_consent_v1_task_summary_consent_put"];
         post?: never;
@@ -1224,12 +1247,12 @@ export interface components {
             extra_failures_per_month: number;
             /**
              * Monthly Saving Usd
-             * @description Negative means switching costs more
+             * @description Change of the monthly bill at the same call volume: runs_per_month x (average cost per call now - on the recommended model). Negative means switching costs more
              */
             monthly_saving_usd: number;
             /**
              * Runs Per Month
-             * @description Production runs in the last 30 days
+             * @description Production runs in the last 30 days on the model in use (not the candidate), the volume the saving is priced on
              */
             runs_per_month: number;
         };
@@ -1738,6 +1761,11 @@ export interface components {
         };
         /** ProjectCreate */
         ProjectCreate: {
+            /**
+             * Billing Mode
+             * @description Optional; defaults to per_use
+             */
+            billing_mode?: ("per_use" | "subscription" | "both") | null;
             /** Name */
             name: string;
         };
@@ -1760,6 +1788,13 @@ export interface components {
         };
         /** ProjectOut */
         ProjectOut: {
+            /**
+             * Billing Mode
+             * @description How this project pays for AI: per_use (each call costs money), subscription (a flat fee with a usage allowance) or both
+             * @default per_use
+             * @enum {string}
+             */
+            billing_mode: "per_use" | "subscription" | "both";
             /**
              * Content Retention Days
              * @description Days a run keeps its prompt, output, tool calls and answer key; the figures stay
@@ -1790,6 +1825,11 @@ export interface components {
             /** Retest Monthly Cap Usd */
             retest_monthly_cap_usd: number;
             /**
+             * Slug
+             * @description Short readable name used in the web address (/p/production). Stable and unique per owner; the API still takes project_id
+             */
+            slug: string;
+            /**
              * Store Tool Arguments
              * @description Whether this project keeps the inputs of tool calls (off by default; they can hold private data). Used only to notice an agent repeating the same step
              * @default false
@@ -1805,6 +1845,11 @@ export interface components {
         };
         /** ProjectPatch */
         ProjectPatch: {
+            /**
+             * Billing Mode
+             * @description How you pay for AI: per_use, subscription or both. Changes wording and which alerts fire; no stored figure changes
+             */
+            billing_mode?: ("per_use" | "subscription" | "both") | null;
             /**
              * Content Retention Days
              * @description Days a run keeps its prompt, output, tool calls and answer key (1 to 3650)
@@ -1831,6 +1876,56 @@ export interface components {
              * @description Must be https; send null to remove
              */
             webhook_url?: string | null;
+        };
+        /**
+         * PromisingOut
+         * @description 'Worth a trial': a cheaper model that looks close to the model in use but is not proven. Never advice.
+         */
+        PromisingOut: {
+            /**
+             * Current
+             * @description The model in use that it was compared with
+             */
+            current: string;
+            /**
+             * Gap Points
+             * @description Observed candidate minus model in use, in percentage points
+             */
+            gap_points: number;
+            /**
+             * High Points
+             * @description Upper end of the range of that gap, in points
+             */
+            high_points: number;
+            /**
+             * Low Points
+             * @description Lower end of the range of that gap, in points (one-sided 95% bound)
+             */
+            low_points: number;
+            /** Model */
+            model: string;
+            /**
+             * More Needed
+             * @description About this many more checked answers on the candidate before a switch could be recommended
+             */
+            more_needed: number | null;
+        };
+        /** PromptComparisonOut */
+        PromptComparisonOut: {
+            /** Newer */
+            newer: string;
+            /** Older */
+            older: string;
+            /**
+             * Side By Side
+             * @description True when the two versions' time ranges overlap
+             */
+            side_by_side: boolean;
+            /**
+             * Summary
+             * @description Facts only; no verdict and no cause
+             */
+            summary: string;
         };
         /** PromptGroupOut */
         PromptGroupOut: {
@@ -1890,6 +1985,88 @@ export interface components {
              * @description tokens_in + tokens_out + cache_read_tokens + cache_write_tokens
              */
             total_tokens: number;
+        };
+        /** PromptVersionOut */
+        PromptVersionOut: {
+            /**
+             * Cache Read Share
+             * @description cache_read / (cache_read + tokens_in); null when both are 0
+             */
+            cache_read_share: number | null;
+            /** Calls */
+            calls: number;
+            /**
+             * Checked
+             * @description Calls whose answer was checked (correct or wrong)
+             */
+            checked: number;
+            /**
+             * Correct Rate
+             * @description Null below 25 checked answers
+             */
+            correct_rate: number | null;
+            /**
+             * Cost Per Call
+             * @description List-price cost, priced calls only; null when none were priced
+             */
+            cost_per_call: number | null;
+            /**
+             * First Seen
+             * Format: date-time
+             */
+            first_seen: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tagged" | "detected" | "untagged";
+            /** Label */
+            label: string;
+            /**
+             * Last Seen
+             * Format: date-time
+             */
+            last_seen: string;
+            /** Priced Calls */
+            priced_calls: number;
+            /** Rate High */
+            rate_high: number | null;
+            /** Rate Low */
+            rate_low: number | null;
+            /**
+             * Start Preview
+             * @description Detected versions only: the start of the prompt (120 characters)
+             */
+            start_preview: string | null;
+            /**
+             * Typical Tokens In
+             * @description Median input tokens per call
+             */
+            typical_tokens_in: number;
+            /**
+             * Typical Tokens Out
+             * @description Median output tokens per call
+             */
+            typical_tokens_out: number;
+            /** Unpriced Calls */
+            unpriced_calls: number;
+        };
+        /** PromptVersionsOut */
+        PromptVersionsOut: {
+            comparison: components["schemas"]["PromptComparisonOut"] | null;
+            /** Days */
+            days: number;
+            /** Job */
+            job: string;
+            /** Reason */
+            reason: ("no_calls" | "text_not_kept" | "no_change" | "unstable") | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "tagged" | "detected" | "none";
+            /** Versions */
+            versions: components["schemas"]["PromptVersionOut"][];
         };
         /** PromptsOut */
         PromptsOut: {
@@ -1978,6 +2155,8 @@ export interface components {
              * @description Progress toward the evidence floor, 0..1; below 1 only when insufficient
              */
             progress: number;
+            /** @description Set only for HOLD, never together with a proven model; never counted as a saving */
+            promising?: components["schemas"]["PromisingOut"] | null;
             recommended: components["schemas"]["ModelRef"] | null;
             /**
              * Reference
@@ -2000,6 +2179,8 @@ export interface components {
              * @description Git blob hash of the prompt file used
              */
             summary_prompt_version?: string | null;
+            /** @description Set for INSUFFICIENT_EVIDENCE when two models can be compared */
+            sure_enough?: components["schemas"]["SureEnoughOut"] | null;
             /**
              * Verdict
              * @enum {string}
@@ -2148,6 +2329,12 @@ export interface components {
              * @default 0
              */
             cache_read_tokens: number;
+            /**
+             * Cache Write 1H Tokens
+             * @description The part of cache_write_tokens written to the 1-hour cache (priced higher than the 5-minute cache). Used for the cost only; not stored
+             * @default 0
+             */
+            cache_write_1h_tokens: number;
             /**
              * Cache Write Tokens
              * @default 0
@@ -2515,6 +2702,22 @@ export interface components {
              * @default 0
              */
             unpriced_runs: number;
+        };
+        /**
+         * SureEnoughOut
+         * @description Stage 2 of the progress bar: checked answers per model before a switch could be recommended.
+         */
+        SureEnoughOut: {
+            /**
+             * Have
+             * @description What the thinner of the two compared models has now
+             */
+            have: number | null;
+            /**
+             * Needed
+             * @description About this many per model, if today's observed rates held; null when it cannot be told
+             */
+            needed: number | null;
         };
         /**
          * TaskProfileOut
@@ -3225,6 +3428,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DayPointOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_prompt_versions_v1_insights_prompt_versions_get: {
+        parameters: {
+            query: {
+                /** @description The job to compare prompt versions for */
+                job: string;
+                /** @description How many days back */
+                days?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptVersionsOut"];
                 };
             };
             /** @description Validation Error */
@@ -4537,8 +4778,6 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                "x-api-key"?: string | null;
-                authorization?: string | null;
                 "x-project-id"?: string | null;
             };
             path?: never;

@@ -5,18 +5,20 @@ import { useDeleteProject } from "../hooks/useProjects";
 
 type Props = {
   projectId: string;
+  /** The short name people see (and type to confirm); the long id is never shown. */
+  projectSlug: string;
   projectName: string;
   /** Called once the project is gone, e.g. to go back to the project list. */
   onDeleted: () => void;
 };
 
-/** Deleting a project, guarded by typing its id: it removes every job, run, prompt and key for good. */
-export function DeleteProjectCard({ projectId, projectName, onDeleted }: Props) {
+/** Deleting a project, guarded by typing its short name: it removes every job, run, prompt and key for good. */
+export function DeleteProjectCard({ projectId, projectSlug, projectName, onDeleted }: Props) {
   const deleteMutation = useDeleteProject();
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const matches = typed.trim() === projectId;
+  const matches = typed.trim() === projectSlug;
 
   const handleDelete = async () => {
     setError(null);
@@ -30,13 +32,12 @@ export function DeleteProjectCard({ projectId, projectName, onDeleted }: Props) 
   };
 
   return (
-    <Card className="p-6 space-y-4 border-bad/40">
+    <Card className="min-w-0 p-6 space-y-4 border-bad/40">
       <div>
         <h3 className="text-base font-semibold text-ink">Delete project</h3>
-        <p className="mt-0.5 text-xs text-dim">
-          Removes {projectName} and everything recorded under it: AI tasks, AI calls with their prompts and answers,
-          trials on new models, recommendations, alerts and the stored provider key. The project key stops working at once.
-          This cannot be undone.
+        <p className="mt-0.5 text-xs text-dim [overflow-wrap:anywhere]">
+          Removes {projectName} and everything under it: AI tasks, AI calls, trials, recommendations, alerts and the
+          provider key. The project key stops working at once. This cannot be undone.
         </p>
       </div>
 
@@ -50,8 +51,8 @@ export function DeleteProjectCard({ projectId, projectName, onDeleted }: Props) 
         </button>
       ) : (
         <div role="alert" className="rounded-card border border-bad/40 bg-bad-soft p-4 space-y-3">
-          <label htmlFor="delete-confirm" className="block text-sm font-semibold text-ink">
-            Type <span className="font-mono">{projectId}</span> to confirm
+          <label htmlFor="delete-confirm" className="block text-sm font-semibold text-ink [overflow-wrap:anywhere]">
+            Type <span className="font-mono break-all">{projectSlug}</span> to confirm
           </label>
           <input
             id="delete-confirm"

@@ -125,7 +125,7 @@ export function suggestFromProfile(answers: Answers, usage: ProfileUsage, catalo
     if (cost === null) {
       why.push(c.priceIn === null || c.priceOut === null ? "No price for this model is in the catalog, so no cost is estimated." : "No usage with tokens is recorded yet, so no cost is estimated.");
     } else {
-      why.push(`At your recent volume (${n(usage.monthlyTokensIn)} tokens in and ${n(usage.monthlyTokensOut)} out a month) it would cost an estimated ${money(cost)} a month.`);
+      why.push(`At your recent volume (${n(usage.monthlyTokensIn)} tokens in and ${n(usage.monthlyTokensOut)} out a month) it would cost ${usage.daysOfHistory < 7 ? `a rough guess of ${money(cost)} a month (we have only ${usage.daysOfHistory} ${usage.daysOfHistory === 1 ? "day" : "days"} of use, so this is not reliable yet)` : `an estimated ${money(cost)} a month`}.`);
       if (answers.budgetUsd !== null) why.push(fits ? `That is within your ${money(answers.budgetUsd)} monthly budget.` : `That is over your ${money(answers.budgetUsd)} monthly budget.`);
     }
     if (answers.people !== "1") {

@@ -33,6 +33,11 @@ describe("month summary", () => {
     const m = summarizeMonth([pt({ runs: 10, tokens_in: 100, tokens_out: 50, spend_usd: 1.5, passed: 6, failed: 2 }), pt({ runs: 5, passed: 2, failed: 0 })]);
     expect(monthLine(m)).toBe("15 AI calls · 150 tokens (100 in, 50 out) · $1.50 · 80% of checked answers correct");
   });
+  it("leaves the dollar figure out on a subscription and labels it for both", () => {
+    const m = summarizeMonth([pt({ runs: 10, tokens_in: 100, tokens_out: 50, spend_usd: 1.5, passed: 6, failed: 2 })]);
+    expect(monthLine(m, "subscription")).toBe("10 AI calls · 150 tokens (100 in, 50 out) · 75% of checked answers correct");
+    expect(monthLine(m, "both")).toContain("$1.50 at list prices");
+  });
   it("is honest when there are no calls", () => {
     expect(monthLine(summarizeMonth([]))).toBe("No calls this month yet.");
   });

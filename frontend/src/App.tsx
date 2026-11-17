@@ -10,6 +10,7 @@ import { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate, RouterProvider, useParams, useSearchParams } from "react-router-dom";
 import { LegacyRedirect, ProjectScope, RequireUser } from "./app/project";
 import { Skeleton } from "./ui/primitives";
+import { projectPath } from "./shared/projectPath";
 
 const Landing = lazy(() => import("./screens/Landing"));
 const SignIn = lazy(() => import("./screens/SignIn"));
@@ -41,15 +42,15 @@ const page = (el: React.ReactNode) => <Suspense fallback={<Loading />}>{el}</Sus
 /** Inside a project, /runs?job=x opens that job's runs. */
 function RunsRedirect() {
   const [params] = useSearchParams();
-  const { projectId = "" } = useParams();
+  const { projectRef = "" } = useParams();
   const job = params.get("job");
-  const base = `/p/${encodeURIComponent(projectId)}`;
+  const base = projectPath(projectRef);
   return <Navigate to={job ? `${base}/jobs/${encodeURIComponent(job)}?tab=runs` : `${base}/jobs`} replace />;
 }
 
 function InProject({ to }: { to: string }) {
-  const { projectId = "" } = useParams();
-  return <Navigate to={`/p/${encodeURIComponent(projectId)}${to}`} replace />;
+  const { projectRef = "" } = useParams();
+  return <Navigate to={`${projectPath(projectRef)}${to}`} replace />;
 }
 
 const router = createBrowserRouter([
@@ -64,7 +65,7 @@ const router = createBrowserRouter([
     ],
   },
   {
-    path: "/p/:projectId",
+    path: "/p/:projectRef",
     element: <ProjectScope />,
     children: [
       { index: true, element: <Overview /> },
@@ -98,13 +99,13 @@ const router = createBrowserRouter([
   { path: "/spend", element: <LegacyRedirect to="" /> },
   { path: "/history", element: <LegacyRedirect to="/jobs" /> },
   { path: "/limits", element: <LegacyRedirect to="/settings#limits" /> },
-  { path: "/projects/:projectId", element: <ProjectSettingsRedirect /> },
+  { path: "/projects/:projectRef", element: <ProjectSettingsRedirect /> },
   { path: "*", element: <Navigate to="/" replace /> },
 ]);
 
 function ProjectSettingsRedirect() {
-  const { projectId = "" } = useParams();
-  return <Navigate to={`/p/${encodeURIComponent(projectId)}/settings`} replace />;
+  const { projectRef = "" } = useParams();
+  return <Navigate to={projectPath(projectRef, "/settings")} replace />;
 }
 
 export default function App() {

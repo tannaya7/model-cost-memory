@@ -585,12 +585,12 @@
             "type": "number"
           },
           "monthly_saving_usd": {
-            "description": "Negative means switching costs more",
+            "description": "Change of the monthly bill at the same call volume: runs_per_month x (average cost per call now - on the recommended model). Negative means switching costs more",
             "title": "Monthly Saving Usd",
             "type": "number"
           },
           "runs_per_month": {
-            "description": "Production runs in the last 30 days",
+            "description": "Production runs in the last 30 days on the model in use (not the candidate), the volume the saving is priced on",
             "title": "Runs Per Month",
             "type": "integer"
           }
@@ -1657,6 +1657,23 @@
       },
       "ProjectCreate": {
         "properties": {
+          "billing_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "per_use",
+                  "subscription",
+                  "both"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional; defaults to per_use",
+            "title": "Billing Mode"
+          },
           "name": {
             "maxLength": 100,
             "minLength": 1,
@@ -1704,6 +1721,17 @@
       },
       "ProjectOut": {
         "properties": {
+          "billing_mode": {
+            "default": "per_use",
+            "description": "How this project pays for AI: per_use (each call costs money), subscription (a flat fee with a usage allowance) or both",
+            "enum": [
+              "per_use",
+              "subscription",
+              "both"
+            ],
+            "title": "Billing Mode",
+            "type": "string"
+          },
           "content_retention_days": {
             "default": 90,
             "description": "Days a run keeps its prompt, output, tool calls and answer key; the figures stay",
@@ -1755,6 +1783,11 @@
             "title": "Retest Monthly Cap Usd",
             "type": "number"
           },
+          "slug": {
+            "description": "Short readable name used in the web address (/p/production). Stable and unique per owner; the API still takes project_id",
+            "title": "Slug",
+            "type": "string"
+          },
           "store_tool_arguments": {
             "default": false,
             "description": "Whether this project keeps the inputs of tool calls (off by default; they can hold private data). Used only to notice an agent repeating the same step",
@@ -1787,6 +1820,7 @@
         },
         "required": [
           "project_id",
+          "slug",
           "name",
           "webhook_url",
           "webhook_secret",
@@ -1800,6 +1834,23 @@
       },
       "ProjectPatch": {
         "properties": {
+          "billing_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "per_use",
+                  "subscription",
+                  "both"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How you pay for AI: per_use, subscription or both. Changes wording and which alerts fire; no stored figure changes",
+            "title": "Billing Mode"
+          },
           "content_retention_days": {
             "anyOf": [
               {
@@ -1893,6 +1944,87 @@
           }
         },
         "title": "ProjectPatch",
+        "type": "object"
+      },
+      "PromisingOut": {
+        "description": "'Worth a trial': a cheaper model that looks close to the model in use but is not proven. Never advice.",
+        "properties": {
+          "current": {
+            "description": "The model in use that it was compared with",
+            "title": "Current",
+            "type": "string"
+          },
+          "gap_points": {
+            "description": "Observed candidate minus model in use, in percentage points",
+            "title": "Gap Points",
+            "type": "number"
+          },
+          "high_points": {
+            "description": "Upper end of the range of that gap, in points",
+            "title": "High Points",
+            "type": "number"
+          },
+          "low_points": {
+            "description": "Lower end of the range of that gap, in points (one-sided 95% bound)",
+            "title": "Low Points",
+            "type": "number"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "more_needed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "About this many more checked answers on the candidate before a switch could be recommended",
+            "title": "More Needed"
+          }
+        },
+        "required": [
+          "model",
+          "current",
+          "gap_points",
+          "low_points",
+          "high_points",
+          "more_needed"
+        ],
+        "title": "PromisingOut",
+        "type": "object"
+      },
+      "PromptComparisonOut": {
+        "properties": {
+          "newer": {
+            "title": "Newer",
+            "type": "string"
+          },
+          "older": {
+            "title": "Older",
+            "type": "string"
+          },
+          "side_by_side": {
+            "description": "True when the two versions' time ranges overlap",
+            "title": "Side By Side",
+            "type": "boolean"
+          },
+          "summary": {
+            "description": "Facts only; no verdict and no cause",
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "older",
+          "newer",
+          "side_by_side",
+          "summary"
+        ],
+        "title": "PromptComparisonOut",
         "type": "object"
       },
       "PromptGroupOut": {
@@ -2024,6 +2156,215 @@
           "repeated_start_preview"
         ],
         "title": "PromptGroupOut",
+        "type": "object"
+      },
+      "PromptVersionOut": {
+        "properties": {
+          "cache_read_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "cache_read / (cache_read + tokens_in); null when both are 0",
+            "title": "Cache Read Share"
+          },
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "checked": {
+            "description": "Calls whose answer was checked (correct or wrong)",
+            "title": "Checked",
+            "type": "integer"
+          },
+          "correct_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null below 25 checked answers",
+            "title": "Correct Rate"
+          },
+          "cost_per_call": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "List-price cost, priced calls only; null when none were priced",
+            "title": "Cost Per Call"
+          },
+          "first_seen": {
+            "format": "date-time",
+            "title": "First Seen",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "tagged",
+              "detected",
+              "untagged"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_seen": {
+            "format": "date-time",
+            "title": "Last Seen",
+            "type": "string"
+          },
+          "priced_calls": {
+            "title": "Priced Calls",
+            "type": "integer"
+          },
+          "rate_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate High"
+          },
+          "rate_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Low"
+          },
+          "start_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Detected versions only: the start of the prompt (120 characters)",
+            "title": "Start Preview"
+          },
+          "typical_tokens_in": {
+            "description": "Median input tokens per call",
+            "title": "Typical Tokens In",
+            "type": "number"
+          },
+          "typical_tokens_out": {
+            "description": "Median output tokens per call",
+            "title": "Typical Tokens Out",
+            "type": "number"
+          },
+          "unpriced_calls": {
+            "title": "Unpriced Calls",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "kind",
+          "first_seen",
+          "last_seen",
+          "calls",
+          "typical_tokens_in",
+          "typical_tokens_out",
+          "cache_read_share",
+          "priced_calls",
+          "unpriced_calls",
+          "cost_per_call",
+          "checked",
+          "correct_rate",
+          "rate_low",
+          "rate_high",
+          "start_preview"
+        ],
+        "title": "PromptVersionOut",
+        "type": "object"
+      },
+      "PromptVersionsOut": {
+        "properties": {
+          "comparison": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PromptComparisonOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_calls",
+                  "text_not_kept",
+                  "no_change",
+                  "unstable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "source": {
+            "enum": [
+              "tagged",
+              "detected",
+              "none"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/PromptVersionOut"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "job",
+          "days",
+          "source",
+          "reason",
+          "versions",
+          "comparison"
+        ],
+        "title": "PromptVersionsOut",
         "type": "object"
       },
       "PromptsOut": {
@@ -2213,6 +2554,17 @@
             "title": "Progress",
             "type": "number"
           },
+          "promising": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PromisingOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set only for HOLD, never together with a proven model; never counted as a saving"
+          },
           "recommended": {
             "anyOf": [
               {
@@ -2269,6 +2621,17 @@
             ],
             "description": "Git blob hash of the prompt file used",
             "title": "Summary Prompt Version"
+          },
+          "sure_enough": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SureEnoughOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set for INSUFFICIENT_EVIDENCE when two models can be compared"
           },
           "verdict": {
             "enum": [
@@ -2607,6 +2970,14 @@
             "maximum": 10000000.0,
             "minimum": 0.0,
             "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cache_write_1h_tokens": {
+            "default": 0,
+            "description": "The part of cache_write_tokens written to the 1-hour cache (priced higher than the 5-minute cache). Used for the cost only; not stored",
+            "maximum": 10000000.0,
+            "minimum": 0.0,
+            "title": "Cache Write 1H Tokens",
             "type": "integer"
           },
           "cache_write_tokens": {
@@ -3464,6 +3835,41 @@
           "share"
         ],
         "title": "SpendOut",
+        "type": "object"
+      },
+      "SureEnoughOut": {
+        "description": "Stage 2 of the progress bar: checked answers per model before a switch could be recommended.",
+        "properties": {
+          "have": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the thinner of the two compared models has now",
+            "title": "Have"
+          },
+          "needed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "About this many per model, if today's observed rates held; null when it cannot be told",
+            "title": "Needed"
+          }
+        },
+        "required": [
+          "needed",
+          "have"
+        ],
+        "title": "SureEnoughOut",
         "type": "object"
       },
       "TaskProfileOut": {
@@ -4998,6 +5404,114 @@
           }
         },
         "summary": "Get Daily",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
+    "/v1/insights/prompt-versions": {
+      "get": {
+        "description": "One job's prompt versions side by side: calls, tokens, cached share, list-price cost and checked answers.\nVersions are the `prompt_version` values you sent, or, when you sent none, detected from where the start of\nthe stored prompt text changed and stayed changed. Production runs only. Shows what changed, not why.",
+        "operationId": "get_prompt_versions_v1_insights_prompt_versions_get",
+        "parameters": [
+          {
+            "description": "The job to compare prompt versions for",
+            "in": "query",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "description": "The job to compare prompt versions for",
+              "maxLength": 200,
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "description": "How many days back",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "description": "How many days back",
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptVersionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Prompt Versions",
         "tags": [
           "insights"
         ]
@@ -8255,41 +8769,9 @@
     },
     "/v1/task-summary-consent": {
       "put": {
-        "description": "Switch the AI-written task summaries on or off for this project. Off by default; while off, no\nsample prompt is ever sent to an outside AI service.",
+        "description": "Switch the AI-written task summaries on or off for this project. Off by default; while off, no\nsample prompt is ever sent to an outside AI service. Only the signed-in owner may change it (a project\nkey, which an SDK holds, is refused), and switching it off deletes the project's stored summaries.",
         "operationId": "put_task_summary_consent_v1_task_summary_consent_put",
         "parameters": [
-          {
-            "in": "header",
-            "name": "x-api-key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          },
           {
             "in": "header",
             "name": "x-project-id",

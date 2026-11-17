@@ -30,7 +30,7 @@ describe("TokenUsage", () => {
     renderWithProviders(<TokenUsage ctx={ctx(points)} shell={shell} />);
     expect(await screen.findByText(/the weekly limit is full in 9 h/)).toHaveTextContent(/caused \d+% of the tokens/);
     expect(screen.getByText("invoice-extract")).toBeInTheDocument();
-    expect(screen.getByText(/from recorded runs/)).toBeInTheDocument();
+    expect(screen.getByText(/Limits and rates are estimates/)).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: /Show table/ }));
     expect(screen.getByRole("table")).toHaveTextContent("Cached");
   });

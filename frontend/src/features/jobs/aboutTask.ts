@@ -57,10 +57,11 @@ export function summarizeMonth(points: DayPoint[]): MonthSummary {
 
 const n = (v: number) => v.toLocaleString("en");
 
-export function monthLine(m: MonthSummary): string {
+export function monthLine(m: MonthSummary, mode: "per_use" | "subscription" | "both" = "per_use"): string {
   if (m.calls === 0) return "No calls this month yet.";
   const right = m.correct === null ? "no answers checked yet" : `${pct(m.correct, 0)} of checked answers correct`;
-  return `${n(m.calls)} AI calls · ${n(m.tokensIn + m.tokensOut)} tokens (${n(m.tokensIn)} in, ${n(m.tokensOut)} out) · ${usd(m.spend)} · ${right}`;
+  const money = mode === "per_use" ? usd(m.spend) : mode === "both" ? `${usd(m.spend)} at list prices` : null;
+  return [`${n(m.calls)} AI calls`, `${n(m.tokensIn + m.tokensOut)} tokens (${n(m.tokensIn)} in, ${n(m.tokensOut)} out)`, money, right].filter(Boolean).join(" · ");
 }
 
 export interface Fact {
@@ -87,7 +88,7 @@ export function profileFacts(p: TaskProfile, job: Pick<Job, "check_kind">): Fact
   }
   if (p.works_like_agent) {
     out.push({
-      label: "Works like an agent",
+      label: "Looks like an agent",
       value: p.works_like_agent === "yes" ? "Yes. It takes several steps with tools to finish one job." : "Probably. Several calls use tools in a row.",
       kind: "estimate",
     });

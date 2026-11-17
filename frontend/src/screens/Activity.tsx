@@ -6,11 +6,12 @@ import { Link, useSearchParams } from "react-router-dom";
 import { AlertItemCard, type AlertListItem } from "../features/alerts/components/AlertItemCard";
 import { useAllRegressions, useDeprecatedModels } from "../features/alerts/hooks/useAlerts";
 import { subscribeToFlow } from "../features/flow/api/flowSubscription";
+import { plainEvent } from "../features/flow/plainEvent";
 import type { FlowConnectionStatus, FlowEvent } from "../features/flow/types";
 import NewsFeed from "./NewsFeed";
 import { timeAgo } from "../ui/format";
 import { IconActivity, IconAlert, IconBell, IconCheck, IconNews, IconShield } from "../ui/icons";
-import { Button, cx, EmptyState, Panel, PanelHeader, Segmented, Skeleton } from "../ui/primitives";
+import { Button, ButtonLink, cx, EmptyState, Panel, PanelHeader, Segmented, Skeleton } from "../ui/primitives";
 
 type Tab = "alerts" | "live" | "news";
 
@@ -32,7 +33,7 @@ function Alerts() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-2xl text-sm text-dim">
-          Every 15 minutes we check each of your AI tasks for a quality drop: a new version of a model that answers worse, or a model that quietly got worse under the same name. We also warn you about unusually high AI use, when you near your monthly spending limit or trial budget, and when a model you use is being shut down. Nothing here needs action unless a card appears.
+          We check every 15 minutes for drops in correct answers, high usage and model shutdowns. Nothing needs action unless a card appears.
         </p>
         <Segmented
           label="Which alerts"
@@ -50,7 +51,7 @@ function Alerts() {
           hint="We will tell you here if something goes wrong, like a model giving worse answers or being shut down."
         />
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {shown.map((item) => (
             <motion.div key={item.kind === "regression" ? item.alert.alert_id : item.model.model} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
               <AlertItemCard item={item} />
@@ -75,6 +76,7 @@ function failed(ev: FlowEvent) {
 }
 
 function Live() {
+  const p = useP();
   const [events, setEvents] = useState<FlowEvent[]>([]);
   const [status, setStatus] = useState<FlowConnectionStatus>("live");
   const [paused, setPaused] = useState(false);
@@ -109,7 +111,7 @@ function Live() {
         <PanelHeader
           eyebrow="Live pipeline"
           title="Every AI call, as it moves through the system"
-          hint="Each AI call your app makes through our SDK appears here as it is recorded, checked and learned from. Nothing to do here but watch."
+          hint="Each AI call moves through these five steps on its own."
           actions={
             <>
               <span className="inline-flex items-center gap-2 rounded-full border border-rule px-3 py-1 text-xs font-semibold text-dim">
@@ -158,10 +160,10 @@ function Live() {
       </Panel>
 
       <Panel className="p-5">
-        <PanelHeader title="Event stream" hint="Newest first; the last 40" />
+        <PanelHeader title="Latest AI calls" hint="Newest first" />
         {events.length === 0 ? (
           <div className="mt-4">
-            <EmptyState icon={<IconActivity size={18} />} title="Waiting for AI calls" hint="No AI call has arrived since this page opened. Make an AI call through our SDK and it will show up here." />
+            <EmptyState icon={<IconActivity size={18} />} title="Waiting for AI calls" hint="Nothing has arrived since this page opened. Make a call from your app and it shows up here." action={<ButtonLink to={p("/settings#keys")} size="sm">Get your API key</ButtonLink>} />
           </div>
         ) : (
           <ul className="mt-4 flex flex-col">
@@ -176,7 +178,7 @@ function Live() {
                 >
                   <span className={cx("mt-0.5 shrink-0", failed(ev) ? "text-bad" : "text-accent")}>{failed(ev) ? <IconAlert size={15} /> : <IconCheck size={15} />}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm text-ink">{ev.message}</span>
+                    <span className="block text-sm text-ink">{plainEvent(ev)}</span>
                     <span className="mt-0.5 block font-mono text-[11px] text-muted">
                       {STAGES.find((s) => s.key === ev.stage)?.title ?? ev.stage} · {ev.run_id ? `call ${String(ev.run_id).slice(0, 8)}` : "system"} · {timeAgo(ev.ts)}
                     </span>
@@ -204,7 +206,7 @@ export default function Activity() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Activity</h1>
-          <p className="mt-1 text-sm text-dim">Alerts when something gets worse, AI calls arriving right now, and news about the models you use. Check the Alerts tab first.</p>
+          <p className="mt-1 text-sm text-dim">Alerts first, then live AI calls and news.</p>
         </div>
         <Segmented<Tab>
           label="Activity views"

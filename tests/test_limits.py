@@ -63,7 +63,7 @@ async def test_a_limit_used_up_before_it_resets_gets_the_proven_cheaper_model_pe
     [s] = f.suggestions
     assert (s.job, s.current, s.suggested) == ("invoice", "big", "mini")
     assert round(s.reduction, 3) == round(1 - 0.001 / 0.03, 3)
-    assert s.note.startswith("Shown within 3 points of big at 99% confidence")
+    assert s.note.startswith("Shown within 3 points of big at very high confidence (about 99.5%, one-sided)")
     assert f.lasts_after is True
     assert f.message.startswith("At this pace Weekly runs out in ") and f.message.endswith(
         "before it resets. With the suggested changes it lasts until the reset")

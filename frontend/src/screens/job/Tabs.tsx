@@ -1,4 +1,4 @@
-/** The job's other views: quality over time, spend, evidence, runs, history and re-tests. */
+/** The AI task's other views. */
 import { useP } from "../../app/project";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -18,7 +18,8 @@ import { ChartFrame } from "../../ui/charts/ChartFrame";
 import { GroupBars, QualityLines, SpendArea, type Marker } from "../../ui/charts/charts";
 import { pivot, rollingPassRate, total } from "../../ui/charts/data";
 import { colorMap } from "../../ui/charts/series";
-import { pct, timeAgo, usd } from "../../ui/format";
+import { count, pct, timeAgo, usd } from "../../ui/format";
+import { useBillingMode } from "../../features/projects/hooks/useBillingMode";
 import { IconCheck, IconFlask, IconShield } from "../../ui/icons";
 import { Button, ButtonLink, EmptyState, ErrorState, ModelName, Panel, PanelHeader, Pill, Segmented, Skeleton } from "../../ui/primitives";
 
@@ -47,11 +48,11 @@ export function QualityTab({ job, rec }: { job: string; rec: Recommendation | nu
         {daily.isPending ? (
           <Skeleton className="h-72" />
         ) : names.length === 0 ? (
-          <EmptyState title="No checked runs in the last 90 days" hint="Pass rates appear once runs on this job have been checked." />
+          <EmptyState title="No checked AI calls in the last 90 days" hint="Correct answers show here once calls on this AI task have been checked." />
         ) : (
           <ChartFrame
-            title="Is it still working? Pass rate over time"
-            hint="Each line is a model's pass rate over the previous 7 days. Red lines mark quality drops the system caught; violet lines mark new model versions."
+            title="Is it still working? Correct answers over time"
+            hint="Each line is one model, over the previous 7 days. Red marks a drop we caught; violet marks a new model version."
             legend={names.map((n) => ({ name: n, color: colors.get(n)! }))}
             table={{
               columns: ["Day", ...names],
@@ -65,14 +66,14 @@ export function QualityTab({ job, rec }: { job: string; rec: Recommendation | nu
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Panel className="p-5 lg:col-span-2">
-          <PanelHeader title="Quality alerts" hint="A version change that made answers worse, or a silent drop under the same name" />
+          <PanelHeader title="Quality alerts" hint="Answers got worse after a model change" />
           <div className="mt-4 flex flex-col gap-3">
             {alerts.isPending ? (
               <Skeleton className="h-24" />
             ) : (alerts.data ?? []).length === 0 ? (
               <div className="flex items-center gap-3 rounded-[12px] border border-rule bg-surface-2/50 p-4">
                 <span className="grid h-9 w-9 place-items-center rounded-full bg-ok-soft text-ok"><IconShield size={17} /></span>
-                <p className="text-sm text-dim">No quality drop found. Every model change is compared on the same mix of inputs, so harder inputs alone do not raise an alarm.</p>
+                <p className="text-sm text-dim">No quality drop found. Model changes are compared on the same input sizes, so longer inputs alone do not raise an alarm.</p>
               </div>
             ) : (
               <>
@@ -84,8 +85,8 @@ export function QualityTab({ job, rec }: { job: string; rec: Recommendation | nu
             )}
           </div>
         </Panel>
-        <Panel className="p-5">
-          <RelatedNews title="In the news about this job's models" filters={{ job }} limit={5} emptyText="No recent story names a model this job runs." />
+        <Panel className="self-start p-5">
+          <RelatedNews title="In the news about this AI task's models" filters={{ job }} limit={5} emptyText="No recent story names a model this AI task runs." />
         </Panel>
       </div>
     </div>
@@ -95,12 +96,16 @@ export function QualityTab({ job, rec }: { job: string; rec: Recommendation | nu
 export function SpendTab({ job }: { job: string }) {
   const daily = useDaily({ days: 60, job });
   const points = daily.data ?? [];
-  const { rows, names } = useMemo(() => pivot(points, "model", "spend_usd", 60), [points]);
+  const { mode } = useBillingMode();
+  const sub = mode === "subscription";
+  const metric = sub ? "tokens" : "spend_usd";
+  const money = (v: number) => (sub ? `${count(v)} tokens` : usd(v));
+  const { rows, names } = useMemo(() => pivot(points, "model", metric, 60), [points, metric]);
   const colors = colorMap(names);
   const byModel = names
     .map((n) => {
       const mine = points.filter((p) => p.model === n);
-      return { model: n, spend: total(mine, "spend_usd"), runs: total(mine, "runs") };
+      return { model: n, spend: total(mine, metric), runs: total(mine, "runs") };
     })
     .sort((a, b) => b.spend - a.spend);
   const grand = byModel.reduce((s, m) => s + m.spend, 0);
@@ -111,31 +116,31 @@ export function SpendTab({ job }: { job: string }) {
         {daily.isPending ? (
           <Skeleton className="h-72" />
         ) : names.length === 0 ? (
-          <EmptyState title="No spend in the last 60 days" />
+          <EmptyState title={sub ? "No usage in the last 60 days" : "No spend in the last 60 days"} />
         ) : (
           <ChartFrame
-            title="What this job costs, per day"
-            hint="Last 60 days, stacked by model"
+            title={sub ? "Tokens this AI task used, per day" : mode === "both" ? "What this AI task costs, per day, at list prices" : "What this AI task costs, per day"}
+            hint={mode === "both" ? "Last 60 days, stacked by model. List prices, not your bill" : "Last 60 days, stacked by model"}
             legend={names.map((n) => ({ name: n, color: colors.get(n)! }))}
-            table={{ columns: ["Day", ...names], rows: rows.filter((r) => names.some((n) => (r[n] as number) > 0)).map((r) => [r.day, ...names.map((n) => usd(r[n] as number))]) }}
+            table={{ columns: ["Day", ...names], rows: rows.filter((r) => names.some((n) => (r[n] as number) > 0)).map((r) => [r.day, ...names.map((n) => money(r[n] as number))]) }}
           >
-            <SpendArea rows={rows} names={names} colors={colors} />
+            <SpendArea rows={rows} names={names} colors={colors} unit={sub ? "tokens" : "usd"} />
           </ChartFrame>
         )}
       </Panel>
-      <Panel className="p-5">
-        <PanelHeader title="By model" hint={`${usd(grand)} over 60 days`} />
+      <Panel className="self-start p-5">
+        <PanelHeader title="By model" hint={mode === "both" ? `${usd(grand)} over 60 days, at list prices` : `${money(grand)} over 60 days`} />
         <ul className="mt-4 flex flex-col gap-3">
           {byModel.map((m) => (
             <li key={m.model}>
               <div className="flex items-baseline justify-between gap-2 text-sm">
                 <ModelName className="truncate">{m.model}</ModelName>
-                <span className="tabular font-semibold text-ink">{usd(m.spend)}</span>
+                <span className="tabular font-semibold text-ink">{money(m.spend)}</span>
               </div>
               <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-3">
                 <div className="h-full rounded-full" style={{ width: `${grand ? (m.spend / grand) * 100 : 0}%`, background: colors.get(m.model) }} />
               </div>
-              <p className="mt-1 text-[11px] text-muted">{m.runs.toLocaleString("en")} runs · {grand ? pct(m.spend / grand, 0) : "–"} of spend</p>
+              <p className="mt-1 text-[11px] text-muted">{m.runs.toLocaleString("en")} AI calls · {grand ? pct(m.spend / grand, 0) : "–"} {sub ? "of tokens" : "of spend"}</p>
             </li>
           ))}
         </ul>
@@ -156,6 +161,7 @@ function bars(items: Breakdown[]) {
 }
 
 export function EvidenceTab({ job, rec }: { job: string; rec: Recommendation | null }) {
+  const { mode: billing } = useBillingMode();
   const [days, setDays] = useState<"7" | "30" | "90">("30");
   const insights = useJobInsights(job, Number(days));
   const [by, setBy] = useState<"size" | "prompt">("size");
@@ -171,7 +177,7 @@ export function EvidenceTab({ job, rec }: { job: string; rec: Recommendation | n
       <Panel className="p-5 md:p-6 lg:col-span-2">
         <ChartFrame
           title="Where each model struggles"
-          hint={`Pass rate by ${by === "size" ? "input size: long documents are often where cheaper models fall behind" : "prompt version: did a prompt change help or hurt"}, last ${data.days} days`}
+          hint={`Correct answers by ${by === "size" ? "input size" : "prompt version"}, last ${data.days} days`}
           actions={
             <>
               <Segmented label="Period" value={days} onChange={setDays} options={[{ value: "7", label: "7 d" }, { value: "30", label: "30 d" }, { value: "90", label: "90 d" }]} />
@@ -180,11 +186,11 @@ export function EvidenceTab({ job, rec }: { job: string; rec: Recommendation | n
           }
           legend={names.map((n) => ({ name: n, color: colors.get(n)! }))}
           table={{
-            columns: ["Group", "Model", "Runs", "Pass rate", "Likely range", "Cost / success"],
+            columns: ["Group", "Model", "AI calls", "Correct answers", "Likely range", billing === "per_use" ? "Cost / success" : "Cost / success (list price)"],
             rows: chosen.map((b) => [b.group, b.model, b.runs.toLocaleString("en"), pct(b.pass_rate), `${pct(b.pass_rate_low)} – ${pct(b.pass_rate_high)}`, usd(b.cost_per_success_usd)]),
           }}
         >
-          {rows.length === 0 ? <EmptyState title="Not enough runs to break down yet" /> : <GroupBars rows={rows} names={names} colors={colors} />}
+          {rows.length === 0 ? <EmptyState title="Not enough AI calls to break down yet" /> : <GroupBars rows={rows} names={names} colors={colors} />}
         </ChartFrame>
       </Panel>
       <Panel className="p-5">
@@ -204,7 +210,7 @@ export function EvidenceTab({ job, rec }: { job: string; rec: Recommendation | n
             ))}
           </ul>
         )}
-        <Link to="?tab=runs" className="mt-3 inline-block text-xs font-semibold text-accent hover:underline">All runs →</Link>
+        <Link to="?tab=runs" className="mt-3 inline-block text-xs font-semibold text-accent hover:underline">All AI calls →</Link>
       </Panel>
     </div>
   );
@@ -212,6 +218,7 @@ export function EvidenceTab({ job, rec }: { job: string; rec: Recommendation | n
 
 export function RunsTab({ job, rec }: { job: string; rec: Recommendation | null }) {
   const [params, setParams] = useSearchParams();
+  const { mode: billing } = useBillingMode();
   const outcome = (["PASS", "FAIL", "UNKNOWN"].includes(params.get("outcome") ?? "") ? params.get("outcome") : "ALL") as "ALL" | "PASS" | "FAIL" | "UNKNOWN";
   const model = params.get("model") ?? "";
   const recommendation = params.get("recommendation") ?? "";
@@ -228,8 +235,8 @@ export function RunsTab({ job, rec }: { job: string; rec: Recommendation | null 
   return (
     <Panel className="p-5 md:p-6">
       <PanelHeader
-        title="Every run, newest first"
-        hint="Click a run for its prompt, answer and why it passed or failed"
+        title="Every AI call, newest first"
+        hint="Click one for its prompt, answer and why it was right or wrong"
         actions={
           <>
             {models.length > 1 && (
@@ -254,17 +261,17 @@ export function RunsTab({ job, rec }: { job: string; rec: Recommendation | null 
       />
       {recommendation && (
         <p className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-[12px] border border-accent/30 bg-accent-soft/50 px-4 py-2.5 text-sm text-dim">
-          <span>Showing only the runs one verdict rests on.</span>
-          <button type="button" onClick={() => set("recommendation", "")} className="text-xs font-semibold text-accent hover:underline">Show every run</button>
+          <span>Showing only the AI calls one verdict rests on.</span>
+          <button type="button" onClick={() => set("recommendation", "")} className="text-xs font-semibold text-accent hover:underline">Show every AI call</button>
         </p>
       )}
-      <div className="mt-4 overflow-x-auto">
+      <div className="scroll-hint-x mt-4 overflow-x-auto">
         {runs.isPending ? (
           <Skeleton className="h-60" />
         ) : runs.isError ? (
           <ErrorState error={runs.error} onRetry={() => runs.refetch()} />
         ) : items.length === 0 ? (
-          <EmptyState title="No runs match" />
+          <EmptyState title="No AI calls match" />
         ) : (
           <table className="w-full min-w-[680px] border-collapse text-left text-sm">
             <thead>
@@ -273,7 +280,7 @@ export function RunsTab({ job, rec }: { job: string; rec: Recommendation | null 
                 <th className="px-3 py-2 font-semibold">Model</th>
                 <th className="px-3 py-2 font-semibold">Result</th>
                 <th className="px-3 py-2 text-right font-semibold">Tokens</th>
-                <th className="px-3 py-2 text-right font-semibold">Cost</th>
+                <th className="px-3 py-2 text-right font-semibold" title={billing === "per_use" ? undefined : "At list prices, not your bill"}>{billing === "per_use" ? "Cost" : "List price"}</th>
                 <th className="px-3 py-2 font-semibold">Prompt</th>
               </tr>
             </thead>
@@ -317,7 +324,7 @@ export function RunsTab({ job, rec }: { job: string; rec: Recommendation | null 
 export function HistoryTab({ job }: { job: string }) {
   return (
     <Panel className="p-5 md:p-6">
-      <PanelHeader title="How the advice changed" hint="Every verdict this job has had, why it changed, and the runs behind each" />
+      <PanelHeader title="How the advice changed" hint="Every recommendation this AI task has had, and why it changed" />
       <div className="mt-5">
         <JobHistoryTimeline jobName={job} />
       </div>
@@ -334,24 +341,23 @@ export function RetestsTab({ job, rec }: { job: string; rec: Recommendation | nu
       <Panel glow className="p-5 md:p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="max-w-2xl">
-            <h3 className="flex items-center gap-2 text-lg font-semibold tracking-tight"><IconFlask size={18} className="text-accent" /> Try a model on your own past prompts</h3>
+            <h3 className="flex items-center gap-2 text-lg font-semibold tracking-tight"><IconFlask size={18} className="text-accent" /> Run a trial on your own past prompts</h3>
             <p className="mt-1 text-sm text-dim">
-              A re-test replays a sample of this job's real prompts on another model, checks each answer the same way, and adds the results to the
-              evidence. It runs on your provider key, within a budget you set, and never above the monthly cap.
+              A trial replays past prompts on another model. It uses your provider key, within a budget you set.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             {(rec?.retest_candidates ?? []).map((m) => (
-              <ButtonLink key={m} to={p(`/retest?job=${encodeURIComponent(job)}&model=${encodeURIComponent(m)}`)} variant="primary" size="sm">Re-test {m}</ButtonLink>
+              <ButtonLink key={m} to={p(`/retest?job=${encodeURIComponent(job)}&model=${encodeURIComponent(m)}`)} variant="primary" size="sm">Start a trial on {m}</ButtonLink>
             ))}
-            <ButtonLink to={p(`/retest?job=${encodeURIComponent(job)}`)} size="sm">Choose a model</ButtonLink>
+            <ButtonLink to={p(`/retest?job=${encodeURIComponent(job)}`)} size="sm">Choose a model for a trial</ButtonLink>
           </div>
         </div>
       </Panel>
       {retests.isPending ? (
         <Skeleton className="h-40" />
       ) : list.length === 0 ? (
-        <EmptyState icon={<IconFlask size={18} />} title="No re-test yet" hint="Re-tests start by themselves when a new cheaper model appears or a verdict is unsure, or you can start one." />
+        <EmptyState icon={<IconFlask size={18} />} title="No trial yet" hint="Trials start by themselves when a new model appears, or you can start one." />
       ) : (
         list.map((r) => (
           <Panel key={r.retest_id} className="p-5">

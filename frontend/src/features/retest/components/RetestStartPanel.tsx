@@ -8,6 +8,7 @@ import { useJobs } from "../../jobs/hooks/useJobs";
 import { fetchModels } from "../../models/api/modelsApi";
 import { useRetestLimits, useStartRetest } from "../hooks/useRetest";
 import { ApiError, errorCode } from "../../../shared/api/apiFetch";
+import { InlineConfirm } from "../../../ui/InlineConfirm";
 import { ProviderKeyForm } from "./ProviderKeyForm";
 import type { Model } from "../../../shared/api/types";
 
@@ -38,6 +39,7 @@ export function RetestStartPanel() {
   const p = useP();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [askForKey, setAskForKey] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const jobs = jobsQuery.data || [];
   const limits = limitsQuery.data;
@@ -114,8 +116,18 @@ export function RetestStartPanel() {
     !isCapExhausted &&
     !startMutation.isPending;
 
-  const handleSubmit = async (e: FormEvent) => {
+  // Changing anything closes the review, so it always describes what is on screen.
+  useEffect(() => setConfirming(false), [selectedJob, selectedModel, budgetUsd, sampleSize]);
+
+  /** The button only opens the review; nothing is sent until "Start trial". */
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
+    if (!canSubmit) return;
+    setSubmitError(null);
+    setConfirming(true);
+  };
+
+  const startTrial = async () => {
     if (!canSubmit) return;
     setSubmitError(null);
 
@@ -133,6 +145,7 @@ export function RetestStartPanel() {
         p(`/retest/${encodeURIComponent(result.retest_id)}?job=${encodeURIComponent(result.job)}`),
       );
     } catch (err) {
+      setConfirming(false);
       if (errorCode(err) === "provider_key_required") {
         setAskForKey(true);
       } else if (err instanceof ApiError) {
@@ -155,9 +168,9 @@ export function RetestStartPanel() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-semibold text-ink">
+              <h2 className="text-base font-semibold text-ink">
                 Monthly budget for trials on new models
-              </h3>
+              </h2>
               {isCapExhausted ? (
                 <Badge tone="bad">Budget used up</Badge>
               ) : (
@@ -226,9 +239,9 @@ export function RetestStartPanel() {
       <Card className="p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="border-b border-rule pb-4">
-            <h3 className="text-base font-semibold text-ink">
+            <h2 className="text-base font-semibold text-ink">
               Set up a trial on a new model
-            </h3>
+            </h2>
             <p className="mt-1 text-xs text-dim">
               Choose the AI task and the model to try. We replay past prompts on that model, so your live app is not affected.
             </p>
@@ -416,15 +429,29 @@ export function RetestStartPanel() {
           </div>
 
           {/* Submit Action */}
+          {confirming && canSubmit && (
+            <InlineConfirm
+              label="Start this trial"
+              confirmLabel="Start trial"
+              cancelLabel="Not now"
+              busy={startMutation.isPending}
+              busyLabel="Starting the trial..."
+              onConfirm={() => void startTrial()}
+              onCancel={() => setConfirming(false)}
+            >
+              Replay up to {sampleNum} past prompts of <b className="text-ink">{selectedJob}</b> on <b className="text-ink">{selectedModel}</b>
+              {activeCandidate ? <> ({activeCandidate.provider})</> : null}, using your own provider key. It costs up to <b className="text-ink">${budgetNum.toFixed(2)}</b>, within your trial budget of ${monthlyCap.toFixed(2)} a month (${capRemaining.toFixed(2)} left). The budget is checked before every call.
+            </InlineConfirm>
+          )}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-rule">
             <button
               type="submit"
-              disabled={!canSubmit}
+              disabled={!canSubmit || confirming}
               className="rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-on-accent shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 transition-opacity"
             >
               {startMutation.isPending
                 ? "Starting the trial..."
-                : "Start a trial on a new model"}
+                : "Review and start a trial"}
             </button>
           </div>
         </form>

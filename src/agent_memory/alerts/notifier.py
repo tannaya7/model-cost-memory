@@ -117,6 +117,9 @@ async def deliver_pending(
             .join(Job, Job.job_id == Alert.job_id).join(Project, Project.project_id == Job.project_id)
             .where(Alert.delivered_at.is_(None), Alert.resolved_at.is_(None), Alert.delivery_failed_at.is_(None),
                    Project.webhook_url.is_not(None),
+                   # A subscription project pays a flat price, so an old money alert (BUDGET, which also carries
+                   # the PROJECTED level) is never sent out in dollars. TRIAL_BUDGET stays: trials spend real money.
+                   ~((Alert.kind == "BUDGET") & (Project.billing_mode == "subscription")),
                    (Alert.next_attempt_at.is_(None)) | (Alert.next_attempt_at <= now))
             .order_by(Alert.created_at).limit(BATCH).with_for_update(of=Alert, skip_locked=True)
         )

@@ -62,7 +62,7 @@
       "shutdown_date": null,
       "status": "GOOD_ENOUGH",
       "weighted_pass_rate": 0.9904761904761905,
-      "why": "At most 3 points worse than acme-large, 95% sure"
+      "why": "At most 3 points worse than acme-large, with high confidence (about 97.5%, one-sided)"
     },
     {
       "catalog_status": "ACTIVE",
@@ -85,6 +85,7 @@
   ],
   "next_step": "Re-test acme-nano: cheaper, but not enough evidence yet",
   "progress": 1.0,
+  "promising": null,
   "recommended": {
     "model": "acme-mini",
     "model_version": "acme-mini-2026-08-15"
@@ -101,6 +102,7 @@
   },
   "summary": null,
   "summary_prompt_version": null,
+  "sure_enough": null,
   "verdict": "DOWNGRADE",
   "warnings": []
 }

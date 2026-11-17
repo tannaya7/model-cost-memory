@@ -195,3 +195,49 @@ async def test_deleting_tool_inputs_keeps_names_and_other_runs(client, dev_login
     await session.refresh(mine), await session.refresh(theirs), await session.refresh(plain)
     assert mine.tool_calls == [{"name": "lookup", "id": "c1"}, {"name": "send", "id": "c2"}]
     assert theirs.tool_calls == kept and plain.tool_calls == [{"name": "x", "id": "c3"}]
+
+
+async def test_billing_mode_defaults_to_per_use_and_the_owner_can_change_it(client, dev_login):
+    await dev_login(client, "ana@example.com")
+    made = (await client.post("/v1/projects", json={"name": "Demo"})).json()["project"]
+    pid = made["project_id"]
+    assert made["billing_mode"] == "per_use"  # existing behaviour is unchanged unless someone opts in
+    assert (await client.get(f"/v1/projects/{pid}")).json()["billing_mode"] == "per_use"
+    assert (await client.patch(f"/v1/projects/{pid}", json={"billing_mode": "subscription"})).json()["billing_mode"] == "subscription"
+    # an unrelated change leaves it alone
+    assert (await client.patch(f"/v1/projects/{pid}", json={"name": "Renamed"})).json()["billing_mode"] == "subscription"
+    assert (await client.patch(f"/v1/projects/{pid}", json={"billing_mode": "both"})).json()["billing_mode"] == "both"
+    assert [p["billing_mode"] for p in (await client.get("/v1/projects")).json()] == ["both"]
+    assert (await client.patch(f"/v1/projects/{pid}", json={"billing_mode": "free"})).status_code == 422
+    assert (await client.patch(f"/v1/projects/{pid}", json={"billing_mode": None})).json()["billing_mode"] == "both"
+
+
+async def test_a_project_can_be_created_with_a_billing_mode(client, dev_login):
+    await dev_login(client, "ana@example.com")
+    made = await client.post("/v1/projects", json={"name": "Sub", "billing_mode": "subscription"})
+    assert made.json()["project"]["billing_mode"] == "subscription"
+    assert (await client.post("/v1/projects", json={"name": "Bad", "billing_mode": "x"})).status_code == 422
+
+
+async def test_only_the_owner_changes_the_billing_mode(client, dev_login):
+    await dev_login(client, "ana@example.com")
+    pid = (await client.post("/v1/projects", json={"name": "Demo"})).json()["project"]["project_id"]
+    await client.post("/auth/logout")
+    assert (await client.patch(f"/v1/projects/{pid}", json={"billing_mode": "both"})).status_code == 401
+    await dev_login(client, "ben@example.com")
+    assert (await client.patch(f"/v1/projects/{pid}", json={"billing_mode": "both"})).status_code in (403, 404)
+
+
+async def test_f22_input_size_band_counts_cached_tokens(client, session):
+    project, key = await create_project(session, "bands")
+    job = Job(project_id="bands", name="doc", check_kind="ANSWER_KEY", check_config={"fields": ["t"]})
+    session.add(job)
+    await session.flush()
+    session.add(Run(
+        run_id=uuid.uuid4(), job_id=job.job_id, project_id="bands", prompt="p", prompt_hash="h", model="mini",
+        model_version="mini-2026-09", tokens_in=500, cache_read_tokens=100_000, outcome="PASS", cost_usd=0.002,
+        state="INDEXED", created_at=datetime.now(UTC) - timedelta(hours=1),
+    ))
+    await session.commit()
+    body = (await client.get("/v1/jobs/doc/insights", headers={"X-API-Key": key})).json()
+    assert [b["group"] for b in body["by_input_size"]] != ["under 8k"]

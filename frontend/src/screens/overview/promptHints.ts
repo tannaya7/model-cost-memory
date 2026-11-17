@@ -1,5 +1,6 @@
 /** Plain tips for writing cheaper prompts, from how a prompt's tokens are spent. Rules are our choices, not promises. */
 import type { PromptGroup } from "../../features/insights/api/promptsApi";
+import type { BillingMode } from "../../features/projects/hooks/useBillingMode";
 
 export type Hint = { id: string; title: string; text: string };
 
@@ -14,7 +15,9 @@ export const MAX_TIPS = 2;
 
 const pctOf = (x: number) => `${Math.round(x * 100)}%`;
 
-export function promptHints(g: PromptGroup): Hint[] {
+/** Subscription projects get allowance-neutral wording: we have not verified how a plan counts cached text. */
+export function promptHints(g: PromptGroup, mode: BillingMode = "per_use"): Hint[] {
+  const sub = mode === "subscription";
   if (g.share < MIN_SHARE_FOR_TIPS) return [];
   const tips: Hint[] = [];
   const start = g.repeated_start_share;
@@ -24,7 +27,9 @@ export function promptHints(g: PromptGroup): Hint[] {
     tips.push({
       id: "repeated-start",
       title: "Much of the prompt repeats",
-      text: `${pctOf(start)} of this prompt is the same in every call. Many providers charge much less for text they have already seen. Keep it at the very start and turn on prompt caching with your provider.`,
+      text: sub
+        ? `${pctOf(start)} of this prompt is the same in every call. Some providers count text they have already seen differently, so keeping the start of the prompt the same may help. We have not verified how your plan counts it.`
+        : `${pctOf(start)} of this prompt is the same in every call. Many providers charge much less for text they have already seen. Keep it at the very start and turn on prompt caching with your provider.`,
     });
   }
   if (end !== null && end >= REPEATED_SHARE && (start ?? 0) < REPEATED_START_MAX_FOR_END_TIP) {
@@ -38,7 +43,7 @@ export function promptHints(g: PromptGroup): Hint[] {
     tips.push({ id: "heavy-input", title: "A lot goes in, little comes out", text: "You send a lot to get a little back. Check that every part you send is needed." });
   }
   if (g.avg_tokens_out > 0 && g.avg_tokens_out >= g.avg_tokens_in) {
-    tips.push({ id: "long-answers", title: "Long answers", text: "The AI writes a lot in each answer. Asking for shorter answers, or setting a maximum length, can cut the cost." });
+    tips.push({ id: "long-answers", title: "Long answers", text: sub ? "The AI writes a lot in each answer. Asking for shorter answers, or setting a maximum length, can make each call smaller." : "The AI writes a lot in each answer. Asking for shorter answers, or setting a maximum length, can cut the cost." });
   }
 
   const out = tips.slice(0, MAX_TIPS);

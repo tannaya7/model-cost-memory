@@ -82,7 +82,9 @@ def _parse_date(value: Any) -> date | None:
 def status_for(shutdown: date | None, today: date) -> str:
     if shutdown is None:
         return "ACTIVE"
-    return "RETIRED" if shutdown <= today else "DEPRECATED"
+    # Providers serve a model until the end of its shutdown date ("not before" that date): it is still
+    # DEPRECATED on the day itself and RETIRED from the day after (F31).
+    return "RETIRED" if shutdown < today else "DEPRECATED"
 
 
 def _priced_entries(data: dict[str, Any], today: date):

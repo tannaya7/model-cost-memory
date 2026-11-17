@@ -113,10 +113,10 @@ def month_bounds(now: datetime) -> tuple[datetime, datetime]:
 
 
 async def _spend(session: AsyncSession, project_id: str, start: datetime, end: datetime) -> Decimal:
-    """Priced spend of the app's own calls (re-test calls are ours, counted by the trial cap) in [start, end). Unpriced runs (cost NULL) are not counted, never treated as free."""
+    """Priced spend of the app's own PRODUCTION calls (the same runs the Overview counts; re-test and shadow calls are not the app's spend, trials are counted by the trial cap) in [start, end). Unpriced runs (cost NULL) are not counted, never treated as free."""
     return Decimal((await session.execute(
         select(func.coalesce(func.sum(Run.cost_usd), 0))
-        .where(Run.project_id == project_id, Run.run_kind != "RETEST", Run.cost_usd.is_not(None),
+        .where(Run.project_id == project_id, Run.run_kind == "PRODUCTION", Run.cost_usd.is_not(None),
                Run.created_at >= start, Run.created_at < end)
     )).scalar_one())
 
@@ -127,10 +127,12 @@ async def _projected(
     """Spent so far plus the last 7 full UTC days' average per day for each remaining day; None without 7 days of data."""
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
     first = (await session.execute(
-        select(func.min(Run.created_at)).where(Run.project_id == project_id, Run.run_kind != "RETEST",
+        select(func.min(Run.created_at)).where(Run.project_id == project_id, Run.run_kind == "PRODUCTION",
                                                Run.cost_usd.is_not(None))
     )).scalar_one()
-    if first is None or first > today - timedelta(days=PROJECTION_DAYS):
+    # Enough data = the first priced run falls on the UTC day 7 days ago or earlier (the web app's rule: the
+    # day itself counts). The first, partial day counts as a full day in the average (can under-state by up to 1/7).
+    if first is None or first >= today - timedelta(days=PROJECTION_DAYS - 1):
         return None  # under 7 days of data: no forecast (our choice, after AWS's no-forecast-on-short-history rule)
     week = await _spend(session, project_id, today - timedelta(days=PROJECTION_DAYS), today)
     remaining_days = Decimal(str((end - now).total_seconds() / 86400))
@@ -144,12 +146,14 @@ async def check_budgets(session: AsyncSession, *, now: datetime | None = None) -
     start, end = month_bounds(now)
     month = f"{now:%Y-%m}"
     raised: list[Alert] = []
-    projects = (await session.execute(select(Project).where(Project.monthly_budget_usd.is_not(None)))).scalars().all()
+    projects = (await session.execute(select(Project).where(
+        Project.monthly_budget_usd.is_not(None), Project.billing_mode != "subscription"))).scalars().all()
+    # A subscription pays a flat fee, so a dollar spending limit means nothing there: the limit is kept, no alert fires.
     for project in projects:
         budget = Decimal(project.monthly_budget_usd)
         spent = await _spend(session, project.project_id, start, now + timedelta(microseconds=1))
         top = (await session.execute(
-            select(Run.job_id).where(Run.project_id == project.project_id, Run.run_kind != "RETEST",
+            select(Run.job_id).where(Run.project_id == project.project_id, Run.run_kind == "PRODUCTION",
                                      Run.cost_usd.is_not(None), Run.created_at >= start)
             .group_by(Run.job_id).order_by(func.sum(Run.cost_usd).desc()).limit(1)
         )).scalar_one_or_none()
@@ -165,7 +169,7 @@ async def check_budgets(session: AsyncSession, *, now: datetime | None = None) -
                 alert = await raise_alert(
                     session, job, "BUDGET", key,
                     {"level": str(level), "month": month, "budget_usd": float(budget), "spent_usd": float(spent),
-                     "summary": f"You have used {float(percent):.0f}% of your ${float(budget):,.2f} monthly AI "
+                     "summary": f"You have used {int(percent)}% of your ${float(budget):,.2f} monthly AI "
                                 f"budget (${float(spent):,.2f} so far this month). Nothing is blocked; this is "
                                 f"a heads-up, and provider cost data can lag a little."},
                     now=now)
