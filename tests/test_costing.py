@@ -106,3 +106,26 @@ def test_f5_one_hour_cache_writes_cost_twice_the_input_price():
     # the split can never exceed the total writes
     assert compute_cost(price, 0, 0, cache_write_tokens=100, cache_write_1h_tokens=10**9) == compute_cost(
         price, 0, 0, cache_write_tokens=100, cache_write_1h_tokens=100)
+
+
+def test_gemini_4_cache_read_is_005_and_older_gemini_families_stay_01():
+    # Gemini pricing page: Carbon/Argon $0.10 cached vs $2.00 input, Hydrogen $0.075 vs $1.50 = 0.05x.
+    # The scheduled price changes (Carbon/Argon doubling 2026-12-01, 3.6/3.8 Flash 2027-01-01) are catalog
+    # prices, not factors, so nothing here depends on the date.
+    from agent_memory.costing import cache_factors
+
+    for name in ("gemini-4-carbon", "gemini/gemini-4-argon", "gemini-4-hydrogen"):
+        assert cache_factors(name)[0] == Decimal("0.05")
+    for name in ("gemini-2.5-pro", "gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.5-flash-lite",
+                 "gemini-3.6-flash", "gemini-3.8-flash"):
+        assert cache_factors(name)[0] == Decimal("0.1")
+    assert cache_factors("gemini-4-carbon")[1] == Decimal("1.25")
+
+
+def test_deepseek_cache_hit_factors_come_from_the_official_off_peak_prices():
+    from agent_memory.costing import cache_factors
+
+    assert cache_factors("deepseek-flash")[0] == Decimal("0.02")
+    assert cache_factors("deepseek/deepseek-v4-pro")[0] == Decimal("0.022") / Decimal("0.66")
+    price = Price.from_input_output("0.66", "1.98", model="deepseek-v4-pro")
+    assert price.cache_read_per_mtok.quantize(Decimal("0.001")) == Decimal("0.022")

@@ -34,7 +34,9 @@ WRITE_1H_FACTOR = Decimal("2")  # Anthropic 1-hour cache writes
 # OpenAI's pricing page (https://developers.openai.com/api/docs/pricing, opened 2026-11-16, Standard tier),
 # cached input / input: gpt-4o 1.25/2.50 = 0.5, gpt-4o-mini 0.075/0.15 = 0.5, gpt-4.1 0.50/2.00 = 0.25,
 # gpt-4.1-mini 0.10/0.40 = 0.25, o3 0.50/2.00 = 0.25, gpt-5 family 0.1.
-# Gemini and other providers keep the 0.1 default (their page could not be re-opened on 2026-11-16: UNVERIFIED).
+# Gemini 4 is 0.05 and DeepSeek has its own ratios (below); other Gemini families are 0.1 (verified on the Gemini
+# pricing page 2026-11-17, except Gemini 2.0 which is no longer listed: UNVERIFIED). Other providers keep 0.1.
+# Known gap: Gemini explicit-cache storage is billed per hour held, which usage does not report, so it is not costed.
 # Keys are matched on a name boundary of the lowercased model name with "." read as "-": the key may not
 # be glued to other letters/digits ("fable-5-10" is not "fable-5-1"), and may only be followed by the end,
 # a "-" plus a digit (a date) or "-latest". Longer keys are listed first so "gpt-4o-mini" beats "gpt-4o".
@@ -50,6 +52,20 @@ _CACHE_READ_FACTORS: tuple[tuple[str, Decimal], ...] = (
     ("gpt-4-1-mini", Decimal("0.25")),
     ("gpt-4-1", Decimal("0.25")),
     ("o3", Decimal("0.25")),
+    # Gemini 4 (https://aistudio.google.com/docs/pricing.md): Carbon and Argon cached $0.10 vs input $2.00,
+    # Hydrogen $0.075 vs $1.50: 0.05x. Every other Gemini family on that page (2.5, 3 Flash Preview, 3.1,
+    # 3.5, 3.6, 3.8) is 0.1x, the default below. The page's SCHEDULED PRICE CHANGES (Gemini 4 Carbon/Argon
+    # input $2 to $4 and output $10 to $20 from 2026-12-01; 3.6/3.8 Flash $0.75 to $1.50 from 2027-01-01) are
+    # prices, not factors: they come from the synced catalog, so they are deliberately not hard-coded here.
+    # The factor stays 0.05 across the Carbon/Argon change (cached $0.10 to $0.20 beside input $2 to $4).
+    ("gemini-4-carbon", Decimal("0.05")),
+    ("gemini-4-argon", Decimal("0.05")),
+    ("gemini-4-hydrogen", Decimal("0.05")),
+    # DeepSeek (https://api-docs.deepseek.com/quick_start/pricing, off-peak): cache hit / miss input is
+    # flash 0.003/0.15 = 0.02 and v4-pro 0.022/0.66. Peak hours cost 2x on every category (the ratio is
+    # unchanged), but the peak window was not read, so peak pricing is NOT modelled.
+    ("deepseek-flash", Decimal("0.003") / Decimal("0.15")),
+    ("deepseek-v4-pro", Decimal("0.022") / Decimal("0.66")),
 )
 _CACHE_READ_PATTERNS = tuple(
     (re.compile(r"(?<![a-z0-9])" + re.escape(key) + r"(?:$|-latest(?![a-z0-9])|-[0-9])"), factor)

@@ -209,10 +209,21 @@ def _int(value: Any) -> int:
 
 
 def read_response(response: Any, *, include_arguments: bool = False) -> dict[str, Any]:
-    """Pull model, usage and output out of an Anthropic- or OpenAI-shaped response (object or dict).
+    """Pull model, usage and output out of an Anthropic-, OpenAI- (Chat or Responses), DeepSeek- or
+    Gemini-shaped response (object or dict).
 
-    `tokens_in` is uncached input only: OpenAI counts cached tokens inside `prompt_tokens`, so they
-    are subtracted here to keep cost exact (docs/ARCHITECTURE.md, cost calculation).
+    `tokens_in` is uncached input only, so cost is never billed twice. Verified against the providers' docs
+    and SDKs (2026-11-17): OpenAI counts cached and cache-write tokens INSIDE prompt_tokens / input_tokens
+    (https://developers.openai.com/api/docs/guides/prompt-caching); Anthropic's input_tokens EXCLUDES cache
+    reads and writes (https://platform.claude.com/docs/en/build-with-claude/prompt-caching); DeepSeek
+    prompt_tokens = prompt_cache_hit_tokens + prompt_cache_miss_tokens
+    (https://api-docs.deepseek.com/api/create-chat-completion); Gemini prompt_token_count includes cached
+    content (python-genai types.py). Thinking and reasoning tokens are already inside the output total for
+    Anthropic, OpenAI and DeepSeek; Gemini reports thoughts separately, so they are added to output.
+
+    Not modelled (needs a price or a field the run does not carry): OpenAI 12-hour cache writes (2.5x; all
+    writes are priced at the 30-minute 1.25x), Anthropic data-residency 1.1x, Batch 50%, fast mode, web
+    search $10 per 1,000 and the Haiku 5.5 over-100K price, DeepSeek peak pricing, Gemini storage fees.
 
     Tool calls are reduced to their names and ids; arguments are included only when `include_arguments`.
     """
@@ -221,20 +232,47 @@ def read_response(response: Any, *, include_arguments: bool = False) -> dict[str
     usage = _get(response, "usage")
     if usage is None:  # Gemini keeps usage under usage_metadata (SDK) or usageMetadata (REST)
         usage = _get(response, "usage_metadata") or _get(response, "usageMetadata")
-    if _get(usage, "input_tokens") is not None:  # Anthropic
+    if _get(usage, "input_tokens") is not None and _get(usage, "input_tokens_details") is not None:
+        # OpenAI Responses API (ResponseUsage). cached_tokens "counts billed reads and excludes tokens charged
+        # as writes" and both sit INSIDE input_tokens: "ordinaryInputTokens = inputTokens - cachedTokens -
+        # cacheWriteTokens" (https://developers.openai.com/api/docs/guides/prompt-caching). Reasoning tokens
+        # (output_tokens_details.reasoning_tokens) are a detail of output_tokens, so they are not added again.
+        cached = _int(_get(usage, "input_tokens_details", "cached_tokens"))
+        written = _int(_get(usage, "input_tokens_details", "cache_write_tokens"))
+        out["tokens_in"] = max(_int(_get(usage, "input_tokens")) - cached - written, 0)
+        out["tokens_out"] = _int(_get(usage, "output_tokens"))
+        out["cache_read_tokens"] = cached
+        out["cache_write_tokens"] = written
+    elif _get(usage, "input_tokens") is not None:  # Anthropic
         out["tokens_in"] = _int(_get(usage, "input_tokens"))
         out["tokens_out"] = _int(_get(usage, "output_tokens"))
         out["cache_read_tokens"] = _int(_get(usage, "cache_read_input_tokens"))
         out["cache_write_tokens"] = _int(_get(usage, "cache_creation_input_tokens"))
-        # UNVERIFIED field names (Anthropic usage.cache_creation split; docs page not re-opened): absent -> 5m rate.
+        # usage.cache_creation {ephemeral_5m_input_tokens, ephemeral_1h_input_tokens}; the total
+        # cache_creation_input_tokens "equals the sum of the values in the cache_creation object"
+        # (https://platform.claude.com/docs/en/build-with-claude/prompt-caching). Absent -> 5m rate.
         one_hour = _int(_get(usage, "cache_creation", "ephemeral_1h_input_tokens"))
         if one_hour:
             out["cache_write_1h_tokens"] = min(one_hour, out["cache_write_tokens"])
-    elif _get(usage, "prompt_tokens") is not None:  # OpenAI and compatible servers (incl. Ollama)
+    elif _get(usage, "prompt_cache_hit_tokens") is not None:
+        # DeepSeek: "prompt_tokens ... equals prompt_cache_hit_tokens + prompt_cache_miss_tokens"
+        # (https://api-docs.deepseek.com/api/create-chat-completion). Misses are the full-price input.
+        hit = _int(_get(usage, "prompt_cache_hit_tokens"))
+        miss = _get(usage, "prompt_cache_miss_tokens")
+        out["tokens_in"] = _int(miss) if miss is not None else max(_int(_get(usage, "prompt_tokens")) - hit, 0)
+        out["tokens_out"] = _int(_get(usage, "completion_tokens"))
+        out["cache_read_tokens"] = hit
+    elif _get(usage, "prompt_tokens") is not None:  # OpenAI Chat Completions and compatible servers (incl. Ollama)
+        # prompt_tokens_details.cached_tokens ("Cached tokens present in the prompt") and cache_write_tokens
+        # are both inside prompt_tokens; reasoning tokens are inside completion_tokens ("still counted in the
+        # total completion tokens for purposes of billing").
         cached = _int(_get(usage, "prompt_tokens_details", "cached_tokens"))
-        out["tokens_in"] = max(_int(_get(usage, "prompt_tokens")) - cached, 0)
+        written = _int(_get(usage, "prompt_tokens_details", "cache_write_tokens"))
+        out["tokens_in"] = max(_int(_get(usage, "prompt_tokens")) - cached - written, 0)
         out["tokens_out"] = _int(_get(usage, "completion_tokens"))
         out["cache_read_tokens"] = cached
+        if written:
+            out["cache_write_tokens"] = written
     elif _get(usage, "prompt_token_count") is not None or _get(usage, "promptTokenCount") is not None:
         # Gemini usageMetadata (SDK snake_case or REST camelCase). promptTokenCount already includes the
         # cached tokens; thoughts are billed as output. Tool-use prompt tokens are added to input
@@ -268,20 +306,75 @@ def read_response(response: Any, *, include_arguments: bool = False) -> dict[str
             if texts:
                 out["output"] = "".join(texts)
 
-    calls: list[dict[str, Any]] = []
-    if isinstance(content, list):  # Anthropic: tool_use blocks
-        calls += [
-            {"id": _get(b, "id"), "name": _get(b, "name"), "arguments": _get(b, "input")}
-            for b in content if _get(b, "type") == "tool_use"
-        ]
-    if isinstance(choices, list) and choices:  # OpenAI: message.tool_calls
-        calls += [
-            {"id": _get(c, "id"), "name": _get(c, "function", "name"), "arguments": _get(c, "function", "arguments")}
-            for c in (_get(choices[0], "message", "tool_calls") or [])
-        ]
+    calls = _read_tool_calls(content, choices, candidates, _get(response, "output"))
     if calls:
         out["tool_calls"] = sanitize_tool_calls(calls, keep_arguments=include_arguments)
     return out
+
+
+# OpenAI Responses `output[]` item types that are a tool call, exactly as the SDK spells them
+# (openai-python types/responses/response_output_item.py). Hosted tools carry no `name`: the type is the tool.
+# `mcp_list_tools` and `mcp_approval_request` are not calls, so they are left out.
+_RESPONSES_CALL_TYPES = frozenset({
+    "function_call", "custom_tool_call", "mcp_call", "web_search_call", "file_search_call", "computer_call",
+    "code_interpreter_call", "local_shell_call", "shell_call", "apply_patch_call", "tool_search_call",
+    "image_generation_call",
+})
+
+
+def _mcp_name(server: Any, name: Any) -> Any:
+    """`mcp__server__tool`, the spelling insights/agent_kinds.MCP_NAME recognises as a tool server."""
+    if not name or not server or str(name).startswith("mcp__"):
+        return name
+    return f"mcp__{server}__{name}"
+
+
+def _read_tool_calls(content: Any, choices: Any, candidates: Any, output: Any) -> list[dict[str, Any]]:
+    """Tool calls as {id, name, arguments}; the caller drops the arguments unless the project opted in.
+
+    Sources (anthropic-sdk-python and openai-python types, python-genai types.py):
+    - Anthropic content blocks `tool_use`, `server_tool_use` {id, name, input} and the beta `mcp_tool_use`
+      {id, name, server_name, input} (its name gets the server so MCP detection works).
+    - OpenAI Chat message.tool_calls: {type: "function", function: {name, arguments}} or
+      {type: "custom", custom: {name, input}}.
+    - OpenAI Responses output[] items (see _RESPONSES_CALL_TYPES); `mcp_call` has `server_label`.
+    - Gemini candidates[].content.parts[].functionCall {name, args, id?} (REST) / function_call (SDK).
+    """
+    calls: list[dict[str, Any]] = []
+    if isinstance(content, list):
+        for b in content:
+            kind = _get(b, "type")
+            if kind in ("tool_use", "server_tool_use"):
+                calls.append({"id": _get(b, "id"), "name": _get(b, "name"), "arguments": _get(b, "input")})
+            elif kind == "mcp_tool_use":
+                calls.append({"id": _get(b, "id"), "name": _mcp_name(_get(b, "server_name"), _get(b, "name")),
+                              "arguments": _get(b, "input")})
+    if isinstance(choices, list) and choices:
+        for c in _get(choices[0], "message", "tool_calls") or []:
+            if _get(c, "function", "name") is not None or _get(c, "custom") is None:
+                calls.append({"id": _get(c, "id"), "name": _get(c, "function", "name"),
+                              "arguments": _get(c, "function", "arguments")})
+            else:
+                calls.append({"id": _get(c, "id"), "name": _get(c, "custom", "name"),
+                              "arguments": _get(c, "custom", "input")})
+    if isinstance(output, list):
+        for item in output:
+            kind = _get(item, "type")
+            if kind not in _RESPONSES_CALL_TYPES:
+                continue
+            name = _get(item, "name") or kind
+            if kind == "mcp_call":
+                name = _mcp_name(_get(item, "server_label"), name)
+            calls.append({"id": _get(item, "call_id") or _get(item, "id"), "name": name,
+                          "arguments": _get(item, "arguments") if _get(item, "arguments") is not None
+                          else _get(item, "input")})
+    if isinstance(candidates, list) and candidates:
+        parts = _get(candidates[0], "content", "parts")
+        for part in parts if isinstance(parts, list) else []:
+            call = _get(part, "functionCall") or _get(part, "function_call")
+            if call is not None and _get(call, "name"):
+                calls.append({"id": _get(call, "id"), "name": _get(call, "name"), "arguments": _get(call, "args")})
+    return calls
 
 
 def estimate_tools_tokens(tools: Any) -> int | None:
