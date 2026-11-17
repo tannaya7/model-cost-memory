@@ -31,13 +31,13 @@ export type Thumb = "kpi" | "line" | "gauge" | "split" | "pills" | "table" | "li
 
 /** Every widget there is. `span` is its width in a three-column grid. */
 export const WIDGETS: Record<WidgetId, { title: string; text: string; tag: string; span: 1 | 2 | 3; thumb: Thumb; section?: SectionId; legacy?: boolean }> = {
-  "spend-month": { title: "Spend", text: "What you spent, each day against the period before, AI calls, the month-end estimate and an optional budget. For a subscription it shows your usage instead.", tag: "Spend", span: 3, thumb: "line", section: "spend" },
+  "spend-month": { title: "Spend", text: "What you spent, each day against the period before, AI calls, the month-end estimate and an optional monthly limit. For a subscription it shows your usage instead.", tag: "Spend", span: 3, thumb: "line", section: "spend" },
   correct: { title: "Correct answers", text: "The share of checked answers that were correct, against a target you set, and how it moved.", tag: "Quality", span: 1, thumb: "gauge", section: "quality" },
   "next-step": { title: "What you could save", text: "How much you could save each month by moving AI tasks to cheaper models, and where to act on it. For a subscription: ways to make your allowance last longer.", tag: "Savings", span: 3, thumb: "hero", section: "next" },
   kpis: { title: "Key numbers", text: "The four numbers to check first: what you spent, how many answers were correct, how many AI calls were made and how much you could save. Each is compared with the period before.", tag: "Performance", span: 3, thumb: "kpi" , legacy: true },
   savings: { title: "What you could save", text: "How much you could save each month if you follow our recommendations, and where to act on them.", tag: "Savings", span: 3, thumb: "hero" , legacy: true },
   "spend-trend": { title: "This period against the last", text: "What you spent, or how many AI calls were made, each day, with the period before as a dashed line.", tag: "Trends", span: 2, thumb: "line" , legacy: true },
-  projection: { title: "Where this month's spending is heading", text: "An estimate of your bill at month end, with an optional monthly budget and a warning as you near it.", tag: "Budget", span: 1, thumb: "gauge" , legacy: true },
+  projection: { title: "Where this month's spending is heading", text: "An estimate of your bill at month end, with an optional monthly limit and a warning as you near it.", tag: "Limit", span: 1, thumb: "gauge" , legacy: true },
   tokens: { title: "Token usage", text: "Tokens are the small pieces of text AI models read and write. See how many you use each day, who uses the most, and how fast a usage limit is filling.", tag: "Usage", span: 2, thumb: "area" },
   agents: { title: "What is using your tokens", text: "Which agents use the most tokens, their heaviest tasks, what tools they use, and how big your tool list is. Worked out from your calls.", tag: "Usage", span: 2, thumb: "split" },
   "tokens-went": { title: "Where your tokens went", text: "Which prompts use the most tokens, how much of each is the same in every call, and plain tips to make them cheaper.", tag: "Usage", span: 2, thumb: "split" },
@@ -98,5 +98,7 @@ export function useLayout(project: string) {
       save(next);
     },
     reset: () => save(DEFAULT_LAYOUT),
+    /** Puts back an earlier list (used by Undo). */
+    restore: save,
   };
 }

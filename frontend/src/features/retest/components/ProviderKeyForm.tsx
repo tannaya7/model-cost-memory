@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Card } from "../../../shared/components/Card";
+import { useToast } from "../../../ui/Toast";
 import { useSaveProviderKey } from "../hooks/useRetest";
 
 const PROVIDERS = [
@@ -12,6 +13,7 @@ const PROVIDERS = [
 /** Asked for the first time a re-test needs it, never at project creation. */
 export function ProviderKeyForm({ onSaved }: { onSaved: () => void }) {
   const save = useSaveProviderKey();
+  const toast = useToast();
   const [provider, setProvider] = useState("gemini");
   const [customName, setCustomName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
@@ -23,12 +25,17 @@ export function ProviderKeyForm({ onSaved }: { onSaved: () => void }) {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!canSave) return;
-    await save.mutateAsync({
-      provider: isOther ? customName.trim().toLowerCase() : provider,
-      api_key: apiKey.trim(),
-      base_url: isOther ? baseUrl.trim() : null,
-    });
+    try {
+      await save.mutateAsync({
+        provider: isOther ? customName.trim().toLowerCase() : provider,
+        api_key: apiKey.trim(),
+        base_url: isOther ? baseUrl.trim() : null,
+      });
+    } catch {
+      return; // the error shows under the form and the pasted key stays
+    }
     setApiKey("");
+    toast({ message: "Provider key saved" });
     onSaved();
   }
 

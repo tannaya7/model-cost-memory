@@ -133,12 +133,19 @@ export function BudgetEditor({ id, alwaysOpen = false }: { id: string; alwaysOpe
   const open = alwaysOpen || editing;
   const remove = async () => {
     setRemoveError(null);
+    const previous = budget;
     const err = await account.save(null);
     if (err) return setRemoveError(err);
     d.discard();
     d.clearResult();
     setEditing(false);
-    toast({ message: "Limit removed" });
+    toast({
+      message: "Limit removed. Warnings for it are off.",
+      undo: previous === null ? undefined : {
+        label: "Undo",
+        onUndo: () => void account.save(previous).then((e) => toast(e ? { message: `Could not restore the limit: ${e}`, kind: "error" } : { message: `Limit set back to ${exactUsd(previous)}` })),
+      },
+    });
   };
   const apply = async () => {
     const ok = await d.apply();

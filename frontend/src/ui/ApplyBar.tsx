@@ -1,7 +1,7 @@
 /** The "Unsaved changes" bar at the bottom of a settings section. It sits in the page flow (never over
  * content or the phone keyboard), appears only while the section differs from what is saved, and offers
  * Apply and Discard. While it shows, leaving the page asks first. */
-import { useContext, useEffect, useId, useRef, type ReactNode } from "react";
+import { useContext, useEffect, useId, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { UNSAFE_DataRouterContext, useBlocker } from "react-router-dom";
 import { Button } from "./primitives";
 
@@ -14,6 +14,30 @@ function RouteGuard() {
     else blocker.reset();
   }, [blocker]);
   return null;
+}
+
+/** Every bar with unsaved changes registers here, so leaving the page asks ONCE however many sections are
+ * dirty: the first registered bar owns the page-leave and tab-close guards. */
+const dirtyOwners: string[] = [];
+const listeners = new Set<() => void>();
+const emit = () => listeners.forEach((l) => l());
+const subscribe = (l: () => void) => {
+  listeners.add(l);
+  return () => void listeners.delete(l);
+};
+const firstOwner = () => dirtyOwners[0] ?? null;
+
+function useIsGuardOwner(id: string, dirty: boolean): boolean {
+  useEffect(() => {
+    if (!dirty) return;
+    dirtyOwners.push(id);
+    emit();
+    return () => {
+      dirtyOwners.splice(dirtyOwners.indexOf(id), 1);
+      emit();
+    };
+  }, [id, dirty]);
+  return useSyncExternalStore(subscribe, firstOwner, firstOwner) === id;
 }
 
 /** Asks the browser to confirm closing or reloading the tab, only while there are unsaved changes. */
@@ -55,7 +79,8 @@ export function ApplyBar({
   const ref = useRef<HTMLDivElement>(null);
   const reviewId = useId();
   const errorId = useId();
-  useBeforeUnload(dirty);
+  const owner = useIsGuardOwner(useId(), dirty);
+  useBeforeUnload(dirty && owner);
   if (!dirty && !applying && !error) return null;
   const apply = async () => {
     const scope = ref.current?.parentElement;
@@ -66,7 +91,7 @@ export function ApplyBar({
   const describedBy = [review ? reviewId : null, error ? errorId : null].filter(Boolean).join(" ") || undefined;
   return (
     <div ref={ref} className="mt-4 rounded-[10px] border border-rule bg-surface-2 p-3">
-      {router && dirty && <RouteGuard />}
+      {router && dirty && owner && <RouteGuard />}
       {review && <div id={reviewId} className="mb-3 text-[13px] text-dim">{review}</div>}
       {error && <p id={errorId} role="alert" className="mb-3 text-[13px] text-bad">{error}</p>}
       <div className="flex flex-wrap items-center justify-between gap-2">

@@ -74,6 +74,12 @@ describe("Overview", () => {
     expect(JSON.parse(localStorage.getItem("mcm_layout_acme")!)).toContain("spend-by-job");
     await user.click(within(drawer).getAllByRole("button", { name: "Remove" })[0]);
     expect(JSON.parse(localStorage.getItem("mcm_layout_acme")!)).not.toContain("spend-month");
+    // Removing is applied at once, says so politely (no focus taken) and can be undone.
+    const toast = (await screen.findByText(/^Removed "Spend"$/)).closest("[role=status]")!;
+    expect(toast.contains(document.activeElement)).toBe(false);
+    await user.click(within(toast as HTMLElement).getByRole("button", { name: "Undo" }));
+    expect(JSON.parse(localStorage.getItem("mcm_layout_acme")!)).toContain("spend-month");
+    expect(JSON.parse(localStorage.getItem("mcm_layout_acme")!)).toContain("spend-by-job");
   });
 
   it("starts with exactly seven widgets, and the others are still there to add", async () => {

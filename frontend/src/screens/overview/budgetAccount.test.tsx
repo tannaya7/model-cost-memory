@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../../test/render";
 import { WithProject } from "../../app/project";
@@ -67,8 +67,13 @@ describe("Settings: monthly spending limit", () => {
     renderWithProviders(<WithProject id="acme"><BudgetSection project={project} /></WithProject>);
     expect(screen.getByText("$500 a month")).toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Remove limit" }));
-    expect((await screen.findByText("Limit removed")).closest("[role=status]")).not.toBeNull();
+    const toast = (await screen.findByText("Limit removed. Warnings for it are off.")).closest("[role=status]") as HTMLElement;
+    expect(toast).not.toBeNull();
     expect(patches).toEqual([{ monthly_budget_usd: null }]);
+    // Undo puts the previous amount back with one more PATCH.
+    await user.click(within(toast).getByRole("button", { name: "Undo" }));
+    expect(await screen.findByText("Limit set back to $500")).toBeInTheDocument();
+    expect(patches).toEqual([{ monthly_budget_usd: null }, { monthly_budget_usd: 500 }]);
   });
 });
 

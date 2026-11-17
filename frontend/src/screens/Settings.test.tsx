@@ -7,7 +7,7 @@ import { renderWithProviders } from "../test/render";
 import { WithProject } from "../app/project";
 import { ToastProvider } from "../ui/Toast";
 import type { Project } from "../shared/api/types";
-import { BudgetSection, PrivacySection, ProjectSection } from "./Settings";
+import { AlertsSection, BudgetSection, PrivacySection, ProjectSection, RetestsSection } from "./Settings";
 import Settings from "./Settings";
 
 afterEach(() => {
@@ -27,9 +27,9 @@ const series = (from: string, spend: number, job = "invoice-extract") => {
   return out;
 };
 
-type Opts = { budget?: number | null; billing?: string; daily?: unknown[]; failPatch?: boolean; slow?: boolean };
+type Opts = { webhook?: string | null; retestAllowed?: boolean; routes?: Record<string, unknown>; budget?: number | null; billing?: string; daily?: unknown[]; failPatch?: boolean; slow?: boolean };
 function account(opts: Opts = {}) {
-  const project = { project_id: "acme", name: "Acme", content_retention_days: 90, store_tool_arguments: false, billing_mode: opts.billing ?? "per_use", webhook_url: null, retest_allowed: true, retest_monthly_cap_usd: 10, monthly_budget_usd: opts.budget ?? null, key_prefix: "mcm_x" } as unknown as Project;
+  const project = { project_id: "acme", name: "Acme", content_retention_days: 90, store_tool_arguments: false, billing_mode: opts.billing ?? "per_use", webhook_url: opts.webhook ?? null, retest_allowed: opts.retestAllowed ?? true, retest_monthly_cap_usd: 10, monthly_budget_usd: opts.budget ?? null, key_prefix: "mcm_x" } as unknown as Project;
   const calls: { method: string; url: string; body?: unknown }[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
@@ -43,9 +43,11 @@ function account(opts: Opts = {}) {
       return json({ ...project });
     }
     if (url.startsWith("/v1/insights/daily")) return json(opts.daily ?? []);
+    const route = Object.keys(opts.routes ?? {}).find((r) => url.startsWith(r));
+    if (route) return method === "DELETE" ? new Response(null, { status: 204 }) : json(opts.routes![route]);
     return json([]);
   }));
-  return { project, patches: () => calls.filter((c) => c.method === "PATCH") };
+  return { project, patches: () => calls.filter((c) => c.method === "PATCH"), writes: () => calls.filter((c) => c.method !== "GET") };
 }
 
 describe("Settings: nothing applies until you press Apply", () => {
@@ -108,9 +110,106 @@ describe("Settings: nothing applies until you press Apply", () => {
     renderWithProviders(<WithProject id="acme"><PrivacySection project={project} /></WithProject>);
     await user.click(screen.getByRole("button", { name: "30" }));
     expect(patches()).toHaveLength(0);
-    await user.click(screen.getByRole("button", { name: "Apply" }));
-    await screen.findByText("Settings applied");
+    await user.click(screen.getByRole("button", { name: "Delete older text, keep 30 days" }));
+    await screen.findByText("Keeping prompts and answers for 30 days");
     expect(patches().map((c) => c.body)).toEqual([{ content_retention_days: 30 }]);
+  });
+
+  it("a LOWER retention says exactly what is deleted and that it cannot come back; a higher one does not warn", async () => {
+    const { project, patches } = account();
+    const user = userEvent.setup();
+    renderWithProviders(<WithProject id="acme"><PrivacySection project={project} /></WithProject>);
+    await user.click(screen.getByRole("button", { name: "30" }));
+    const note = screen.getByText(/What will be deleted\./).parentElement!;
+    expect(note).toHaveTextContent("prompt, answer, tool calls and answer key of every AI call older than 30 days");
+    expect(note).toHaveTextContent("Whether each call was correct, what it cost and its token counts stay");
+    expect(note).toHaveTextContent("cannot be brought back");
+    expect(patches()).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Keep 90 days" }));
+    expect(patches()).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "365" }));
+    expect(screen.queryByText(/What will be deleted/)).toBeNull();
+  });
+
+  it("webhook: a non-https address is refused next to the field, what you typed stays, nothing is sent", async () => {
+    const { project, patches } = account();
+    const user = userEvent.setup();
+    renderWithProviders(<WithProject id="acme"><AlertsSection project={project} /></WithProject>);
+    const box = screen.getByLabelText("Webhook URL");
+    await user.type(box, "http://example.com/hook");
+    await user.click(screen.getByRole("button", { name: "Save address" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Use an address that starts with https://.");
+    expect(box).toHaveValue("http://example.com/hook");
+    expect(box).toHaveAttribute("aria-invalid", "true");
+    expect(patches()).toHaveLength(0);
+  });
+
+  it("webhook: a good address saves with a toast; emptying it first says alerts will only be in the app", async () => {
+    const { project, patches } = account({ webhook: "https://hooks.slack.com/x" });
+    const user = userEvent.setup();
+    renderWithProviders(<WithProject id="acme"><AlertsSection project={project} /></WithProject>);
+    await user.clear(screen.getByLabelText("Webhook URL"));
+    expect(screen.getByText(/alerts only appear in the app/)).toBeInTheDocument();
+    expect(patches()).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Remove address" }));
+    const toast = (await screen.findByText("Alert address removed. Alerts now show only in the app.")).closest("[role=status]");
+    expect(toast).not.toBeNull();
+    expect(patches().map((c) => c.body)).toEqual([{ webhook_url: null }]);
+  });
+
+  it("trials: turning ON allow-trials shows who gets the prompts and the budget; Keep trials off sends nothing", async () => {
+    const { project, writes } = account({ retestAllowed: false });
+    const user = userEvent.setup();
+    renderWithProviders(<WithProject id="acme"><RetestsSection project={project} /></WithProject>);
+    await user.click(screen.getByRole("checkbox", { name: /Allow trials on new models/ }));
+    expect(screen.getByText(/Past prompts will be sent to the provider of the model you choose to test, at their cost, within your trial budget of \$10\.00 a month\./)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Keep trials off" }));
+    expect(writes()).toHaveLength(0);
+    await user.click(screen.getByRole("checkbox", { name: /Allow trials on new models/ }));
+    await user.click(screen.getByRole("button", { name: "Allow trials" }));
+    await screen.findByText("Trials are allowed");
+    expect(writes().filter((c) => c.method === "PATCH")).toHaveLength(1);
+  });
+
+  const KEY = { "/v1/retest/limits": { monthly_cap_usd: 10, spent_this_month_usd: 1, cap_remaining_usd: 9, provider_key: { provider: "gemini", key_hint: "abcd" } } };
+
+  it("removing the provider key asks first, sends one DELETE on confirm, and toasts", async () => {
+    const { project, writes } = account({ routes: KEY });
+    const user = userEvent.setup();
+    renderWithProviders(<WithProject id="acme"><RetestsSection project={project} /></WithProject>);
+    await user.click(await screen.findByRole("button", { name: "Remove" }));
+    const box = screen.getByRole("group", { name: "Remove the provider key" });
+    expect(box).toHaveTextContent("Remove the gemini key? New trials cannot start without a key. You can add it again.");
+    expect(writes()).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Keep key" }));
+    expect(writes()).toHaveLength(0);
+    expect(screen.queryByRole("group", { name: "Remove the provider key" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await user.click(screen.getByRole("button", { name: "Remove key" }));
+    expect(await screen.findByText("gemini key removed")).toBeInTheDocument();
+    expect(writes().map((c) => `${c.method} ${c.url}`)).toEqual(["DELETE /v1/provider-key"]);
+  });
+
+  it("with several sections unsaved, leaving asks exactly once", async () => {
+    const { project } = account();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const router = createMemoryRouter([
+      { path: "/", element: <><ProjectSection project={project} /><PrivacySection project={project} /><Link to="/other">Go away</Link></> },
+      { path: "/other", element: <p>Other page</p> },
+    ]);
+    const user = userEvent.setup();
+    render(<QueryClientProvider client={client}><ToastProvider><WithProject id="acme"><RouterProvider router={router} /></WithProject></ToastProvider></QueryClientProvider>);
+    await user.type(screen.getByLabelText("Name"), "!");
+    await user.click(screen.getByRole("button", { name: "30" }));
+    expect(screen.getAllByText("Unsaved changes")).toHaveLength(2);
+    await user.click(screen.getByRole("link", { name: "Go away" }));
+    await waitFor(() => expect(confirm).toHaveBeenCalled());
+    await act(async () => undefined);
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Other page")).toBeNull();
+    // Cancel restored nothing: both drafts are still there.
+    expect(screen.getAllByText("Unsaved changes")).toHaveLength(2);
   });
 
   it("asks before leaving while there are unsaved changes, and warns the browser only while dirty", async () => {

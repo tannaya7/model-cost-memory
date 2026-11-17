@@ -67,6 +67,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
+      {/* While messages show, the page gets that much extra room at its end, so the last lines stay reachable above them. */}
+      {items.length > 0 && <div aria-hidden style={{ height: items.length * 64 }} />}
       {/* Above the phone's bottom bar; the region itself ignores clicks so it never blocks a field. */}
       <div className="pointer-events-none fixed inset-x-0 bottom-20 z-[90] flex flex-col items-center gap-2 px-4 md:bottom-6 md:items-end md:px-6">
         {items.map((t) => (

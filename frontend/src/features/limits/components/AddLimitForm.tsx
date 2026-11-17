@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import type { UsageLimitInput } from "../../../shared/api/types";
 import { Card } from "../../../shared/components/Card";
+import { useToast } from "../../../ui/Toast";
 import { useCreateLimit } from "../hooks/useLimits";
 
 type Measure = UsageLimitInput["measure"];
@@ -10,7 +11,7 @@ const PRESETS: { id: string; label: string; name: string; hours: number; measure
   { id: "weekly-plan", label: "Plan: weekly limit (shown as a percentage)", name: "Weekly", hours: 168, measure: "PERCENT" },
   { id: "session-plan", label: "Plan: 5-hour session (shown as a percentage)", name: "Session (5h)", hours: 5, measure: "PERCENT" },
   { id: "model-plan", label: "Plan: one model's limit (shown as a percentage)", name: "Model limit", hours: 168, measure: "PERCENT" },
-  { id: "monthly-budget", label: "API: monthly spend budget ($)", name: "Monthly budget", hours: 720, measure: "USD" },
+  { id: "monthly-budget", label: "API: monthly spend limit ($)", name: "Monthly limit", hours: 720, measure: "USD" },
   { id: "daily-requests", label: "API: daily request quota", name: "Daily requests", hours: 24, measure: "REQUESTS" },
   { id: "custom", label: "Custom", name: "", hours: 24, measure: "USD" },
 ];
@@ -29,6 +30,7 @@ function localInputValue(date: Date): string {
 
 export function AddLimitForm({ onDone }: { onDone?: () => void }) {
   const create = useCreateLimit();
+  const toast = useToast();
   const [preset, setPreset] = useState(PRESETS[0].id);
   const [name, setName] = useState(PRESETS[0].name);
   const [hours, setHours] = useState(String(PRESETS[0].hours));
@@ -53,17 +55,22 @@ export function AddLimitForm({ onDone }: { onDone?: () => void }) {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!canSave) return;
-    await create.mutateAsync({
-      name: name.trim(),
-      window_hours: Math.round(Number(hours)),
-      resets_at: new Date(resetsAt).toISOString(),
-      measure,
-      size: isPercent ? null : Number(size),
-      model: model.trim() || null,
-      used_percent: isPercent ? Number(usedPercent) : null,
-    });
+    try {
+      await create.mutateAsync({
+        name: name.trim(),
+        window_hours: Math.round(Number(hours)),
+        resets_at: new Date(resetsAt).toISOString(),
+        measure,
+        size: isPercent ? null : Number(size),
+        model: model.trim() || null,
+        used_percent: isPercent ? Number(usedPercent) : null,
+      });
+    } catch {
+      return; // the error shows in the form and everything typed stays
+    }
     setSize("");
     setUsedPercent("");
+    toast({ message: `Usage limit "${name.trim()}" added` });
     onDone?.();
   }
 

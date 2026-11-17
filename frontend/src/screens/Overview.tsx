@@ -11,6 +11,7 @@ import { IconCalendar, IconDownload, IconWidgets } from "../ui/icons";
 import { Button, cx, EmptyState, ErrorState } from "../ui/primitives";
 import { useAllRecommendations } from "./shared";
 import { useBillingMode } from "../features/projects/hooks/useBillingMode";
+import { useToast } from "../ui/Toast";
 import { SECTIONS, useLayout, WIDGETS, type SectionId, type WidgetId } from "./overview/layout";
 import { periods, rangeLabel, toCsv } from "./overview/metrics";
 import { MonthProjection, UnitCost, WastedSpend } from "./overview/moneyWidgets";
@@ -80,6 +81,13 @@ export default function Overview() {
   const days = (PERIODS as readonly number[]).includes(asked) ? asked : 30;
   const [drawer, setDrawer] = useState(false);
   const layout = useLayout(project);
+  const toast = useToast();
+  /** Removing a card only hides it, so it is applied at once and can be undone. */
+  const removeWidget = (id: WidgetId) => {
+    const before = layout.ids;
+    layout.remove(id);
+    toast({ message: `Removed "${WIDGETS[id].title}"`, undo: { label: "Undo", onUndo: () => layout.restore(before) } });
+  };
   const { mode: billing } = useBillingMode();
 
   const jobsQuery = useJobs();
@@ -169,7 +177,7 @@ export default function Overview() {
                           <Widget
                             id={id}
                             ctx={ctx}
-                            shell={{ id, first: i === 0, last: i === shown.length - 1, onMove: (by) => layout.move(id, by), onRemove: () => layout.remove(id) }}
+                            shell={{ id, first: i === 0, last: i === shown.length - 1, onMove: (by) => layout.move(id, by), onRemove: () => removeWidget(id) }}
                           />
                         </motion.div>
                       );
@@ -182,7 +190,7 @@ export default function Overview() {
         </div>
       )}
 
-      <WidgetDrawer open={drawer} onClose={() => setDrawer(false)} ids={layout.ids} onAdd={layout.add} onRemove={layout.remove} />
+      <WidgetDrawer open={drawer} onClose={() => setDrawer(false)} ids={layout.ids} onAdd={layout.add} onRemove={removeWidget} />
     </div>
   );
 }

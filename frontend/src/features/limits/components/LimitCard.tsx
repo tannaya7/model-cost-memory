@@ -2,6 +2,8 @@ import { useP } from "../../../app/project";
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Help } from "../../../ui/Help";
+import { InlineConfirm } from "../../../ui/InlineConfirm";
+import { useToast } from "../../../ui/Toast";
 import type { UsageLimit } from "../../../shared/api/types";
 import { Badge } from "../../../shared/components/Badge";
 import { Card } from "../../../shared/components/Card";
@@ -20,7 +22,11 @@ export function LimitCard({ limit }: { limit: UsageLimit }) {
   const p = useP();
   const report = useReportLimitUsed();
   const remove = useDeleteLimit();
+  const toast = useToast();
   const [percent, setPercent] = useState("");
+  const [percentError, setPercentError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const state = STATE_LABELS[limit.state];
   const share = Math.min(limit.share_used ?? 0, 1);
   // Where the bar will be when the window resets, at the current pace.
@@ -31,8 +37,26 @@ export function LimitCard({ limit }: { limit: UsageLimit }) {
   function submit(e: FormEvent) {
     e.preventDefault();
     const value = Number(percent);
-    if (!Number.isFinite(value) || value < 0 || value > 100) return;
-    report.mutate({ limitId: limit.limit_id, usedPercent: value }, { onSuccess: () => setPercent("") });
+    if (percent.trim() === "" || !Number.isFinite(value) || value < 0 || value > 100) {
+      setPercentError("Enter a number from 0 to 100.");
+      return;
+    }
+    setPercentError(null);
+    report.mutate(
+      { limitId: limit.limit_id, usedPercent: value },
+      {
+        onSuccess: () => { setPercent(""); toast({ message: `${limit.name} updated to ${value}% used` }); },
+        onError: (err) => setPercentError(err instanceof Error ? err.message : "Could not update. Try again."),
+      },
+    );
+  }
+
+  function confirmRemove() {
+    setRemoveError(null);
+    remove.mutate(limit.limit_id, {
+      onSuccess: () => toast({ message: `Stopped tracking ${limit.name}` }),
+      onError: (err) => setRemoveError(err instanceof Error ? err.message : "Could not remove it. Try again."),
+    });
   }
 
   return (
@@ -121,7 +145,9 @@ export function LimitCard({ limit }: { limit: UsageLimit }) {
               id={`pct-${limit.limit_id}`}
               inputMode="decimal"
               value={percent}
-              onChange={(e) => setPercent(e.target.value)}
+              onChange={(e) => { setPercent(e.target.value); setPercentError(null); }}
+              aria-invalid={percentError ? true : undefined}
+              aria-describedby={percentError ? `pct-err-${limit.limit_id}` : undefined}
               placeholder="80"
               className="w-16 rounded-md border border-rule bg-surface px-2 py-1 text-sm text-ink focus:border-accent focus:outline-none"
             />
@@ -137,15 +163,32 @@ export function LimitCard({ limit }: { limit: UsageLimit }) {
         ) : (
           <span className="text-xs text-dim">Estimated from your recorded AI calls.</span>
         )}
-        <button
-          type="button"
-          onClick={() => remove.mutate(limit.limit_id)}
-          disabled={remove.isPending}
-          className="text-xs text-dim hover:text-bad"
-        >
-          Remove
-        </button>
+        {!removing && (
+          <button
+            type="button"
+            onClick={() => { setRemoveError(null); setRemoving(true); }}
+            className="text-xs text-dim hover:text-bad"
+          >
+            Remove
+          </button>
+        )}
       </div>
+      {percentError && <p id={`pct-err-${limit.limit_id}`} role="alert" className="text-xs text-bad">{percentError}</p>}
+      {removing && (
+        <InlineConfirm
+          label={`Stop tracking ${limit.name}`}
+          confirmLabel="Stop tracking"
+          cancelLabel="Keep it"
+          danger
+          busy={remove.isPending}
+          busyLabel="Removing..."
+          error={removeError}
+          onConfirm={confirmRemove}
+          onCancel={() => setRemoving(false)}
+        >
+          Stop tracking {limit.name}? Warnings for it stop. Your recorded AI calls are not touched.
+        </InlineConfirm>
+      )}
     </Card>
   );
 }

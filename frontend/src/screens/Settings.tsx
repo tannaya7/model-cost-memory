@@ -23,6 +23,8 @@ import { billingTitle, payModeChange } from "../features/projects/payModeChange"
 import { usd } from "../ui/format";
 import { IconCheck } from "../ui/icons";
 import { ApplyBar } from "../ui/ApplyBar";
+import { InlineConfirm } from "../ui/InlineConfirm";
+import { useToast } from "../ui/Toast";
 import { useDraftSection } from "../ui/useDraftSection";
 import { BudgetEditor } from "./overview/BudgetEditor";
 import { Button, cx, EmptyState, Panel, PanelHeader, Pill, Skeleton } from "../ui/primitives";
@@ -60,7 +62,7 @@ export function ProjectSection({ project }: { project: Project }) {
   });
   return (
     <Panel id="project" className="scroll-mt-24 p-5 md:p-6">
-      <PanelHeader title="Project" hint={<>Your app's SDK sends its AI calls to this project id: <span className="font-mono text-ink">{project.project_id}</span>.</>} />
+      <PanelHeader title="Project" hint="Your app sends its AI calls here with this project's API key (see API keys below)." />
       <form onSubmit={(e) => { e.preventDefault(); void d.apply(); }}>
         <label htmlFor="project-name" className="mt-4 block text-xs font-semibold text-dim">Name</label>
         <input id="project-name" className={cx(field, "mt-1.5 max-w-md")} value={d.value} onChange={(e) => d.change(e.target.value)} maxLength={100} />
@@ -77,13 +79,14 @@ export function AlertsSection({ project }: { project: Project }) {
     equal: (a, b) => a.trim() === b,
     validate: (u) => (u.trim() && !u.trim().startsWith("https://") ? "Use an address that starts with https://." : null),
     save: (u) => send({ webhook_url: u.trim() || null }),
-    success: "Settings applied",
+    success: (u) => (u.trim() ? "Alert address saved" : "Alert address removed. Alerts now show only in the app."),
   });
+  const removing = d.dirty && d.value.trim() === "" && Boolean(project.webhook_url);
   return (
     <Panel id="alerts" className="scroll-mt-24 p-5 md:p-6">
       <PanelHeader title="Where alerts go" hint="Paste a Slack, Discord, Google Chat or Mattermost webhook. Leave empty to see alerts here only." />
       <label htmlFor="webhook" className="mt-4 block text-xs font-semibold text-dim">Webhook URL</label>
-      <input id="webhook" type="url" className={cx(field, "mt-1.5")} value={d.value} onChange={(e) => d.change(e.target.value)} placeholder="https://hooks.slack.com/services/…" />
+      <input id="webhook" type="url" className={cx(field, "mt-1.5")} value={d.value} onChange={(e) => d.change(e.target.value)} placeholder="https://hooks.slack.com/services/…" aria-invalid={d.error ? true : undefined} />
       {project.webhook_secret && (
         <details className="mt-2 text-xs text-muted">
           <summary className="cursor-pointer font-semibold text-accent">For developers: check a message came from us</summary>
@@ -100,7 +103,17 @@ export function AlertsSection({ project }: { project: Project }) {
           </div>
         </details>
       )}
-      <ApplyBar dirty={d.dirty} applying={d.applying} error={d.error} onApply={d.apply} onDiscard={d.discard} />
+      <ApplyBar
+        dirty={d.dirty}
+        applying={d.applying}
+        error={d.error}
+        onApply={d.apply}
+        onDiscard={d.discard}
+        review={removing ? "With no address, alerts only appear in the app. Nothing is sent to Slack or anywhere else." : undefined}
+        applyLabel={removing ? "Remove address" : "Save address"}
+        applyingLabel="Saving…"
+        discardLabel={removing ? "Keep address" : "Discard"}
+      />
     </Panel>
   );
 }
@@ -112,10 +125,12 @@ export function PrivacySection({ project }: { project: Project }) {
     saved: String(project.content_retention_days),
     equal: (a, b) => !okDays(a) || Number(a) === Number(b),
     save: (t) => send({ content_retention_days: Number(t) }),
-    success: "Settings applied",
+    success: (t) => `Keeping prompts and answers for ${Number(t)} days`,
   });
   const days = d.value;
   const valid = okDays(days);
+  const savedDays = project.content_retention_days;
+  const lowering = d.dirty && valid && Number(days) < savedDays;
   return (
     <Panel id="privacy" className="scroll-mt-24 p-5 md:p-6">
       <PanelHeader title={<span className="inline-flex items-center gap-1.5">How long prompts and answers are kept <Help label="About keeping prompts and answers">Tokens are the small pieces of text AI models read and write. After this many days the text of each AI call (prompt, answer, tool calls, answer key) is deleted each night. Whether it was correct, what it cost and how many tokens it used are kept, so our recommendations do not change.</Help></span>} hint="The text of each AI call is deleted after this many days." />
@@ -128,13 +143,24 @@ export function PrivacySection({ project }: { project: Project }) {
           </button>
         ))}
       </div>
-      {!valid && <p className="mt-2 text-xs text-bad">Between 1 and 3650 days.</p>}
-      <ApplyBar dirty={d.dirty} applying={d.applying} error={d.error} onApply={d.apply} onDiscard={d.discard} />
+      {!valid && <p role="alert" className="mt-2 text-xs text-bad">Between 1 and 3650 days.</p>}
+      <ApplyBar
+        dirty={d.dirty}
+        applying={d.applying}
+        error={d.error}
+        onApply={d.apply}
+        onDiscard={d.discard}
+        applyLabel={lowering ? `Delete older text, keep ${Number(days)} days` : valid ? `Keep ${Number(days)} days` : "Apply"}
+        discardLabel={`Keep ${savedDays} days`}
+        review={lowering ? (
+          <><span className="font-semibold text-ink">What will be deleted.</span> At the next nightly clean-up, the prompt, answer, tool calls and answer key of every AI call older than {Number(days)} days are deleted, and so are the AI task summaries written from them. Whether each call was correct, what it cost and its token counts stay. Deleted text cannot be brought back.</>
+        ) : undefined}
+      />
     </Panel>
   );
 }
 
-function RetestsSection({ project }: { project: Project | null }) {
+export function RetestsSection({ project }: { project: Project | null }) {
   const limits = useRetestLimits();
   const removeKey = useDeleteProviderKey();
   const send = useProjectSave(project ?? { project_id: "" });
@@ -142,11 +168,25 @@ function RetestsSection({ project }: { project: Project | null }) {
     saved: { cap: project ? String(project.retest_monthly_cap_usd) : "", allowed: project?.retest_allowed ?? true },
     equal: (a, b) => Number(a.cap) === Number(b.cap) && a.allowed === b.allowed,
     save: (v) => send({ retest_monthly_cap_usd: Number(v.cap), retest_allowed: v.allowed }),
-    success: "Settings applied",
+    success: (v) => (v.allowed ? "Trials are allowed" : "Trials are turned off"),
   });
   const { cap, allowed } = d.value;
+  const turningOn = d.dirty && allowed && !d.saved.allowed;
+  const toast = useToast();
   const [editingKey, setEditingKey] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const l = limits.data;
+  const doRemove = async () => {
+    setRemoveError(null);
+    try {
+      await removeKey.mutateAsync();
+      setConfirmRemove(false);
+      toast({ message: `${l?.provider_key?.provider ?? "Provider"} key removed` });
+    } catch (e) {
+      setRemoveError(e instanceof Error ? e.message : "Could not remove the key. Try again.");
+    }
+  };
   const share = l && l.monthly_cap_usd > 0 ? Math.min(1, l.spent_this_month_usd / l.monthly_cap_usd) : 0;
   return (
     <Panel id="retests" className="scroll-mt-24 p-5 md:p-6">
@@ -177,21 +217,39 @@ function RetestsSection({ project }: { project: Project | null }) {
           </label>
         </div>
       )}
-      {project && <ApplyBar dirty={d.dirty} applying={d.applying} error={d.error} onApply={d.apply} onDiscard={d.discard} />}
+      {project && (
+        <ApplyBar
+          dirty={d.dirty}
+          applying={d.applying}
+          error={d.error}
+          onApply={d.apply}
+          onDiscard={d.discard}
+          applyLabel={turningOn ? "Allow trials" : "Apply"}
+          discardLabel={turningOn ? "Keep trials off" : "Discard"}
+          review={turningOn ? <>Past prompts will be sent to the provider of the model you choose to test, at their cost, within your trial budget of {usd(Number(cap) || 0)} a month.</> : undefined}
+        />
+      )}
       <div className="mt-5 border-t border-rule pt-5">
         <p className="text-sm font-semibold text-ink">Provider key</p>
         {limits.isPending ? (
           <Skeleton className="mt-3 h-12" />
         ) : l?.provider_key && !editingKey ? (
+          <>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-rule bg-surface-2/50 p-3">
             <span className="text-sm text-dim">
               <span className="font-semibold text-ink">{l.provider_key.provider}</span> key ending <span className="font-mono text-ink">…{l.provider_key.key_hint}</span>
             </span>
             <span className="flex gap-2">
               <Button size="sm" onClick={() => setEditingKey(true)}>Replace</Button>
-              <Button size="sm" variant="ghost" onClick={() => removeKey.mutate()} disabled={removeKey.isPending}>Remove</Button>
+              <Button size="sm" variant="ghost" onClick={() => { setRemoveError(null); setConfirmRemove(true); }} disabled={removeKey.isPending || confirmRemove}>Remove</Button>
             </span>
           </div>
+          {confirmRemove && (
+            <InlineConfirm label="Remove the provider key" confirmLabel="Remove key" cancelLabel="Keep key" danger busy={removeKey.isPending} busyLabel="Removing…" error={removeError} onConfirm={() => void doRemove()} onCancel={() => setConfirmRemove(false)}>
+              Remove the {l.provider_key.provider} key? New trials cannot start without a key. You can add it again.
+            </InlineConfirm>
+          )}
+          </>
         ) : (
           <div className="mt-3">
             <ProviderKeyForm onSaved={() => setEditingKey(false)} />

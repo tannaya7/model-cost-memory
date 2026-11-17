@@ -58,8 +58,17 @@ describe("What this task is", () => {
     expect(await screen.findByText("ai.example.com")).toBeInTheDocument();
     expect(screen.getByText(/outside AI service/)).toBeInTheDocument();
     expect(calls.some((c) => c.startsWith("PUT"))).toBe(false);
-    await userEvent.setup().click(screen.getByRole("button", { name: "Turn on" }));
-    await waitFor(() => expect(calls).toContain("PUT /v1/task-summary-consent"));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Turn on AI summaries" }));
+    // The review is open and still nothing is sent.
+    expect(screen.getByRole("group", { name: "Turn on AI summaries" })).toHaveTextContent(/names and other free text cannot be spotted/);
+    expect(calls.some((c) => c.startsWith("PUT"))).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Keep it off" }));
+    expect(screen.queryByRole("group", { name: "Turn on AI summaries" })).not.toBeInTheDocument();
+    expect(calls.some((c) => c.startsWith("PUT"))).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Turn on AI summaries" }));
+    await user.click(screen.getByRole("button", { name: "Turn on" }));
+    await waitFor(() => expect(calls.filter((c) => c === "PUT /v1/task-summary-consent")).toHaveLength(1));
   });
 
   it("shows the written summary under the warning label with delete and off controls", async () => {
@@ -68,8 +77,15 @@ describe("What this task is", () => {
     expect(await screen.findByText("It pulls totals out of invoices.")).toBeInTheDocument();
     expect(screen.getByText(/Written by AI from a few of your sample calls/)).toBeInTheDocument();
     expect(screen.getByRole("switch")).toBeChecked();
-    await userEvent.setup().click(screen.getByRole("button", { name: "Delete this summary" }));
-    await waitFor(() => expect(calls).toContain("DELETE /v1/jobs/invoice-extract/summary"));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Delete this summary" }));
+    expect(screen.getByRole("group", { name: "Delete this summary" })).toHaveTextContent(/cannot be brought back/);
+    expect(calls.some((c) => c.startsWith("DELETE"))).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Keep it" }));
+    expect(calls.some((c) => c.startsWith("DELETE"))).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Delete this summary" }));
+    await user.click(screen.getByRole("button", { name: "Delete summary" }));
+    await waitFor(() => expect(calls.filter((c) => c === "DELETE /v1/jobs/invoice-extract/summary")).toHaveLength(1));
   });
 
   it("says calmly when no sample text is kept or the server has no AI set up", async () => {
