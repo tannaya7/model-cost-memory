@@ -212,6 +212,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/insights/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Insights
+         * @description Tokens and spend per agent, the ten heaviest traces (with a retry-loop flag), and what tool
+         *     definitions add to each call. Production runs only.
+         */
+        get: operations["get_agent_insights_v1_insights_agents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/insights/daily": {
         parameters: {
             query?: never;
@@ -225,6 +246,28 @@ export interface paths {
          *     over time. Days without runs are absent.
          */
         get: operations["get_daily_v1_insights_daily_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/prompts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Prompt Insights
+         * @description Which prompts use the most tokens (largest first), and how much of each prompt is identical in
+         *     every call, so you can see what to trim or cache. Production runs only; the repeated-text figures
+         *     use the most recent calls whose text is still stored.
+         */
+        get: operations["get_prompt_insights_v1_insights_prompts_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -277,6 +320,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/jobs/{job}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Job Endpoint
+         * @description Change a job's description. The name and the check settings never change (the name is what your
+         *     code sends, and the check decides pass or fail).
+         */
+        patch: operations["patch_job_endpoint_v1_jobs__job__patch"];
+        trace?: never;
+    };
     "/v1/jobs/{job}/history": {
         parameters: {
             query?: never;
@@ -313,6 +377,28 @@ export interface paths {
          *     each with its run count and 95% interval.
          */
         get: operations["get_job_insights_v1_jobs__job__insights_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Task Profile
+         * @description What the recorded calls prove about a task: models, tool use, typical size (measured, no AI). With
+         *     fewer than 25 calls only the count is given. Also the optional AI summary's state; the summary is
+         *     written only when the project switched it on.
+         */
+        get: operations["get_task_profile_v1_jobs__job__profile_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -427,6 +513,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/jobs/{job}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Task Summary
+         * @description Delete the stored AI summary of this task. It is not written again unless the sample calls change.
+         */
+        delete: operations["delete_task_summary_v1_jobs__job__summary_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/limits": {
         parameters: {
             query?: never;
@@ -501,6 +607,27 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/me/ui-flags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Ui Flags
+         * @description Remember which first-visit guides this person has seen. Only tour_seen and first_results_seen, as
+         *     true or false; any other key or value is refused. Only the flags sent change.
+         */
+        patch: operations["patch_ui_flags_v1_me_ui_flags_patch"];
         trace?: never;
     };
     "/v1/models": {
@@ -633,6 +760,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{project_id}/tool-inputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Tool Inputs
+         * @description Remove the stored inputs of tool calls from every run of this project. Tool names, ids, counts, costs
+         *     and everything else stay. It does not change the switch: new inputs are kept again if it is on.
+         */
+        delete: operations["delete_tool_inputs_v1_projects__project_id__tool_inputs_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/provider-key": {
         parameters: {
             query?: never;
@@ -743,10 +891,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/task-summary-consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Task Summary Consent
+         * @description Switch the AI-written task summaries on or off for this project. Off by default; while off, no
+         *     sample prompt is ever sent to an outside AI service.
+         */
+        put: operations["put_task_summary_consent_v1_task_summary_consent_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AgentInsightsOut */
+        AgentInsightsOut: {
+            /** Agents */
+            agents: components["schemas"]["AgentUsageOut"][];
+            kinds: components["schemas"]["UsageKindsOut"];
+            /** Tools */
+            tools: components["schemas"]["ToolsUsageOut"][];
+            /**
+             * Traces
+             * @description Top 10 traces by total tokens
+             */
+            traces: components["schemas"]["TraceUsageOut"][];
+        };
+        /** AgentUsageOut */
+        AgentUsageOut: {
+            /**
+             * Agent
+             * @description The agent or role; runs that named none are 'unlabelled'
+             */
+            agent: string;
+            /** Cache Read Tokens */
+            cache_read_tokens: number;
+            /**
+             * Models
+             * @description Models this agent called
+             */
+            models?: string[];
+            /** Runs */
+            runs: number;
+            /**
+             * Share
+             * @description Share of the project's total tokens in the window, 0..1
+             */
+            share: number;
+            /**
+             * Spend Usd
+             * @description Priced runs only
+             */
+            spend_usd: number;
+            /**
+             * Steps Per Task
+             * @description Calls per trace id; null without trace ids
+             */
+            steps_per_task?: number | null;
+            /** Tokens In */
+            tokens_in: number;
+            /** Tokens Out */
+            tokens_out: number;
+            /**
+             * Tool Servers
+             * @description Server names read from mcp__server__tool names
+             */
+            tool_servers?: string[];
+            /**
+             * Tool Source
+             * @description 'mcp' only when tool names look like mcp__server__tool; 'tool_list' for other tools; null when none
+             */
+            tool_source?: string | null;
+            /**
+             * Top Tools
+             * @description Most used tools by name
+             */
+            top_tools?: components["schemas"]["ToolCountOut"][];
+            /**
+             * Uses Tools
+             * @description Tool definitions were sent or tool calls made (certain)
+             * @default false
+             */
+            uses_tools: boolean;
+            /**
+             * Works Like Agent
+             * @description 'yes' (calls share a trace id and tool use repeats), 'probably' (no trace id), or null
+             */
+            works_like_agent?: string | null;
+        };
         /**
          * AlertOut
          * @description A regression, silent drop or deprecation that needs a person's attention.
@@ -776,7 +1020,7 @@ export interface components {
             delivery_failed_at?: string | null;
             /**
              * Detail
-             * @description VERSION_REGRESSION: model, old_version, new_version, old_pass_rate, new_pass_rate, n_old, n_new, drop, p_value, failing_run_ids. SILENT_DROP: model, model_version, before_pass_rate, after_pass_rate, n_before, n_after, drop, p_value. MODEL_DEPRECATED: model, model_version, status.
+             * @description VERSION_REGRESSION: model, old_version, new_version, old_pass_rate, new_pass_rate, n_old, n_new, drop, p_value, failing_run_ids. SILENT_DROP: model, model_version, before_pass_rate, after_pass_rate, n_before, n_after, drop, p_value. MODEL_DEPRECATED: model, model_version, status. TOKEN_BURST: tokens_last_hour, usual_tokens_per_hour, top_job, top_job_tokens. BUDGET: level (85, 95 or PROJECTED), month, budget_usd, spent_usd, projected_usd. TRIAL_BUDGET: level (85 or 95), month, cap_usd, spent_usd. MODEL_RETIRING: model, status, shutdown_date (the earliest possible date: check your provider's notice).
              */
             detail: {
                 [key: string]: unknown;
@@ -787,7 +1031,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "VERSION_REGRESSION" | "SILENT_DROP" | "MODEL_DEPRECATED";
+            kind: "VERSION_REGRESSION" | "SILENT_DROP" | "MODEL_DEPRECATED" | "TOKEN_BURST" | "BUDGET" | "TRIAL_BUDGET" | "MODEL_RETIRING";
             /** Resolved At */
             resolved_at: string | null;
             /**
@@ -844,6 +1088,18 @@ export interface components {
         /** DayPointOut */
         DayPointOut: {
             /**
+             * Cache Read Tokens
+             * @description Input tokens read from the prompt cache
+             * @default 0
+             */
+            cache_read_tokens: number;
+            /**
+             * Cache Write Tokens
+             * @description Input tokens written to the prompt cache
+             * @default 0
+             */
+            cache_write_tokens: number;
+            /**
              * Day
              * Format: date
              */
@@ -853,6 +1109,12 @@ export interface components {
              * @description UNKNOWN runs count in runs but in neither passed nor failed
              */
             failed: number;
+            /**
+             * Failed Spend Usd
+             * @description Actual cost of the priced runs whose check failed
+             * @default 0
+             */
+            failed_spend_usd: number;
             /** Job */
             job: string;
             /** Model */
@@ -869,6 +1131,24 @@ export interface components {
              * @description Priced runs only
              */
             spend_usd: number;
+            /**
+             * Tokens In
+             * @description Uncached input tokens, summed over the group's runs
+             * @default 0
+             */
+            tokens_in: number;
+            /**
+             * Tokens Out
+             * @description Output tokens, summed over the group's runs
+             * @default 0
+             */
+            tokens_out: number;
+            /**
+             * Unpriced Runs
+             * @description Runs with no known price (cost unknown): not in spend_usd
+             * @default 0
+             */
+            unpriced_runs: number;
         };
         /** DevLogin */
         DevLogin: {
@@ -1122,6 +1402,17 @@ export interface components {
             };
         };
         /**
+         * JobPatch
+         * @description Change a job's description. Name and check settings cannot be changed.
+         */
+        JobPatch: {
+            /**
+             * Description
+             * @description Null or an empty string clears it
+             */
+            description?: string | null;
+        };
+        /**
          * LabelCreate
          * @description A late outcome for a run that was stored UNKNOWN.
          */
@@ -1160,6 +1451,29 @@ export interface components {
              * @description What to move it to; null when nothing is proven yet
              */
             suggested: string | null;
+        };
+        /** LoopOut */
+        LoopOut: {
+            /**
+             * Cost Usd
+             * @description Priced cost of the repeated steps
+             */
+            cost_usd: number;
+            /**
+             * Repeats
+             * @description Times it repeated within a window of 7 steps
+             */
+            repeats: number;
+            /**
+             * Step
+             * @description What repeated, in words
+             */
+            step: string;
+            /**
+             * Uses Arguments
+             * @description False: matched on tool name and identical prompt, because arguments are not stored
+             */
+            uses_arguments: boolean;
         };
         /**
          * ModelEvidenceOut
@@ -1462,6 +1776,11 @@ export interface components {
              * @description The first characters of the live project key
              */
             key_prefix: string | null;
+            /**
+             * Monthly Budget Usd
+             * @description Optional monthly AI spend budget in USD. Soft: alerts at 85% and 95% of actual spend and when the month is projected to go over; nothing is ever blocked
+             */
+            monthly_budget_usd?: number | null;
             /** Name */
             name: string;
             /** Project Id */
@@ -1470,6 +1789,12 @@ export interface components {
             retest_allowed: boolean;
             /** Retest Monthly Cap Usd */
             retest_monthly_cap_usd: number;
+            /**
+             * Store Tool Arguments
+             * @description Whether this project keeps the inputs of tool calls (off by default; they can hold private data). Used only to notice an agent repeating the same step
+             * @default false
+             */
+            store_tool_arguments: boolean;
             /**
              * Webhook Secret
              * @description Verify X-MCM-Signature on webhook payloads with it
@@ -1485,6 +1810,11 @@ export interface components {
              * @description Days a run keeps its prompt, output, tool calls and answer key (1 to 3650)
              */
             content_retention_days?: number | null;
+            /**
+             * Monthly Budget Usd
+             * @description Monthly AI spend budget in USD (above 0, up to 10,000,000); send null to clear
+             */
+            monthly_budget_usd?: number | null;
             /** Name */
             name?: string | null;
             /** Retest Allowed */
@@ -1492,10 +1822,83 @@ export interface components {
             /** Retest Monthly Cap Usd */
             retest_monthly_cap_usd?: number | null;
             /**
+             * Store Tool Arguments
+             * @description Keep the inputs of tool calls from now on (true) or stop storing new ones (false). Already-stored inputs stay until deleted or the retention period ends
+             */
+            store_tool_arguments?: boolean | null;
+            /**
              * Webhook Url
              * @description Must be https; send null to remove
              */
             webhook_url?: string | null;
+        };
+        /** PromptGroupOut */
+        PromptGroupOut: {
+            /** Avg Tokens In */
+            avg_tokens_in: number;
+            /** Avg Tokens Out */
+            avg_tokens_out: number;
+            /**
+             * Cache Read Share
+             * @description cache_read / (cache_read + tokens_in); null when both are 0
+             */
+            cache_read_share: number | null;
+            /** Cache Read Tokens */
+            cache_read_tokens: number;
+            /** Cache Write Tokens */
+            cache_write_tokens: number;
+            /** Calls */
+            calls: number;
+            /** Job */
+            job: string;
+            /**
+             * Prompt Version
+             * @description Null groups all unversioned calls of the job
+             */
+            prompt_version: string | null;
+            /**
+             * Repeated End Share
+             * @description Share of the prompt that ends identically in every call
+             */
+            repeated_end_share: number | null;
+            /**
+             * Repeated Start Preview
+             * @description First 120 characters of the repeated start
+             */
+            repeated_start_preview: string | null;
+            /**
+             * Repeated Start Share
+             * @description Share of the prompt that starts identically in every call
+             */
+            repeated_start_share: number | null;
+            /**
+             * Share
+             * @description Of the project's total tokens in the window, 0..1
+             */
+            share: number;
+            /**
+             * Text Samples
+             * @description Recent calls with stored prompt text that were compared (at most 50)
+             */
+            text_samples: number;
+            /** Tokens In */
+            tokens_in: number;
+            /** Tokens Out */
+            tokens_out: number;
+            /**
+             * Total Tokens
+             * @description tokens_in + tokens_out + cache_read_tokens + cache_write_tokens
+             */
+            total_tokens: number;
+        };
+        /** PromptsOut */
+        PromptsOut: {
+            /** Days */
+            days: number;
+            /** Groups */
+            groups: components["schemas"]["PromptGroupOut"][];
+            /** Total Tokens */
+            total_tokens: number;
         };
         /**
          * ProviderKeyIn
@@ -1736,6 +2139,11 @@ export interface components {
          */
         RunCreate: {
             /**
+             * Agent
+             * @description Which agent or role made the call
+             */
+            agent?: string | null;
+            /**
              * Cache Read Tokens
              * @default 0
              */
@@ -1814,12 +2222,27 @@ export interface components {
             tool_calls?: {
                 [key: string]: unknown;
             }[] | null;
+            /**
+             * Tools Tokens
+             * @description Estimated tokens of the tool definitions sent with the call
+             */
+            tools_tokens?: number | null;
+            /**
+             * Trace Id
+             * @description One id shared by every call that serves the same user task
+             */
+            trace_id?: string | null;
         };
         /**
          * RunDetail
          * @description One run in full, for the detail panel.
          */
         RunDetail: {
+            /**
+             * Agent
+             * @description Which agent or role made the call, if the SDK said
+             */
+            agent?: string | null;
             /** Cache Read Tokens */
             cache_read_tokens: number;
             /** Cache Write Tokens */
@@ -1874,14 +2297,14 @@ export interface components {
             output: string | null;
             /**
              * Output Preview
-             * @description First 200 characters of the output
+             * @description Same for the output
              */
             output_preview: string | null;
             /** Prompt */
             prompt: string | null;
             /**
              * Prompt Preview
-             * @description First 200 characters of the prompt; null once retention cleared it
+             * @description First 240 characters of the prompt, whitespace collapsed, ending in an ellipsis when cut; null once retention cleared it
              */
             prompt_preview: string | null;
             /** Prompt Version */
@@ -1905,10 +2328,25 @@ export interface components {
             tokens_in: number;
             /** Tokens Out */
             tokens_out: number;
+            /**
+             * Tool Call Count
+             * @description Tool calls the response made
+             */
+            tool_call_count?: number | null;
             /** Tool Calls */
             tool_calls: {
                 [key: string]: unknown;
             }[] | null;
+            /**
+             * Tools Tokens
+             * @description Estimated tokens of the tool definitions sent
+             */
+            tools_tokens?: number | null;
+            /**
+             * Trace Id
+             * @description Shared by every call serving the same user task
+             */
+            trace_id?: string | null;
             /**
              * Weight
              * @description How much it counts in the recommendation now: e^(-age/S), S shorter once its version is replaced
@@ -1920,6 +2358,11 @@ export interface components {
          * @description One recorded run, as a table row. Full prompt and output come from the run detail.
          */
         RunOut: {
+            /**
+             * Agent
+             * @description Which agent or role made the call, if the SDK said
+             */
+            agent?: string | null;
             /** Cache Read Tokens */
             cache_read_tokens: number;
             /** Cache Write Tokens */
@@ -1972,12 +2415,12 @@ export interface components {
             outcome_reason: string | null;
             /**
              * Output Preview
-             * @description First 200 characters of the output
+             * @description Same for the output
              */
             output_preview: string | null;
             /**
              * Prompt Preview
-             * @description First 200 characters of the prompt; null once retention cleared it
+             * @description First 240 characters of the prompt, whitespace collapsed, ending in an ellipsis when cut; null once retention cleared it
              */
             prompt_preview: string | null;
             /** Prompt Version */
@@ -2001,6 +2444,21 @@ export interface components {
             tokens_in: number;
             /** Tokens Out */
             tokens_out: number;
+            /**
+             * Tool Call Count
+             * @description Tool calls the response made
+             */
+            tool_call_count?: number | null;
+            /**
+             * Tools Tokens
+             * @description Estimated tokens of the tool definitions sent
+             */
+            tools_tokens?: number | null;
+            /**
+             * Trace Id
+             * @description Shared by every call serving the same user task
+             */
+            trace_id?: string | null;
             /**
              * Weight
              * @description How much it counts in the recommendation now: e^(-age/S), S shorter once its version is replaced
@@ -2057,6 +2515,182 @@ export interface components {
              * @default 0
              */
             unpriced_runs: number;
+        };
+        /**
+         * TaskProfileOut
+         * @description What the recorded calls prove about a task (measured; no AI). Fewer than 25 calls: only `calls`.
+         */
+        TaskProfileOut: {
+            /**
+             * Calls
+             * @description Production calls in the window
+             */
+            calls: number;
+            /** Enough Data */
+            enough_data: boolean;
+            /** Models */
+            models: string[];
+            /** Multi Agent */
+            multi_agent: boolean;
+            summary: components["schemas"]["TaskSummaryOut"];
+            /** Tool Source */
+            tool_source: string | null;
+            /**
+             * Typical Tokens In
+             * @description Median input tokens per call, as billed
+             */
+            typical_tokens_in: number | null;
+            /**
+             * Typical Tokens Out
+             * @description Median output tokens per call, as billed
+             */
+            typical_tokens_out: number | null;
+            /** Uses Tools */
+            uses_tools: boolean;
+            /** Window Days */
+            window_days: number;
+            /**
+             * Works Like Agent
+             * @description 'yes', 'probably' or null
+             */
+            works_like_agent: string | null;
+        };
+        /** TaskSummaryConsentIn */
+        TaskSummaryConsentIn: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** TaskSummaryOut */
+        TaskSummaryOut: {
+            /**
+             * Consent
+             * @description Whether this project switched the AI summary on
+             */
+            consent: boolean;
+            /**
+             * Service
+             * @description The outside AI service sample prompts are sent to when it is on
+             */
+            service: string;
+            /**
+             * State
+             * @description 'ready', 'pending', 'off' (not switched on), 'unavailable' (no AI service configured, or a limit or failure), 'no_samples' (too little stored text) or 'deleted'
+             */
+            state: string;
+            /**
+             * Text
+             * @description Two sentences written by an AI; may be wrong
+             */
+            text?: string | null;
+        };
+        /** ToolCountOut */
+        ToolCountOut: {
+            /** Calls */
+            calls: number;
+            /** Name */
+            name: string;
+        };
+        /** ToolInputsDeleted */
+        ToolInputsDeleted: {
+            /**
+             * Runs Cleared
+             * @description Runs whose stored tool-call inputs were removed
+             */
+            runs_cleared: number;
+        };
+        /** ToolsUsageOut */
+        ToolsUsageOut: {
+            /**
+             * Avg Tools Tokens
+             * @description Estimated tokens the tool definitions add to every call
+             */
+            avg_tools_tokens: number;
+            /** Job */
+            job: string;
+            /**
+             * Runs
+             * @description Runs that sent tool definitions
+             */
+            runs: number;
+            /**
+             * Share Of Tokens In
+             * @description Of those runs' input tokens (cache included), 0..1
+             */
+            share_of_tokens_in: number;
+        };
+        /** TraceUsageOut */
+        TraceUsageOut: {
+            /**
+             * Agent Names
+             * @description Named agents in the trace
+             */
+            agent_names?: string[];
+            /**
+             * Agents
+             * @description Distinct agents in the trace
+             */
+            agents: number;
+            /** Calls */
+            calls: number;
+            /**
+             * Multi Agent
+             * @description More than one distinct named agent shares this trace
+             * @default false
+             */
+            multi_agent: boolean;
+            /** @description Beta: the same step repeated 5 or more times within 7 steps with no sign of progress */
+            possible_loop?: components["schemas"]["LoopOut"] | null;
+            /**
+             * Repeated Prompts
+             * @description The same prompt appears 3 or more times in the trace: a likely retry loop or runaway agent
+             */
+            repeated_prompts: boolean;
+            /**
+             * Spend Usd
+             * @description Priced runs only
+             */
+            spend_usd: number;
+            /**
+             * Tokens
+             * @description Input, output and cache tokens over every call in the trace
+             */
+            tokens: number;
+            /** Trace Id */
+            trace_id: string;
+        };
+        /**
+         * UiFlagsPatch
+         * @description Only these two true/false flags can be saved; anything else is refused.
+         */
+        UiFlagsPatch: {
+            /** First Results Seen */
+            first_results_seen?: boolean | null;
+            /** Tour Seen */
+            tour_seen?: boolean | null;
+        };
+        /** UsageKindsOut */
+        UsageKindsOut: {
+            /**
+             * Calls
+             * @description Recent production calls the labels were worked out from (at most 5000)
+             */
+            calls: number;
+            /** Multi Agent */
+            multi_agent: boolean;
+            /** Tool Servers */
+            tool_servers: string[];
+            /**
+             * Tool Source
+             * @description 'mcp' only for mcp__server__tool names; 'tool_list'; or null
+             */
+            tool_source: string | null;
+            /** Uses Tools */
+            uses_tools: boolean;
+            /**
+             * Works Like Agent
+             * @description 'yes', 'probably' or null
+             */
+            works_like_agent: string | null;
         };
         /**
          * UsageLimitIn
@@ -2185,6 +2819,13 @@ export interface components {
             name: string | null;
             /** Picture Url */
             picture_url: string | null;
+            /**
+             * Ui Flags
+             * @description First-visit guides this person has seen
+             */
+            ui_flags?: {
+                [key: string]: boolean;
+            };
             /**
              * User Id
              * Format: uuid
@@ -2523,6 +3164,42 @@ export interface operations {
             };
         };
     };
+    get_agent_insights_v1_insights_agents_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back */
+                days?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentInsightsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_daily_v1_insights_daily_get: {
         parameters: {
             query?: {
@@ -2548,6 +3225,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DayPointOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_prompt_insights_v1_insights_prompts_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back */
+                days?: number;
+                /** @description Only this job */
+                job?: string | null;
+                /** @description How many prompts to return */
+                limit?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptsOut"];
                 };
             };
             /** @description Validation Error */
@@ -2667,6 +3384,45 @@ export interface operations {
             };
         };
     };
+    patch_job_endpoint_v1_jobs__job__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_history_v1_jobs__job__history_get: {
         parameters: {
             query?: never;
@@ -2727,6 +3483,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobInsightsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_task_profile_v1_jobs__job__profile_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back */
+                days?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskProfileOut"];
                 };
             };
             /** @description Validation Error */
@@ -2923,6 +3717,39 @@ export interface operations {
             };
         };
     };
+    delete_task_summary_v1_jobs__job__summary_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_limits_v1_limits_get: {
         parameters: {
             query?: never;
@@ -3081,6 +3908,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserOut"];
+                };
+            };
+        };
+    };
+    patch_ui_flags_v1_me_ui_flags_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UiFlagsPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -3388,6 +4248,37 @@ export interface operations {
             };
         };
     };
+    delete_tool_inputs_v1_projects__project_id__tool_inputs_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolInputsDeleted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     put_provider_key_v1_provider_key_put: {
         parameters: {
             query?: never;
@@ -3629,6 +4520,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_task_summary_consent_v1_task_summary_consent_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskSummaryConsentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSummaryOut"];
                 };
             };
             /** @description Validation Error */

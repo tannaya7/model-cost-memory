@@ -13,7 +13,7 @@ from typing import Literal
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 CheckKind = Literal["ANSWER_KEY", "TEST_COMMAND", "SCHEMA", "LATE_LABEL"]
 Outcome = Literal["PASS", "FAIL", "UNKNOWN"]
@@ -73,6 +73,19 @@ class JobCreate(Model):
         return self
 
 
+class JobPatch(Model):
+    """Change a job's description. Name and check settings cannot be changed."""
+
+    description: str | None = Field(default=None, max_length=500,
+                                    description="Null or an empty string clears it")
+
+    @field_validator("description")
+    @classmethod
+    def _trim(cls, v: str | None) -> str | None:
+        v = v.strip() if v is not None else None
+        return v or None
+
+
 class JobOut(Model):
     job_id: uuid.UUID
     name: str
@@ -86,6 +99,35 @@ class JobOut(Model):
     )
 
 
+class TaskSummaryOut(Model):
+    state: str = Field(description="'ready', 'pending', 'off' (not switched on), 'unavailable' (no AI service "
+                                   "configured, or a limit or failure), 'no_samples' (too little stored text) "
+                                   "or 'deleted'")
+    text: str | None = Field(default=None, description="Two sentences written by an AI; may be wrong")
+    consent: bool = Field(description="Whether this project switched the AI summary on")
+    service: str = Field(description="The outside AI service sample prompts are sent to when it is on")
+
+
+class TaskProfileOut(Model):
+    """What the recorded calls prove about a task (measured; no AI). Fewer than 25 calls: only `calls`."""
+
+    calls: int = Field(description="Production calls in the window")
+    window_days: int
+    enough_data: bool
+    models: list[str]
+    uses_tools: bool
+    works_like_agent: str | None = Field(description="'yes', 'probably' or null")
+    tool_source: str | None
+    multi_agent: bool
+    typical_tokens_in: int | None = Field(description="Median input tokens per call, as billed")
+    typical_tokens_out: int | None = Field(description="Median output tokens per call, as billed")
+    summary: TaskSummaryOut
+
+
+class TaskSummaryConsentIn(Model):
+    enabled: bool
+
+
 class RunOut(Model):
     """One recorded run, as a table row. Full prompt and output come from the run detail."""
 
@@ -96,6 +138,10 @@ class RunOut(Model):
     model_version: str
     prompt_version: str | None
     effort: str | None = None
+    agent: str | None = Field(default=None, description="Which agent or role made the call, if the SDK said")
+    trace_id: str | None = Field(default=None, description="Shared by every call serving the same user task")
+    tools_tokens: int | None = Field(default=None, description="Estimated tokens of the tool definitions sent")
+    tool_call_count: int | None = Field(default=None, description="Tool calls the response made")
     tokens_in: int
     tokens_out: int
     cache_read_tokens: int
@@ -107,8 +153,10 @@ class RunOut(Model):
     run_kind: RunKind
     state: RunState
     created_at: datetime
-    prompt_preview: str | None = Field(description="First 200 characters of the prompt; null once retention cleared it")
-    output_preview: str | None = Field(description="First 200 characters of the output")
+    prompt_preview: str | None = Field(description="First 240 characters of the prompt, whitespace "
+                                                                   "collapsed, ending in an ellipsis when cut; "
+                                                                   "null once retention cleared it")
+    output_preview: str | None = Field(description="Same for the output")
     content_removed_at: datetime | None = Field(
         default=None, description="When the prompt, output, tool calls and answer key were cleared under the "
                                   "project's retention; the figures are kept")
@@ -155,6 +203,11 @@ class RunCreate(Model):
         description="The reasoning effort the call asked for (e.g. low, medium, high). The same model at different "
                     "efforts is compared as separate options",
     )
+    agent: str | None = Field(default=None, max_length=100, description="Which agent or role made the call")
+    trace_id: str | None = Field(default=None, max_length=200,
+                                 description="One id shared by every call that serves the same user task")
+    tools_tokens: int | None = Field(default=None, ge=0, le=MAX_TOKENS,
+                                     description="Estimated tokens of the tool definitions sent with the call")
     tokens_in: int = Field(default=0, ge=0, le=MAX_TOKENS, description="Uncached input tokens")
     tokens_out: int = Field(default=0, ge=0, le=MAX_TOKENS, description="Output tokens, thinking included")
     cache_read_tokens: int = Field(default=0, ge=0, le=MAX_TOKENS)
@@ -357,7 +410,7 @@ class HistoryOut(Model):
     versions: list[ModelVersionSeen] = Field(description="Every model version this job has run on")
 
 
-AlertKind = Literal["VERSION_REGRESSION", "SILENT_DROP", "MODEL_DEPRECATED"]
+AlertKind = Literal["VERSION_REGRESSION", "SILENT_DROP", "MODEL_DEPRECATED", "TOKEN_BURST", "BUDGET", "TRIAL_BUDGET", "MODEL_RETIRING"]
 
 
 class AlertOut(Model):
@@ -371,7 +424,9 @@ class AlertOut(Model):
         description="VERSION_REGRESSION: model, old_version, new_version, old_pass_rate, new_pass_rate, n_old, "
                     "n_new, drop, p_value, failing_run_ids. SILENT_DROP: model, model_version, before_pass_rate, "
                     "after_pass_rate, n_before, n_after, drop, p_value. MODEL_DEPRECATED: model, model_version, "
-                    "status."
+                    "status. TOKEN_BURST: tokens_last_hour, usual_tokens_per_hour, top_job, top_job_tokens. BUDGET: "
+                    "level (85, 95 or PROJECTED), month, budget_usd, spent_usd, projected_usd. TRIAL_BUDGET: level (85 or 95), month, cap_usd, spent_usd. MODEL_RETIRING: model, "
+                    "status, shutdown_date (the earliest possible date: check your provider's notice)."
     )
     created_at: datetime
     delivered_at: datetime | None = Field(description="When the webhook accepted it; null if not (yet)")
@@ -443,6 +498,16 @@ class UserOut(Model):
     email: str
     name: str | None
     picture_url: str | None
+    ui_flags: dict[str, bool] = Field(default_factory=dict, description="First-visit guides this person has seen")
+
+
+class UiFlagsPatch(Model):
+    """Only these two true/false flags can be saved; anything else is refused."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tour_seen: StrictBool | None = None
+    first_results_seen: StrictBool | None = None
 
 
 class AuthConfig(Model):
@@ -466,6 +531,12 @@ class ProjectOut(Model):
     key_prefix: str | None = Field(description="The first characters of the live project key")
     content_retention_days: int = Field(
         default=90, description="Days a run keeps its prompt, output, tool calls and answer key; the figures stay")
+    monthly_budget_usd: float | None = Field(
+        default=None, description="Optional monthly AI spend budget in USD. Soft: alerts at 85% and 95% of actual "
+                                  "spend and when the month is projected to go over; nothing is ever blocked")
+    store_tool_arguments: bool = Field(
+        default=False, description="Whether this project keeps the inputs of tool calls (off by default; they can "
+                                   "hold private data). Used only to notice an agent repeating the same step")
     created_at: datetime
 
 
@@ -484,9 +555,19 @@ class ProjectPatch(Model):
                                     description="Must be https; send null to remove")
     retest_monthly_cap_usd: float | None = Field(default=None, ge=0, le=10_000)
     retest_allowed: bool | None = None
+    monthly_budget_usd: float | None = Field(
+        default=None, gt=0, le=10_000_000, description="Monthly AI spend budget in USD (above 0, up to 10,000,000); "
+                                                       "send null to clear")
     content_retention_days: int | None = Field(
         default=None, ge=1, le=3650,
         description="Days a run keeps its prompt, output, tool calls and answer key (1 to 3650)")
+    store_tool_arguments: bool | None = Field(
+        default=None, description="Keep the inputs of tool calls from now on (true) or stop storing new ones (false). "
+                                  "Already-stored inputs stay until deleted or the retention period ends")
+
+
+class ToolInputsDeleted(Model):
+    runs_cleared: int = Field(description="Runs whose stored tool-call inputs were removed")
 
 
 class ProjectKey(Model):
@@ -632,4 +713,104 @@ class DayPointOut(Model):
     passed: int
     failed: int = Field(description="UNKNOWN runs count in runs but in neither passed nor failed")
     spend_usd: float = Field(description="Priced runs only")
+    tokens_in: int = Field(default=0, description="Uncached input tokens, summed over the group's runs")
+    tokens_out: int = Field(default=0, description="Output tokens, summed over the group's runs")
+    cache_read_tokens: int = Field(default=0, description="Input tokens read from the prompt cache")
+    cache_write_tokens: int = Field(default=0, description="Input tokens written to the prompt cache")
+    unpriced_runs: int = Field(default=0, description="Runs with no known price (cost unknown): not in spend_usd")
+    failed_spend_usd: float = Field(default=0.0, description="Actual cost of the priced runs whose check failed")
 
+
+
+class ToolCountOut(Model):
+    name: str
+    calls: int
+
+
+class LoopOut(Model):
+    step: str = Field(description="What repeated, in words")
+    repeats: int = Field(description="Times it repeated within a window of 7 steps")
+    cost_usd: float = Field(description="Priced cost of the repeated steps")
+    uses_arguments: bool = Field(description="False: matched on tool name and identical prompt, because "
+                                             "arguments are not stored")
+
+
+class AgentUsageOut(Model):
+    agent: str = Field(description="The agent or role; runs that named none are 'unlabelled'")
+    runs: int
+    tokens_in: int
+    tokens_out: int
+    cache_read_tokens: int
+    spend_usd: float = Field(description="Priced runs only")
+    share: float = Field(description="Share of the project's total tokens in the window, 0..1")
+    models: list[str] = Field(default_factory=list, description="Models this agent called")
+    uses_tools: bool = Field(default=False, description="Tool definitions were sent or tool calls made (certain)")
+    works_like_agent: str | None = Field(default=None, description="'yes' (calls share a trace id and tool use "
+                                         "repeats), 'probably' (no trace id), or null")
+    tool_source: str | None = Field(default=None, description="'mcp' only when tool names look like "
+                                    "mcp__server__tool; 'tool_list' for other tools; null when none")
+    tool_servers: list[str] = Field(default_factory=list, description="Server names read from mcp__server__tool names")
+    top_tools: list[ToolCountOut] = Field(default_factory=list, description="Most used tools by name")
+    steps_per_task: float | None = Field(default=None, description="Calls per trace id; null without trace ids")
+
+
+class TraceUsageOut(Model):
+    trace_id: str
+    calls: int
+    tokens: int = Field(description="Input, output and cache tokens over every call in the trace")
+    spend_usd: float = Field(description="Priced runs only")
+    agents: int = Field(description="Distinct agents in the trace")
+    repeated_prompts: bool = Field(description="The same prompt appears 3 or more times in the trace: a likely "
+                                               "retry loop or runaway agent")
+    agent_names: list[str] = Field(default_factory=list, description="Named agents in the trace")
+    multi_agent: bool = Field(default=False, description="More than one distinct named agent shares this trace")
+    possible_loop: LoopOut | None = Field(default=None, description="Beta: the same step repeated 5 or more times "
+                                          "within 7 steps with no sign of progress")
+
+
+class ToolsUsageOut(Model):
+    job: str
+    runs: int = Field(description="Runs that sent tool definitions")
+    avg_tools_tokens: int = Field(description="Estimated tokens the tool definitions add to every call")
+    share_of_tokens_in: float = Field(description="Of those runs' input tokens (cache included), 0..1")
+
+
+class UsageKindsOut(Model):
+    calls: int = Field(description="Recent production calls the labels were worked out from (at most 5000)")
+    uses_tools: bool
+    works_like_agent: str | None = Field(description="'yes', 'probably' or null")
+    tool_source: str | None = Field(description="'mcp' only for mcp__server__tool names; 'tool_list'; or null")
+    tool_servers: list[str]
+    multi_agent: bool
+
+
+class AgentInsightsOut(Model):
+    agents: list[AgentUsageOut]
+    traces: list[TraceUsageOut] = Field(description="Top 10 traces by total tokens")
+    tools: list[ToolsUsageOut]
+    kinds: UsageKindsOut
+
+
+class PromptGroupOut(Model):
+    job: str
+    prompt_version: str | None = Field(description="Null groups all unversioned calls of the job")
+    calls: int
+    tokens_in: int
+    tokens_out: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    total_tokens: int = Field(description="tokens_in + tokens_out + cache_read_tokens + cache_write_tokens")
+    share: float = Field(description="Of the project's total tokens in the window, 0..1")
+    avg_tokens_in: float
+    avg_tokens_out: float
+    cache_read_share: float | None = Field(description="cache_read / (cache_read + tokens_in); null when both are 0")
+    text_samples: int = Field(description="Recent calls with stored prompt text that were compared (at most 50)")
+    repeated_start_share: float | None = Field(description="Share of the prompt that starts identically in every call")
+    repeated_end_share: float | None = Field(description="Share of the prompt that ends identically in every call")
+    repeated_start_preview: str | None = Field(description="First 120 characters of the repeated start")
+
+
+class PromptsOut(Model):
+    days: int
+    total_tokens: int
+    groups: list[PromptGroupOut]

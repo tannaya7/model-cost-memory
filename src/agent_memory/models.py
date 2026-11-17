@@ -51,6 +51,8 @@ class User(Base):
     name: Mapped[str | None] = mapped_column(Text)
     picture_url: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+    # Which first-visit guides this person has seen: only tour_seen and first_results_seen, as booleans.
+    ui_flags: Mapped[dict[str, bool]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
 
 
 class Project(Base):
@@ -58,6 +60,7 @@ class Project(Base):
     __table_args__ = (
         Index("idx_projects_owner", "owner_user_id"),
         CheckConstraint("content_retention_days BETWEEN 1 AND 3650", name="projects_retention_check"),
+        CheckConstraint("monthly_budget_usd IS NULL OR monthly_budget_usd > 0", name="projects_budget_check"),
     )
 
     project_id: Mapped[str] = mapped_column(Text, primary_key=True)
@@ -75,6 +78,9 @@ class Project(Base):
     key_prefix: Mapped[str | None] = mapped_column(Text)  # first characters of the live key, for display
     # Days a run keeps its prompt, answer, tool calls and answer key (retention.py; 0015).
     content_retention_days: Mapped[int] = mapped_column(Integer, server_default=text("90"))
+    # Opt-in: may a few sample prompts be sent to an outside AI service to write a task summary (0019).
+    task_summary_consent: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    monthly_budget_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))  # optional soft budget (0018)
 
 
 class ProviderKey(Base):
@@ -131,6 +137,7 @@ class Run(Base):
             "idx_runs_embedding_cache", "project_id", "prompt_hash", "embedding_model",
             postgresql_where=text("embedding IS NOT NULL"),
         ),
+        Index("idx_runs_project_trace", "project_id", "trace_id", postgresql_where=text("trace_id IS NOT NULL")),
         Index("idx_runs_content_kept", "created_at", postgresql_where=text("content_removed_at IS NULL")),
     )
 
@@ -166,6 +173,10 @@ class Run(Base):
     retest_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("retests.retest_id"))
     expected: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # kept only for jobs with re-test consent
     provider: Mapped[str | None] = mapped_column(Text)  # who served the call; picks the price
+    agent: Mapped[str | None] = mapped_column(Text)  # which agent or role made the call (0017)
+    trace_id: Mapped[str | None] = mapped_column(Text)  # shared by every call serving one user task (0017)
+    tools_tokens: Mapped[int | None] = mapped_column(Integer)  # estimate: size of the tool definitions sent (0017)
+    tool_call_count: Mapped[int | None] = mapped_column(Integer)  # tool calls in the response (0017)
     # When retention cleared prompt, output, tool_calls, expected and embedding (retention.py; 0015).
     content_removed_at: Mapped[datetime | None] = mapped_column(Timestamp)
 
@@ -297,7 +308,8 @@ class Alert(Base):
     __tablename__ = "alerts"
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('VERSION_REGRESSION','SILENT_DROP','MODEL_DEPRECATED')", name="alerts_kind_check"
+            "kind IN ('VERSION_REGRESSION','SILENT_DROP','MODEL_DEPRECATED','TOKEN_BURST','BUDGET',"
+            "'TRIAL_BUDGET','MODEL_RETIRING')", name="alerts_kind_check"
         ),
         Index("idx_alerts_open", "job_id", "dedupe_key", unique=True, postgresql_where=text("resolved_at IS NULL")),
         Index("idx_alerts_undelivered", "next_attempt_at", postgresql_where=text("delivered_at IS NULL")),
@@ -328,6 +340,22 @@ class RecommendationSummary(Base):
     summary_key: Mapped[str] = mapped_column(Text, primary_key=True)
     job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("jobs.job_id", ondelete="CASCADE"))
     summary: Mapped[str | None] = mapped_column(Text)  # null while being written, or after a failed call
+    prompt_version: Mapped[str] = mapped_column(Text)
+    attempts: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    attempted_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+
+
+class TaskSummary(Base):
+    """The optional AI summary of what a task does, one per job (0019). `fingerprint` identifies the sample
+    calls it was written from, so it is written again only when they change."""
+
+    __tablename__ = "task_summaries"
+    __table_args__ = (Index("idx_task_summaries_attempted", "attempted_at"),)
+
+    job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("jobs.job_id", ondelete="CASCADE"),
+                                              primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(Text)
+    summary: Mapped[str | None] = mapped_column(Text)
     prompt_version: Mapped[str] = mapped_column(Text)
     attempts: Mapped[int] = mapped_column(Integer, server_default=text("1"))
     attempted_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)

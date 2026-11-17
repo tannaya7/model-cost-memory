@@ -27,12 +27,24 @@ describe("VerdictTab", () => {
   it("shows progress instead of a verdict while evidence is thin", () => {
     renderWithProviders(<VerdictTab rec={{ ...downgrade, verdict: "INSUFFICIENT_EVIDENCE", recommended: null, forecast: null, progress: 0.4 }} />);
     expect(screen.getByRole("heading", { level: 2, name: "Still learning" })).toBeInTheDocument();
-    expect(screen.getByText("40%")).toBeInTheDocument();
+    const bar = screen.getByRole("progressbar");
+    expect(bar).toHaveAttribute("aria-valuemax", String(downgrade.rules.evidence_floor));
+    expect(bar).toHaveAttribute("aria-valuenow", String(Math.min(downgrade.evidence.n_runs, downgrade.rules.evidence_floor)));
+    expect(screen.getByText(/Not enough checked answers yet. We need at least/)).toBeInTheDocument();
+  });
+
+  it("puts a plain sentence under the numbers and one help button on the recommendation", async () => {
+    renderWithProviders(<VerdictTab rec={downgrade} />);
+    expect(screen.getAllByText(/Out of every 100 answers we checked, about/).length).toBeGreaterThan(0);
+    const help = screen.getByRole("button", { name: "How we reach this recommendation" });
+    await userEvent.setup().click(help);
+    expect(screen.getByRole("status")).toHaveTextContent(/within 3 points of the best model/);
+    expect(screen.getByRole("status")).toHaveTextContent(/we need at least 25/);
   });
 
   it("offers the re-tests that would settle an open question", () => {
     renderWithProviders(<WithProject id="acme"><VerdictTab rec={downgrade} /></WithProject>);
-    expect(screen.getByRole("link", { name: /Re-test acme-nano/ })).toHaveAttribute("href", "/p/acme/retest?job=invoice-extract&model=acme-nano");
+    expect(screen.getByRole("link", { name: /Trial acme-nano on past prompts/ })).toHaveAttribute("href", "/p/acme/retest?job=invoice-extract&model=acme-nano");
   });
 
   it("gives the chart's numbers as a table on request", async () => {

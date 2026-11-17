@@ -24,7 +24,7 @@ export function ThemeToggle({ className }: { className?: string }) {
         layout
         transition={{ type: "spring", stiffness: 500, damping: 32 }}
         className={cx(
-          "grid h-6 w-6 place-items-center rounded-full text-white shadow-[0_4px_12px_-2px_rgba(124,58,237,0.6)]",
+          "grid h-6 w-6 place-items-center rounded-full text-on-accent shadow-[0_4px_12px_-2px_var(--accent-glow)]",
           "bg-gradient-to-br from-[var(--grad-from)] to-accent-2",
           dark ? "ml-auto" : "",
         )}

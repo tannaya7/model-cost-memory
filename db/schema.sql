@@ -15,7 +15,8 @@ CREATE TABLE users (                                -- Google sign-in; no passwo
     email       TEXT NOT NULL,
     name        TEXT,
     picture_url TEXT,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ui_flags    JSONB NOT NULL DEFAULT '{}'::jsonb      -- first-visit guides seen: only tour_seen, first_results_seen
 );
 
 CREATE TABLE projects (
@@ -31,7 +32,10 @@ CREATE TABLE projects (
     name          TEXT,                             -- display name chosen in the web app
     key_prefix    TEXT,                             -- first characters of the live key, for display
     content_retention_days INTEGER NOT NULL DEFAULT 90  -- days runs keep their prompt and answer (0015)
-        CONSTRAINT projects_retention_check CHECK (content_retention_days BETWEEN 1 AND 3650)
+        CONSTRAINT projects_retention_check CHECK (content_retention_days BETWEEN 1 AND 3650),
+    monthly_budget_usd NUMERIC(12,2)                -- optional soft budget; alerts only (0018)
+        CONSTRAINT projects_budget_check CHECK (monthly_budget_usd IS NULL OR monthly_budget_usd > 0),
+    task_summary_consent BOOLEAN NOT NULL DEFAULT false  -- opt in to an AI-written task summary (0019)
 );
 CREATE INDEX idx_projects_owner ON projects(owner_user_id);
 
@@ -116,13 +120,18 @@ CREATE TABLE runs (
     retest_id         UUID REFERENCES retests(retest_id),  -- which re-test produced a RETEST run
     expected          JSONB,                        -- answer key, kept only for jobs with re-test consent
     provider          TEXT,                         -- who served the call, e.g. 'groq'; picks the price (0010)
-    content_removed_at TIMESTAMPTZ                  -- when retention cleared prompt, output, tool calls, answer key, embedding (0015)
+    content_removed_at TIMESTAMPTZ,                 -- when retention cleared prompt, output, tool calls, answer key, embedding (0015)
+    agent             TEXT,                         -- which agent or role made the call (0017)
+    trace_id          TEXT,                         -- shared by every call serving one user task (0017)
+    tools_tokens      INTEGER,                      -- estimated tokens of the tool definitions sent, chars / 4 (0017)
+    tool_call_count   INTEGER                       -- number of tool calls in the response (0017)
 );
 CREATE INDEX idx_runs_content_kept ON runs(created_at) WHERE content_removed_at IS NULL;
 CREATE INDEX idx_runs_retest ON runs(retest_id) WHERE retest_id IS NOT NULL;
 CREATE INDEX idx_runs_job_model ON runs(job_id, model, model_version);
 CREATE INDEX idx_runs_job_created ON runs(job_id, created_at DESC);   -- "recent runs for this job"
 CREATE INDEX idx_runs_prompt_hash ON runs(prompt_hash);
+CREATE INDEX idx_runs_project_trace ON runs(project_id, trace_id) WHERE trace_id IS NOT NULL;   -- (0017)
 CREATE INDEX idx_runs_embedding ON runs USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX idx_runs_embedding_cache ON runs(project_id, prompt_hash, embedding_model) WHERE embedding IS NOT NULL;
 
@@ -197,7 +206,7 @@ CREATE TABLE alerts (
     alert_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     job_id         UUID NOT NULL REFERENCES jobs(job_id),
     kind           TEXT NOT NULL CHECK (kind IN
-                     ('VERSION_REGRESSION','SILENT_DROP','MODEL_DEPRECATED')),
+                     ('VERSION_REGRESSION','SILENT_DROP','MODEL_DEPRECATED','TOKEN_BURST','BUDGET','TRIAL_BUDGET','MODEL_RETIRING')),
     detail         JSONB NOT NULL,                  -- rates before/after, p-value, run ids
     delivered_at   TIMESTAMPTZ,                     -- null until the webhook accepts it
     resolved_at    TIMESTAMPTZ,
@@ -220,6 +229,16 @@ CREATE TABLE recommendation_summaries (             -- the optional summary, onc
     attempted_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_summaries_attempted ON recommendation_summaries(attempted_at);
+
+CREATE TABLE task_summaries (                       -- the optional AI summary of what a task does (0019)
+    job_id         UUID PRIMARY KEY REFERENCES jobs(job_id) ON DELETE CASCADE,
+    fingerprint    TEXT NOT NULL,                   -- of the sample calls it was written from
+    summary        TEXT,                            -- null after a failed call
+    prompt_version TEXT NOT NULL,
+    attempts       INTEGER NOT NULL DEFAULT 1,
+    attempted_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_task_summaries_attempted ON task_summaries(attempted_at);
 
 CREATE TABLE usage_limits (                         -- limits the project works under (0013)
     limit_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),

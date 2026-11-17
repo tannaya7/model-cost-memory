@@ -7,9 +7,9 @@ type Measure = UsageLimitInput["measure"];
 
 /** Common shapes, so most people only pick one and fill in when it resets. */
 const PRESETS: { id: string; label: string; name: string; hours: number; measure: Measure }[] = [
-  { id: "weekly-plan", label: "Plan: weekly limit (shown as %)", name: "Weekly", hours: 168, measure: "PERCENT" },
-  { id: "session-plan", label: "Plan: 5-hour session (shown as %)", name: "Session (5h)", hours: 5, measure: "PERCENT" },
-  { id: "model-plan", label: "Plan: one model's limit (shown as %)", name: "Model limit", hours: 168, measure: "PERCENT" },
+  { id: "weekly-plan", label: "Plan: weekly limit (shown as a percentage)", name: "Weekly", hours: 168, measure: "PERCENT" },
+  { id: "session-plan", label: "Plan: 5-hour session (shown as a percentage)", name: "Session (5h)", hours: 5, measure: "PERCENT" },
+  { id: "model-plan", label: "Plan: one model's limit (shown as a percentage)", name: "Model limit", hours: 168, measure: "PERCENT" },
   { id: "monthly-budget", label: "API: monthly spend budget ($)", name: "Monthly budget", hours: 720, measure: "USD" },
   { id: "daily-requests", label: "API: daily request quota", name: "Daily requests", hours: 24, measure: "REQUESTS" },
   { id: "custom", label: "Custom", name: "", hours: 24, measure: "USD" },
@@ -73,10 +73,9 @@ export function AddLimitForm({ onDone }: { onDone?: () => void }) {
   return (
     <Card className="space-y-4 p-6">
       <div>
-        <h3 className="text-base font-bold tracking-tight text-ink">Add a limit</h3>
+        <h3 className="text-base font-bold tracking-tight text-ink">Add a usage limit</h3>
         <p className="mt-1 text-xs text-dim">
-          Plans that only show a percentage are measured from your recorded runs and your reading of the bar, so
-          use made outside the recorded runs is not seen.
+          A usage limit is a cap you or your provider set, so a mistake cannot run up a huge bill. Plans that only show a percentage are estimated from your recorded AI calls and the number you read off the plan's bar, so use outside the recorded AI calls is not counted.
         </p>
       </div>
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
@@ -135,7 +134,7 @@ export function AddLimitForm({ onDone }: { onDone?: () => void }) {
         </label>
         {create.isError && (
           <p role="alert" className="text-sm text-bad sm:col-span-2">
-            {create.error instanceof Error ? create.error.message : "Could not save the limit."}
+            {create.error instanceof Error ? create.error.message : "The usage limit was not saved. Check the numbers and try again."}
           </p>
         )}
         <div className="flex justify-end sm:col-span-2">
@@ -144,7 +143,7 @@ export function AddLimitForm({ onDone }: { onDone?: () => void }) {
             disabled={!canSave || create.isPending}
             className="rounded-md bg-accent px-5 py-2 text-sm font-semibold text-on-accent shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {create.isPending ? "Saving…" : "Add limit"}
+            {create.isPending ? "Saving…" : "Add usage limit"}
           </button>
         </div>
       </form>

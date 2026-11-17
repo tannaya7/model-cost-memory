@@ -11,7 +11,7 @@ function Crumbs({ job, last }: { job: string; last: string }) {
   const p = useP();
   return (
     <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-muted">
-      <Link to={p("/jobs")} className="hover:text-ink">Jobs</Link>
+      <Link to={p("/jobs")} className="hover:text-ink">AI tasks</Link>
       {job && (
         <>
           <IconArrowRight size={13} />
@@ -29,12 +29,11 @@ export function RetestStart() {
   const job = params.get("job") ?? "";
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-5">
-      <Crumbs job={job} last="New re-test" />
+      <Crumbs job={job} last="New trial on a new model" />
       <header>
         <h1 className="flex items-center gap-2.5 text-3xl font-semibold tracking-tight"><IconFlask size={26} className="text-accent" /> Try a model on your own prompts</h1>
         <p className="mt-1 max-w-2xl text-sm text-dim">
-          A sample of this job's past prompts is sent to the model you choose, each answer is checked the same way as in production, and the
-          results join the evidence. Production is not touched.
+          We replay a sample of this AI task's past prompts on the model you choose, within a budget you set, to see if it does as well. Each answer is checked the same way as your real ones, and the results count towards our recommendation. Your app is not touched.
         </p>
       </header>
       <Panel className="p-5 md:p-6">
@@ -51,9 +50,9 @@ export function RetestRun() {
   const query = useRetestStatus(job, retestId);
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-5">
-      <Crumbs job={job} last="Re-test" />
+      <Crumbs job={job} last="Trial on a new model" />
       {!job || !retestId ? (
-        <EmptyState title="This re-test link is incomplete" hint="Open re-tests from a job's Re-tests tab." />
+        <EmptyState title="This trial link is incomplete" hint="Open the AI task and choose its Trials tab to find your trials." />
       ) : query.isPending ? (
         <Skeleton className="h-64" />
       ) : query.isError ? (

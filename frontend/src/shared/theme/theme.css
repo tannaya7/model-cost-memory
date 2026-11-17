@@ -80,6 +80,30 @@
   --page-glow-1: rgba(139, 92, 246, 0.12);
   --page-glow-2: rgba(217, 70, 239, 0.07);
 
+
+  /* things that change colour with the theme */
+  --accent-glow: rgba(124, 58, 237, 0.7);
+  --glow-a: #c026d3;
+  --glow-b: #a855f7;
+  --glow-c: #c084fc;
+  --glow-core: #f5e8ff;
+  --coin-hi: #fff6c4;
+  --coin-mid: #f2c14e;
+  --coin-lo: #a8740a;
+  --coin-edge: #c99318;
+  --coin-back: #8a5e05;
+  --logo-1: #a78bfa;
+  --logo-2: #7c3aed;
+  --logo-3: #d946ef;
+  --promo-from: #4c1d95;
+  --promo-via: #6d28d9;
+  --promo-to: #a21caf;
+  --promo-ink: #4c1d95;
+  --band-from: #2b1470;
+  --band-via: #160f3d;
+  --band-to: #3d0f52;
+  --grain: 0;
+
   --font-sans: "Geist Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, Consolas, monospace;
 
@@ -87,7 +111,8 @@
   --radius-sm: 0.625rem;
 }
 
-[data-theme="dark"] {
+/* A dark band on the light page keeps the violet night; on the dark theme it is simply the dark theme. */
+:root:not([data-theme="dark"]) [data-band="night"] {
   color-scheme: dark;
 
   --color-bg: #07071a;
@@ -154,4 +179,114 @@
   --panel-light: rgba(255, 255, 255, 0.025);
   --page-glow-1: rgba(139, 92, 246, 0.12);
   --page-glow-2: rgba(217, 70, 239, 0.06);
+
+  --accent-glow: rgba(139, 92, 246, 0.7);
+  --glow-a: #c026d3;
+  --glow-b: #a855f7;
+  --glow-c: #c084fc;
+  --glow-core: #f5e8ff;
+  --coin-hi: #fff6c4;
+  --coin-mid: #f2c14e;
+  --coin-lo: #a8740a;
+  --coin-edge: #c99318;
+  --coin-back: #8a5e05;
+  --promo-from: #4c1d95;
+  --promo-via: #6d28d9;
+  --promo-to: #a21caf;
+  --promo-ink: #4c1d95;
+  --band-from: #2b1470;
+  --band-via: #160f3d;
+  --band-to: #3d0f52;
+}
+
+/* Dark: a soft-touch plastic night. Near-black forest green, sage teal, pale mint highlights. */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg: #040a09;
+  --color-surface: #0a1513;
+  --color-surface-2: #0f1e1b;
+  --color-surface-3: #162a26;
+  --color-rule: rgba(190, 235, 222, 0.08);
+  --color-rule-strong: rgba(190, 235, 222, 0.16);
+
+  --color-ink: #e9f4f0;
+  --color-dim: #9db8b0;
+  --color-muted: #6f8d85;
+
+  --color-accent: #6fb5a5;
+  --color-accent-2: #b7e3d3;
+  --color-accent-ink: #a5d9c8;
+  --color-accent-soft: rgba(111, 181, 165, 0.15);
+  --color-on-accent: #04100d;
+  --color-overlay: #000000;
+  --grad-from: #9dd8c7;
+  --grad-to: #5fa597;
+  --grad-text: linear-gradient(100deg, #e3f6ee 0%, #a5d9c8 42%, #6fb5a5 100%);
+
+  --color-ok: #4ade80;
+  --color-ok-soft: rgba(74, 222, 128, 0.14);
+  --color-warn: #fab219;
+  --color-warn-soft: rgba(250, 178, 25, 0.14);
+  --color-bad: #ff7b7b;
+  --color-bad-soft: rgba(255, 107, 107, 0.16);
+  --color-skeleton: #152824;
+  --tab-active: #1b3330;
+
+  /* chart series, validated on --color-surface (dataviz validator: all checks pass, dark) */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --series-other: #587069;
+  --chart-grid: #132420;
+  --chart-axis: #20382f;
+  --chart-tick: #78968d;
+  --chart-cursor: rgba(190, 235, 222, 0.3);
+  --chart-hover: rgba(190, 235, 222, 0.05);
+
+  --scene-floor: #07110f;
+  --scene-line: rgba(150, 220, 200, 0.09);
+  --scene-slab-top: #14281f;
+  --scene-slab-side: #08120f;
+  --scene-slab-front: #0e1e19;
+  --scene-tube: rgba(170, 230, 210, 0.14);
+  --scene-tube-edge: rgba(190, 240, 225, 0.4);
+  --scene-shadow: rgba(0, 0, 0, 0.6);
+  --scene-speck: rgba(160, 230, 210, 0.6);
+  --scene-beam: rgba(120, 200, 180, 0.07);
+  --glass: rgba(10, 24, 21, 0.72);
+  --glass-border: rgba(190, 235, 222, 0.13);
+
+  --shadow-panel: 0 1px 0 rgba(190, 235, 222, 0.05) inset, 0 24px 48px -24px rgba(0, 0, 0, 0.7);
+  --shadow-float: 0 30px 60px -20px rgba(0, 0, 0, 0.85);
+  --panel-light: rgba(190, 235, 222, 0.03);
+  --page-glow-1: rgba(80, 170, 150, 0.14);
+  --page-glow-2: rgba(180, 230, 215, 0.05);
+
+  --accent-glow: rgba(111, 181, 165, 0.55);
+  --glow-a: #2fa58d;
+  --glow-b: #4fd1b5;
+  --glow-c: #8be8d0;
+  --glow-core: #e6fff8;
+  --coin-hi: #f4fffb;
+  --coin-mid: #b6e2d3;
+  --coin-lo: #4a8c7c;
+  --coin-edge: #7cc4b3;
+  --coin-back: #2d5f54;
+  --logo-1: #c9efe2;
+  --logo-2: #6fb5a5;
+  --logo-3: #3f8a7b;
+  --promo-from: #0d2823;
+  --promo-via: #17463d;
+  --promo-to: #2f7d6e;
+  --promo-ink: #0d2823;
+  --band-from: #0f2a25;
+  --band-via: #081513;
+  --band-to: #14332d;
+  --grain: 1;
 }

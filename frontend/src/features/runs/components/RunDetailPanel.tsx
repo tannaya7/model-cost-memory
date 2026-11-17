@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { jobTitle } from "../../jobs/jobTitle";
 import { useRunDetail } from "../hooks/useRunDetail";
 import { Badge } from "../../../shared/components/Badge";
 import { Skeleton } from "../../../shared/components/Skeleton";
@@ -151,8 +152,10 @@ export function RunDetailPanel({
               {/* Metadata Grid */}
               <div className="grid grid-cols-2 gap-4 rounded-card border border-rule p-4 text-sm sm:grid-cols-3">
                 <div>
-                  <div className="text-xs font-semibold uppercase tracking-wider text-dim">Job</div>
-                  <div className="mt-1 font-medium text-ink">{run.job}</div>
+                  <div className="text-xs font-semibold uppercase tracking-wider text-dim">AI task</div>
+                  <div className="mt-1 font-medium text-ink" title="Name in your code">
+                    {jobTitle(run.job)} <span className="ml-1 rounded-md border border-rule bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-dim">{run.job}</span>
+                  </div>
                 </div>
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-wider text-dim">Model</div>

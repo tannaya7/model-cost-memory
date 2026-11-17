@@ -1,6 +1,8 @@
 import type { components } from "./generated";
 
 export type Job = components["schemas"]["JobOut"];
+export type TaskProfile = components["schemas"]["TaskProfileOut"];
+export type TaskSummary = components["schemas"]["TaskSummaryOut"];
 export type JobCreate = components["schemas"]["JobCreate"];
 export type Run = components["schemas"]["RunOut"];
 export type RunDetail = components["schemas"]["RunDetail"];

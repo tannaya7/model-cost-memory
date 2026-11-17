@@ -30,8 +30,11 @@ export function monthlySaving(rec: Recommendation | null | undefined): number {
   return Math.max(0, rec.forecast?.monthly_saving_usd ?? 0);
 }
 
-export function VerdictPill({ verdict }: { verdict: Verdict }) {
+export function VerdictPill({ verdict, rec }: { verdict: Verdict; rec?: { evidence: { n_runs: number }; rules: { evidence_floor: number } } | null }) {
   const v = VERDICT[verdict];
+  if (verdict === "INSUFFICIENT_EVIDENCE" && rec) {
+    return <Pill tone={v.tone}>Still learning: {Math.min(Math.round(rec.evidence.n_runs), rec.rules.evidence_floor)} of {rec.rules.evidence_floor}</Pill>;
+  }
   return <Pill tone={v.tone}>{v.label}</Pill>;
 }
 

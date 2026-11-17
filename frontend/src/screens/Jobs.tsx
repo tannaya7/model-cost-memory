@@ -1,10 +1,12 @@
-/** Jobs: every job with its verdict, the model it should use and what that is worth. */
+/** AI tasks: every task with our recommendation, the model it should use and what that is worth. */
 import { useP } from "../app/project";
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { useDaily } from "../features/insights/api/dailyApi";
 import { useSpendInsights } from "../features/insights/hooks/useSpendInsights";
+import { jobTitle, TASK_EXPLAINER } from "../features/jobs/jobTitle";
+import { CHECK_KIND_LABELS } from "../features/jobs/checkKinds";
 import { JobCreatePanel } from "../features/jobs/components/JobCreatePanel";
 import { useJobs } from "../features/jobs/hooks/useJobs";
 import { Sparkline } from "../ui/charts/charts";
@@ -46,18 +48,18 @@ export default function Jobs() {
   });
   const shown = rows
     .filter((r) => filter === "all" || r.kind === filter)
-    .filter((r) => !query.trim() || r.job.name.toLowerCase().includes(query.trim().toLowerCase()))
+    .filter((r) => !query.trim() || `${r.job.name} ${jobTitle(r.job.name)}`.toLowerCase().includes(query.trim().toLowerCase()))
     .sort((a, b) => monthlySaving(b.rec) - monthlySaving(a.rec) || b.job.run_count - a.job.run_count);
 
   return (
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Jobs</h1>
-          <p className="mt-1 text-sm text-dim">One job is one kind of AI task (extract an invoice, classify a ticket). Each is judged on its own runs.</p>
+          <h1 className="text-3xl font-semibold tracking-tight">AI tasks</h1>
+          <p className="mt-1 max-w-2xl text-sm text-dim">{TASK_EXPLAINER}</p>
         </div>
         <Button variant="primary" onClick={() => setCreating(true)}>
-          <IconPlus size={16} /> New job
+          <IconPlus size={16} /> New AI task
         </Button>
       </header>
 
@@ -69,7 +71,7 @@ export default function Jobs() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Segmented<Filter>
-          label="Show jobs"
+          label="Show AI tasks"
           value={filter}
           onChange={setFilter}
           options={[
@@ -88,7 +90,7 @@ export default function Jobs() {
         />
         <label className="flex items-center gap-2 rounded-[10px] border border-rule bg-surface px-3 py-2 text-sm text-muted focus-within:border-accent">
           <IconSearch size={15} />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a job" aria-label="Find a job" className="w-44 bg-transparent text-ink outline-none placeholder:text-muted" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find an AI task" aria-label="Find an AI task" className="w-44 bg-transparent text-ink outline-none placeholder:text-muted" />
         </label>
         </div>
       </div>
@@ -100,9 +102,9 @@ export default function Jobs() {
       ) : shown.length === 0 ? (
         <EmptyState
           icon={<IconJobs size={18} />}
-          title={jobs?.length ? "No job matches" : "No jobs yet"}
-          hint={jobs?.length ? "Try another filter or search." : "A job is a kind of task you send to a model. Create one, then record its runs with the SDK."}
-          action={!jobs?.length && <Button variant="primary" onClick={() => setCreating(true)}>Create the first job</Button>}
+          title={jobs?.length ? "No AI task matches" : "No AI tasks yet"}
+          hint={jobs?.length ? "Try another filter or search." : `${TASK_EXPLAINER} You create a task here first, then send calls for it from your code. Example: name "invoice-extract", what it does: "Pull the total amount out of an invoice".`}
+          action={!jobs?.length && <Button variant="primary" onClick={() => setCreating(true)}>Create your first AI task</Button>}
         />
       ) : (
         <ul className="flex flex-col gap-3">
@@ -118,11 +120,22 @@ export default function Jobs() {
                   className="panel group grid grid-cols-1 items-center gap-4 p-4 transition-all hover:border-rule-strong md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_repeat(3,minmax(0,0.8fr))_120px_24px] md:p-5"
                 >
                   <div className="min-w-0">
-                    <p className="truncate font-mono text-[15px] font-semibold text-ink">{job.name}</p>
-                    <p className="mt-1 text-xs text-muted">{count(job.run_count)} runs · {job.check_kind.toLowerCase().replace("_", " ")}</p>
+                    <p className="truncate text-[15px] font-semibold text-ink">{jobTitle(job.name)}</p>
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                      <span title="name in your code" className="rounded-md border border-rule bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-dim">{job.name}</span>
+                      <span>{count(job.run_count)} AI calls</span>
+                    </p>
+                    {job.description ? (
+                      <p className="mt-1.5 line-clamp-2 text-xs text-dim">{job.description}</p>
+                    ) : (
+                      <p className="mt-1.5 text-xs text-muted">
+                        No description yet. <span className="text-accent underline">Add one</span> so your team knows what this does.
+                      </p>
+                    )}
+                    <p className="mt-1 text-[11px] text-muted">{CHECK_KIND_LABELS[job.check_kind]}</p>
                   </div>
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    {rec ? <VerdictPill verdict={rec.verdict as Verdict} /> : <Pill tone="neutral">No verdict yet</Pill>}
+                    {rec ? <VerdictPill verdict={rec.verdict as Verdict} rec={rec} /> : <Pill tone="neutral">No recommendation yet</Pill>}
                     {rec?.current && (
                       <span className="flex min-w-0 items-center gap-1.5 text-sm">
                         <ModelName className="truncate text-dim">{rec.current.model}</ModelName>
@@ -135,7 +148,7 @@ export default function Jobs() {
                       </span>
                     )}
                   </div>
-                  <Metric label="Pass rate" value={pct((moving ? target : current)?.weighted_pass_rate)} />
+                  <Metric label="Correct answers" value={pct((moving ? target : current)?.weighted_pass_rate)} />
                   <Metric label={`Spend ${period} d`} value={usd(spendByJob.get(job.name) ?? 0)} />
                   <Metric label="Saving" value={saving > 0 ? `${usd(saving)}/mo` : "–"} good={saving > 0} />
                   <div className="hidden md:block">
@@ -150,7 +163,7 @@ export default function Jobs() {
       )}
 
       <Reveal delay={0.1}>
-        <p className="text-center text-xs text-muted">The line on the right is runs per day over the last {period} days.</p>
+        <p className="text-center text-xs text-muted">The line on the right is AI calls per day over the last {period} days.</p>
       </Reveal>
 
       <JobCreatePanel isOpen={creating} onClose={() => setCreating(false)} onSuccess={(message) => { setCreating(false); setNotice(message); }} />

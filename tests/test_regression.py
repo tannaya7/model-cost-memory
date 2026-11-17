@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from agent_memory.alerts.notifier import deliver_pending, sign
+from agent_memory.alerts.notifier import deliver_pending, sign, sign_v2
 from agent_memory.alerts.service import catalog_alerts
 from agent_memory.models import Alert, CatalogEntry, Job, Project, ProviderPrice, Recommendation, Run
 from agent_memory.pipeline.consolidation import consolidate_job
@@ -184,7 +184,7 @@ async def test_alerts_are_listed_and_resolved_through_the_api(client, session, w
     assert (await client.post(f"/v1/alerts/{uuid.uuid4()}/resolve", headers=headers)).status_code == 404
 
 
-async def test_webhook_delivery_is_signed_and_retried_with_backoff(session, world):
+async def test_webhook_delivery_is_signed_and_retried_with_backoff(session, world, caplog):
     _, job, add = world
     await add(200, version="big-2026-08", passes=190, start=T0)
     await add(100, version="big-2026-09", passes=80, start=T0 + timedelta(days=3))
@@ -211,6 +211,13 @@ async def test_webhook_delivery_is_signed_and_retried_with_backoff(session, worl
     [request] = received
     expected = "sha256=" + hmac.new(b"whsec_test", request.content, hashlib.sha256).hexdigest()
     assert request.headers["X-MCM-Signature"] == expected == sign("whsec_test", request.content)
+    # replay protection: the timestamp is signed in with the body; the old header is still sent
+    stamp = request.headers["X-MCM-Timestamp"]
+    assert request.headers["X-MCM-Signature-V2"] == sign_v2("whsec_test", stamp, request.content)
+    assert request.headers["X-MCM-Signature-V2"] != sign_v2("whsec_test", str(int(stamp) + 1), request.content)
+    assert request.headers["X-MCM-Signature-V2"] != request.headers["X-MCM-Signature"]
+    assert abs(int(stamp) - datetime.now(UTC).timestamp()) < 60
+    assert "whsec_test" not in caplog.text
     payload = json.loads(request.content)
     assert payload["kind"] == "VERSION_REGRESSION" and payload["job"] == "invoice"
     # Slack (text) and Discord (content) show a readable line

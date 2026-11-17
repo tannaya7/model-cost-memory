@@ -13,7 +13,7 @@ export function getVerdictChip(verdict: Verdict) {
     case "HOLD":
       return <Badge tone="neutral">Keep current model</Badge>;
     case "INSUFFICIENT_EVIDENCE":
-      return <Badge tone="neutral">Not enough evidence yet</Badge>;
+      return <Badge tone="neutral">Not enough checked answers yet</Badge>;
   }
 }
 
@@ -26,7 +26,7 @@ function ModelNumbers({ label, model }: { label: string; model: ModelEvidence })
       </div>
       <div className="grid grid-cols-2 gap-3 pt-1">
         <div>
-          <div className="text-xs text-dim">Pass rate</div>
+          <div className="text-xs text-dim">Correct answers</div>
           <div className="font-mono text-lg font-bold text-ink">
             {model.weighted_pass_rate !== null ? (
               <CountUp value={model.weighted_pass_rate * 100} decimals={1} suffix="%" />
@@ -37,7 +37,7 @@ function ModelNumbers({ label, model }: { label: string; model: ModelEvidence })
           {range(model) && <div className="font-mono text-[11px] text-dim">likely {range(model)}</div>}
         </div>
         <div>
-          <div className="text-xs text-dim">Cost / success</div>
+          <div className="text-xs text-dim">Cost per correct answer</div>
           <div className="font-mono text-lg font-bold text-ink">
             {model.cost_per_success_usd !== null ? (
               <CountUp value={model.cost_per_success_usd} decimals={4} prefix="$" />
@@ -53,7 +53,7 @@ function ModelNumbers({ label, model }: { label: string; model: ModelEvidence })
 
 function failuresText(n: number): string {
   const rounded = Math.round(Math.abs(n) * 10) / 10;
-  return `${rounded} ${rounded === 1 ? "failure" : "failures"}`;
+  return `${rounded} ${rounded === 1 ? "wrong answer" : "wrong answers"}`;
 }
 
 function ForecastPanel({ forecast }: { forecast: Forecast }) {
@@ -68,12 +68,12 @@ function ForecastPanel({ forecast }: { forecast: Forecast }) {
           {saving >= 0 ? " a month" : " more a month"}
         </div>
         <p className="mt-0.5 text-xs text-dim">
-          Based on {forecast.runs_per_month.toLocaleString()} runs in the last 30 days
+          Based on {forecast.runs_per_month.toLocaleString()} AI calls in the last 30 days
         </p>
       </div>
       <div className="text-xs font-medium">
         {Math.abs(extra) < 0.05 ? (
-          <span className="text-dim">No change in failures expected</span>
+          <span className="text-dim">No change in wrong answers expected</span>
         ) : extra > 0 ? (
           <span className="text-warn">About {failuresText(extra)} more a month</span>
         ) : (
@@ -84,7 +84,7 @@ function ForecastPanel({ forecast }: { forecast: Forecast }) {
           (likely between {forecast.extra_failures_low.toFixed(1)} and {forecast.extra_failures_high.toFixed(1)})
         </span>
       </div>
-      <p className="text-xs text-dim">Estimate. Assumes next month looks like the last 30 days.</p>
+      <p className="text-xs text-dim">Estimate, not a promise. It assumes next month looks like the last 30 days.</p>
     </div>
   );
 }
@@ -100,7 +100,7 @@ export function RecommendationCard({ recommendation }: { recommendation: Recomme
   } else if (verdict === "HOLD") {
     headline = `Keep using ${current?.model ?? "the current model"}`;
   } else {
-    headline = `Gathering evidence for ${recommendation.job}`;
+    headline = `Still learning about ${recommendation.job}`;
   }
 
   const highestWeight = models.reduce((max, m) => Math.max(max, m.evidence_weight), 0);
@@ -158,7 +158,7 @@ export function RecommendationCard({ recommendation }: { recommendation: Recomme
         <div className="space-y-2 rounded-card border border-rule bg-bg p-4">
           <div className="flex items-center justify-between text-xs font-semibold">
             <span className="text-ink">
-              {highestWeight.toFixed(1)} of {rules.evidence_floor} weighted runs
+              {highestWeight.toFixed(1)} of {rules.evidence_floor} checked answers needed (recent ones count more)
             </span>
             <span className="font-mono text-dim">{progressPct}%</span>
           </div>
@@ -171,7 +171,7 @@ export function RecommendationCard({ recommendation }: { recommendation: Recomme
         </div>
       )}
 
-      {/* With re-test candidates the job page shows the next step beside the buttons that start them. */}
+      {/* With trial candidates the AI task page shows the next step beside the buttons that start them. */}
       {next_step && recommendation.retest_candidates.length === 0 && (
         <p className="text-xs text-dim italic">{next_step}</p>
       )}

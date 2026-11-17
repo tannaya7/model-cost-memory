@@ -55,6 +55,14 @@ function generateApiKey(): string {
   return `mcm_live_${suffix}`;
 }
 
+/** The "staging" project is brand new: it has no jobs, runs or alerts, so the first-visit tour shows there. */
+const EMPTY_PROJECT_ID = "00000000-0000-0000-0000-000000000002";
+function isEmptyProject(request: Request): boolean {
+  return request.headers.get("x-project-id") === EMPTY_PROJECT_ID;
+}
+/** What the mock "account" has saved about which first-visit guides it has seen (nothing else is kept). */
+const mockUiFlags: { tour_seen?: boolean; first_results_seen?: boolean } = {};
+
 const projects: Project[] = [
   {
     project_id: "00000000-0000-0000-0000-000000000001",
@@ -64,6 +72,7 @@ const projects: Project[] = [
     retest_monthly_cap_usd: 10,
     retest_allowed: true,
     content_retention_days: 90,
+    store_tool_arguments: false,
     key_prefix: "mcm_live_prod",
     created_at: "2026-09-01T00:00:00Z",
   },
@@ -75,6 +84,7 @@ const projects: Project[] = [
     retest_monthly_cap_usd: 50,
     retest_allowed: false,
     content_retention_days: 90,
+    store_tool_arguments: false,
     key_prefix: "mcm_live_stag",
     created_at: "2026-09-15T00:00:00Z",
   },
@@ -253,6 +263,9 @@ for (let i = 0; i < 297; i++) {
 // Ensure sorted newest first
 runs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+let summaryConsent = false;
+let summaryDeleted = false;
+
 export const handlers = [
   // GET /v1/jobs
   http.get("/v1/jobs", async ({ request }) => {
@@ -260,7 +273,7 @@ export const handlers = [
     if (!isAuthorized(request)) {
       return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
     }
-    return HttpResponse.json(jobs);
+    return HttpResponse.json(isEmptyProject(request) ? [] : jobs);
   }),
 
   // POST /v1/jobs
@@ -553,6 +566,50 @@ export const handlers = [
     HttpResponse.json({ google: true, dev_login: false, demo_project_id: null } satisfies AuthConfig),
   ),
 
+  // GET /v1/jobs/:job/profile (what the calls prove, plus the optional AI summary)
+  http.get("/v1/jobs/:job/profile", async ({ request, params }) => {
+    await delay(300);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+    const name = decodeURIComponent(String(params.job));
+    const calls = runs.filter((r) => r.job === name).length;
+    const summary = {
+      state: !summaryConsent ? "off" : summaryDeleted ? "deleted" : "ready",
+      text: summaryConsent && !summaryDeleted
+        ? "This task reads an invoice and pulls out the total amount to pay. It is an extraction task: finding facts in text."
+        : null,
+      consent: summaryConsent,
+      service: "generativelanguage.googleapis.com",
+    };
+    if (calls < 25) {
+      return HttpResponse.json({
+        calls, window_days: 30, enough_data: false, models: [], uses_tools: false, works_like_agent: null,
+        tool_source: null, multi_agent: false, typical_tokens_in: null, typical_tokens_out: null, summary,
+      });
+    }
+    return HttpResponse.json({
+      calls, window_days: 30, enough_data: true, models: ["acme-large", "acme-mini"], uses_tools: false,
+      works_like_agent: null, tool_source: null, multi_agent: false, typical_tokens_in: 1840, typical_tokens_out: 96, summary,
+    });
+  }),
+
+  // PUT /v1/task-summary-consent
+  http.put("/v1/task-summary-consent", async ({ request }) => {
+    await delay(250);
+    const body = (await request.json()) as { enabled: boolean };
+    summaryConsent = body.enabled;
+    summaryDeleted = false;
+    return HttpResponse.json({ state: summaryConsent ? "ready" : "off", text: null, consent: summaryConsent, service: "generativelanguage.googleapis.com" });
+  }),
+
+  // DELETE /v1/jobs/:job/summary
+  http.delete("/v1/jobs/:job/summary", async () => {
+    await delay(200);
+    summaryDeleted = true;
+    return new HttpResponse(null, { status: 204 });
+  }),
+
   // GET /v1/jobs/:job/insights
   http.get("/v1/jobs/:job/insights", async ({ request, params }) => {
     await delay(300);
@@ -612,7 +669,7 @@ export const handlers = [
       return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
     }
     const all = new URL(request.url).searchParams.get("include_resolved") === "true";
-    return HttpResponse.json(mockAlerts.filter((a) => all || a.resolved_at === null));
+    return HttpResponse.json(isEmptyProject(request) ? [] : mockAlerts.filter((a) => all || a.resolved_at === null));
   }),
 
   // POST /v1/alerts/:alert_id/resolve
@@ -718,6 +775,54 @@ export const handlers = [
   http.get("/healthz", () => HttpResponse.json({ status: "ok" })),
   http.get("/healthz/scheduler", () => HttpResponse.json({ status: "ok", overdue: {} })),
 
+  // GET /v1/insights/agents: who uses the tokens, the heaviest runs, tool-list size and plain labels.
+  http.get("/v1/insights/agents", async () => {
+    await delay(250);
+    return HttpResponse.json({
+      agents: [
+        { agent: "researcher", runs: 410, tokens_in: 3_900_000, tokens_out: 420_000, cache_read_tokens: 600_000, spend_usd: 41.2, share: 0.58, models: ["acme-large"], uses_tools: true, works_like_agent: "yes", tool_source: "mcp", tool_servers: ["github", "slack"], top_tools: [{ name: "mcp__github__search_code", calls: 310 }, { name: "mcp__slack__post_message", calls: 44 }], steps_per_task: 8.4 },
+        { agent: "writer", runs: 190, tokens_in: 1_100_000, tokens_out: 380_000, cache_read_tokens: 0, spend_usd: 14.7, share: 0.2, models: ["acme-large", "acme-mini"], uses_tools: true, works_like_agent: "yes", tool_source: "tool_list", tool_servers: [], top_tools: [{ name: "search_docs", calls: 120 }], steps_per_task: 3.1 },
+        { agent: "unlabelled", runs: 900, tokens_in: 1_200_000, tokens_out: 150_000, cache_read_tokens: 0, spend_usd: 9.9, share: 0.22, models: ["acme-mini"], uses_tools: false, works_like_agent: null, tool_source: null, tool_servers: [], top_tools: [], steps_per_task: null },
+      ],
+      traces: [
+        { trace_id: "task-8841", calls: 38, tokens: 912_000, spend_usd: 11.4, agents: 2, repeated_prompts: true, agent_names: ["researcher", "writer"], multi_agent: true, possible_loop: { step: "the mcp__github__search_code tool", repeats: 6, cost_usd: 1.9, uses_arguments: false } },
+        { trace_id: "task-8790", calls: 12, tokens: 240_000, spend_usd: 2.8, agents: 1, repeated_prompts: false, agent_names: ["researcher"], multi_agent: false, possible_loop: null },
+      ],
+      tools: [
+        { job: "invoice-extract", runs: 600, avg_tools_tokens: 12_400, share_of_tokens_in: 0.46 },
+        { job: "receipt-scan", runs: 120, avg_tools_tokens: 900, share_of_tokens_in: 0.05 },
+      ],
+      kinds: { calls: 1500, uses_tools: true, works_like_agent: "yes", tool_source: "mcp", tool_servers: ["github", "slack"], multi_agent: true },
+    });
+  }),
+
+  // GET /v1/insights/prompts: the prompts that use the most tokens, and how much of each is the same every call.
+  http.get("/v1/insights/prompts", async ({ request }) => {
+    await delay(250);
+    const url = new URL(request.url);
+    const job = url.searchParams.get("job");
+    const limit = Math.min(10, Math.max(1, Number(url.searchParams.get("limit") ?? 3)));
+    const days = Number(url.searchParams.get("days") ?? 30);
+    const all = [
+      { job: "invoice-extract", prompt_version: null, calls: 2840, tokens_in: 5_210_000, tokens_out: 690_000, cache_read_tokens: 0, cache_write_tokens: 0, text_samples: 50, repeated_start_share: 0.62, repeated_end_share: 0.05, repeated_start_preview: "You are an accounting assistant. Read the invoice below and return the vendor, invoice number, date and total as JSON…" },
+      { job: "receipt-scan", prompt_version: "v2", calls: 640, tokens_in: 910_000, tokens_out: 210_000, cache_read_tokens: 380_000, cache_write_tokens: 40_000, text_samples: 50, repeated_start_share: 0.18, repeated_end_share: 0.36, repeated_start_preview: null },
+      { job: "ticket-classify", prompt_version: null, calls: 3100, tokens_in: 620_000, tokens_out: 95_000, cache_read_tokens: 0, cache_write_tokens: 0, text_samples: 3, repeated_start_share: null, repeated_end_share: null, repeated_start_preview: null },
+    ].map((g) => ({ ...g, total_tokens: g.tokens_in + g.tokens_out + g.cache_read_tokens + g.cache_write_tokens }));
+    const total = all.reduce((sum, g) => sum + g.total_tokens, 0);
+    const groups = all
+      .filter((g) => !job || g.job === job)
+      .sort((x, y) => y.total_tokens - x.total_tokens)
+      .slice(0, limit)
+      .map((g) => ({
+        ...g,
+        share: total ? Math.round((g.total_tokens / total) * 1000) / 1000 : 0,
+        avg_tokens_in: Math.round((g.tokens_in / g.calls) * 10) / 10,
+        avg_tokens_out: Math.round((g.tokens_out / g.calls) * 10) / 10,
+        cache_read_share: g.cache_read_tokens + g.tokens_in ? Math.round((g.cache_read_tokens / (g.cache_read_tokens + g.tokens_in)) * 1000) / 1000 : null,
+      }));
+    return HttpResponse.json({ days, total_tokens: total, groups });
+  }),
+
   // GET /v1/insights/daily: 60 days per job and model, deterministic. invoice-extract moves from
   // acme-large to acme-mini three weeks ago; acme-large's new version dips for a week.
   http.get("/v1/insights/daily", async ({ request }) => {
@@ -730,19 +835,19 @@ export const handlers = [
     const onlyJob = url.searchParams.get("job");
     let seed = 7;
     const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    const plan: Array<{ job: string; model: string; perDay: number; pass: number; cost: number; from: number; to: number }> = [
-      { job: "invoice-extract", model: "acme-large", perDay: 120, pass: 0.975, cost: 0.031, from: days, to: 21 },
-      { job: "invoice-extract", model: "acme-large", perDay: 35, pass: 0.97, cost: 0.031, from: 21, to: 0 },
-      { job: "invoice-extract", model: "acme-mini", perDay: 90, pass: 0.962, cost: 0.003, from: 21, to: 0 },
-      { job: "invoice-extract", model: "acme-mini", perDay: 12, pass: 0.955, cost: 0.003, from: 45, to: 21 },
-      { job: "ticket-classify", model: "mini", perDay: 18, pass: 0.88, cost: 0.0011, from: 14, to: 0 },
-      { job: "receipt-scan", model: "acme-mini", perDay: 26, pass: 0.985, cost: 0.0024, from: days, to: 0 },
+    const plan: Array<{ job: string; model: string; perDay: number; pass: number; cost: number; from: number; to: number; inTok: number; outTok: number; cache: number }> = [
+      { job: "invoice-extract", model: "acme-large", perDay: 120, pass: 0.975, cost: 0.031, from: days, to: 21, inTok: 3400, outTok: 520, cache: 0.35 },
+      { job: "invoice-extract", model: "acme-large", perDay: 35, pass: 0.97, cost: 0.031, from: 21, to: 0, inTok: 3400, outTok: 520, cache: 0.35 },
+      { job: "invoice-extract", model: "acme-mini", perDay: 90, pass: 0.962, cost: 0.003, from: 21, to: 0, inTok: 3300, outTok: 480, cache: 0.5 },
+      { job: "invoice-extract", model: "acme-mini", perDay: 12, pass: 0.955, cost: 0.003, from: 45, to: 21, inTok: 3300, outTok: 480, cache: 0.5 },
+      { job: "ticket-classify", model: "mini", perDay: 18, pass: 0.88, cost: 0.0011, from: 14, to: 0, inTok: 900, outTok: 130, cache: 0 },
+      { job: "receipt-scan", model: "acme-mini", perDay: 26, pass: 0.985, cost: 0.0024, from: days, to: 0, inTok: 1800, outTok: 260, cache: 0.2 },
     ];
-    const out: Array<{ day: string; job: string; model: string; runs: number; passed: number; failed: number; spend_usd: number }> = [];
+    const out: Array<{ day: string; job: string; model: string; runs: number; passed: number; failed: number; spend_usd: number; tokens_in: number; tokens_out: number; cache_read_tokens: number; cache_write_tokens: number; unpriced_runs: number; failed_spend_usd: number }> = [];
     const today = new Date();
     for (let d = days - 1; d >= 0; d--) {
       const day = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - d)).toISOString().slice(0, 10);
-      const merged = new Map<string, { runs: number; passed: number; failed: number; spend_usd: number }>();
+      const merged = new Map<string, { runs: number; passed: number; failed: number; spend_usd: number; tokens_in: number; tokens_out: number; cache_read_tokens: number; cache_write_tokens: number; unpriced_runs: number; failed_spend_usd: number }>();
       for (const p of plan) {
         if (d >= p.from || d < p.to || (onlyJob && p.job !== onlyJob)) continue;
         const weekday = new Date(day).getUTCDay();
@@ -752,12 +857,22 @@ export const handlers = [
         const passed = Math.round(runs * rate);
         const unknown = Math.round(runs * 0.01);
         const key = `${p.job}|${p.model}`;
-        const prev = merged.get(key) ?? { runs: 0, passed: 0, failed: 0, spend_usd: 0 };
+        const prev = merged.get(key) ?? { runs: 0, passed: 0, failed: 0, spend_usd: 0, tokens_in: 0, tokens_out: 0, cache_read_tokens: 0, cache_write_tokens: 0, unpriced_runs: 0, failed_spend_usd: 0 };
+        const inputTotal = Math.round(runs * p.inTok * (0.9 + rand() * 0.2));
+        const cacheRead = Math.round(inputTotal * p.cache * (0.8 + rand() * 0.4));
         merged.set(key, {
           runs: prev.runs + runs,
           passed: prev.passed + passed,
           failed: prev.failed + Math.max(0, runs - passed - unknown),
           spend_usd: Math.round((prev.spend_usd + runs * p.cost * (0.9 + rand() * 0.2)) * 100) / 100,
+          tokens_in: prev.tokens_in + inputTotal - cacheRead,
+          tokens_out: prev.tokens_out + Math.round(runs * p.outTok * (0.9 + rand() * 0.2)),
+          cache_read_tokens: prev.cache_read_tokens + cacheRead,
+          cache_write_tokens: prev.cache_write_tokens + (p.cache > 0 ? Math.round(inputTotal * 0.05) : 0),
+          // receipt-scan runs on a model with no listed price part of the time: those runs have no cost.
+          unpriced_runs: prev.unpriced_runs + (p.job === "receipt-scan" ? Math.round(runs * 0.05) : 0),
+          // what the failed answers actually cost (a failed answer tends to be a longer, dearer one)
+          failed_spend_usd: Math.round((prev.failed_spend_usd + Math.max(0, runs - passed - unknown) * p.cost * 1.15) * 100) / 100,
         });
       }
       for (const [key, v] of merged) {
@@ -765,7 +880,7 @@ export const handlers = [
         out.push({ day, job, model, ...v });
       }
     }
-    return HttpResponse.json(out);
+    return HttpResponse.json(isEmptyProject(request) ? [] : out);
   }),
 
   // GET /v1/news: a few stories, one naming a model the demo project runs
@@ -1058,8 +1173,24 @@ export const handlers = [
       email: "demo@example.com",
       name: "Demo user (sample data)",
       picture_url: null,
+      ui_flags: { ...mockUiFlags },
     };
     return HttpResponse.json(user);
+  }),
+
+  // PATCH /v1/me/ui-flags: only the two first-visit flags, only true or false
+  http.patch("/v1/me/ui-flags", async ({ request }) => {
+    if (!isMockSignedIn(request)) {
+      return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
+    }
+    const body = (await request.json()) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(body)) {
+      if ((k !== "tour_seen" && k !== "first_results_seen") || typeof v !== "boolean") {
+        return HttpResponse.json({ detail: "Unknown flag or not true/false" }, { status: 422 });
+      }
+      mockUiFlags[k] = v;
+    }
+    return HttpResponse.json({ ...mockUiFlags });
   }),
 
   // POST /auth/logout
@@ -1127,6 +1258,7 @@ export const handlers = [
       retest_monthly_cap_usd: 10,
       retest_allowed: true,
       content_retention_days: 90,
+      store_tool_arguments: false,
       key_prefix: keyPrefix,
       created_at: new Date().toISOString(),
     };
@@ -1151,6 +1283,7 @@ export const handlers = [
       retest_monthly_cap_usd?: number;
       retest_allowed?: boolean;
       content_retention_days?: number;
+      store_tool_arguments?: boolean;
     };
     if (body.name !== undefined) {
       const name = body.name.trim();
@@ -1195,7 +1328,25 @@ export const handlers = [
       }
       project.content_retention_days = days;
     }
+    if (body.store_tool_arguments !== undefined) {
+      if (typeof body.store_tool_arguments !== "boolean") {
+        return HttpResponse.json({ detail: "store_tool_arguments must be true or false" }, { status: 422 });
+      }
+      project.store_tool_arguments = body.store_tool_arguments;
+    }
     return HttpResponse.json(project);
+  }),
+
+  // DELETE /v1/projects/:project_id/tool-inputs
+  http.delete("/v1/projects/:project_id/tool-inputs", async ({ request, params }) => {
+    await delay(350);
+    if (!isMockSignedIn(request)) {
+      return HttpResponse.json({ detail: "Not signed in" }, { status: 401 });
+    }
+    if (!projects.some((p) => p.project_id === String(params.project_id))) {
+      return HttpResponse.json({ detail: "Project not found" }, { status: 404 });
+    }
+    return HttpResponse.json({ runs_cleared: 12 });
   }),
 
   // DELETE /v1/projects/:project_id?confirm=<project_id>

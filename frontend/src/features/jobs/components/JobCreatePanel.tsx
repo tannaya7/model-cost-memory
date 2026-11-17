@@ -7,18 +7,19 @@ import { createJob } from "../api/jobsApi";
 import { ApiError } from "../../../shared/api/apiFetch";
 import type { JobCreate } from "../../../shared/api/types";
 import { CHECK_KIND_LABELS } from "../checkKinds";
+import { jobTitle } from "../jobTitle";
 
 const jobFormSchema = z
   .object({
     name: z
       .string()
-      .min(1, "Name is required")
+      .min(1, "Give the task a name")
       .max(100, "Name must be at most 100 characters")
       .regex(
         /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
-        "Name must start with an alphanumeric character and contain only letters, numbers, '.', '_', or '-'",
+        "Use only letters, numbers, dashes and underscores, with no spaces, starting with a letter or number.",
       ),
-    description: z.string().max(500, "Description must be under 500 characters").optional(),
+    description: z.string().max(500, "Keep the description under 500 characters").optional(),
     // TEST_COMMAND needs a code sandbox, which v1 does not have; the backend rejects it.
     check_kind: z.enum(["ANSWER_KEY", "SCHEMA", "LATE_LABEL"]),
     fields: z.array(z.object({ name: z.string() })).optional(),
@@ -34,7 +35,7 @@ const jobFormSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["fields"],
-          message: "At least one expected field name is required",
+          message: "Add at least one field name",
         });
       }
     } else if (data.check_kind === "SCHEMA") {
@@ -42,7 +43,7 @@ const jobFormSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["schemaJson"],
-          message: "Schema JSON is required",
+          message: "Describe the format you expect",
         });
       } else {
         try {
@@ -51,14 +52,14 @@ const jobFormSchema = z
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
               path: ["schemaJson"],
-              message: "Schema must be a valid JSON object",
+              message: "The format must be a JSON object, one that starts with a curly bracket",
             });
           }
         } catch {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["schemaJson"],
-            message: "Invalid JSON format. Check brackets and quotes.",
+            message: "That is not valid JSON. Check the brackets and quotes.",
           });
         }
       }
@@ -66,6 +67,13 @@ const jobFormSchema = z
   });
 
 type JobFormValues = z.infer<typeof jobFormSchema>;
+
+/** Which check fits which situation, in plain words. */
+const KIND_HELP = {
+  ANSWER_KEY: "Best when each question has one right answer you know, like the total on an invoice.",
+  SCHEMA: "Best when you only need the answer in the right shape, like a JSON with a category field.",
+  LATE_LABEL: "Best when only a person can judge, like sorting a support ticket. You mark answers later.",
+} as const;
 
 export function JobCreatePanel({
   isOpen,
@@ -114,6 +122,7 @@ export function JobCreatePanel({
   });
 
   const selectedKind = watch("check_kind");
+  const typedName = (watch("name") ?? "").trim();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -130,20 +139,20 @@ export function JobCreatePanel({
 
   const mutation = useMutation({
     mutationFn: (data: JobCreate) => createJob(data),
-    onSuccess: () => {
+    onSuccess: (job) => {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
-      onSuccess("Job created");
+      onSuccess(`AI task "${jobTitle(job.name)}" created. To send calls for it, add job="${job.name}" in your code: RunRecorder(job="${job.name}", provider=...)`);
       reset();
       setServerError(null);
       onClose();
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError && err.status === 422) {
-        setServerError(err.message || "Invalid job configuration.");
+        setServerError(err.message || "Invalid AI task settings.");
       } else if (err instanceof Error) {
         setServerError(err.message);
       } else {
-        setServerError("Failed to create job.");
+        setServerError("We could not create the AI task. Please try again.");
       }
     },
   });
@@ -192,16 +201,16 @@ export function JobCreatePanel({
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-rule bg-surface px-6 py-4">
           <div>
             <h2 id="job-create-title" className="text-lg font-bold text-ink">
-              Define a New Job
+              Create an AI task
             </h2>
             <p className="text-xs text-dim">
-              Set up how inputs are processed and how correct answers are verified.
+              An AI task is one kind of work your app asks an AI to do. Create it here first, then send calls for it from your code.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close job form"
+            aria-label="Close the form"
             className="rounded-md p-1.5 text-dim hover:bg-bg hover:text-ink focus:outline-none focus:ring-2 focus:ring-accent"
           >
             <svg
@@ -223,7 +232,7 @@ export function JobCreatePanel({
               role="alert"
               className="rounded-md border border-bad bg-bad-soft p-4 text-sm text-bad"
             >
-              <p className="font-semibold">Unable to create job</p>
+              <p className="font-semibold">We could not create the AI task</p>
               <p className="mt-1">{serverError}</p>
             </div>
           )}
@@ -231,7 +240,7 @@ export function JobCreatePanel({
           {/* Job Name */}
           <div>
             <label htmlFor="job-name" className="block text-sm font-medium text-ink">
-              Job Name <span className="text-bad">*</span>
+              Task name (used in your code, no spaces) <span className="text-bad">*</span>
             </label>
             <input
               id="job-name"
@@ -244,19 +253,22 @@ export function JobCreatePanel({
               <p className="mt-1 text-xs text-bad">{errors.name.message}</p>
             )}
             <p className="mt-1 text-xs text-dim">
-              Letters, numbers, periods, dashes, and underscores only.
+              Example: invoice-extract. Letters, numbers, dashes and underscores only.
             </p>
+            {typedName && !errors.name && (
+              <p className="mt-1 text-xs text-dim">It will show as: <span className="font-semibold text-ink">{jobTitle(typedName)}</span></p>
+            )}
           </div>
 
           {/* Description */}
           <div>
             <label htmlFor="job-desc" className="block text-sm font-medium text-ink">
-              Description <span className="text-dim text-xs font-normal">(optional)</span>
+              What does this task do? <span className="text-dim text-xs font-normal">(recommended, so your team knows)</span>
             </label>
             <textarea
               id="job-desc"
               rows={2}
-              placeholder="Brief explanation of what this job evaluates..."
+              placeholder="Pull the total amount out of an invoice"
               {...register("description")}
               className="mt-1 w-full rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink placeholder:text-dim focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
@@ -268,24 +280,24 @@ export function JobCreatePanel({
           {/* Check Kind */}
           <div>
             <label className="block text-sm font-medium text-ink mb-2">
-              Check Kind <span className="text-bad">*</span>
+              How should we check answers? <span className="text-bad">*</span>
             </label>
-            <div className="flex flex-wrap gap-4">
+            <div className="flex flex-col gap-2.5">
               {(["ANSWER_KEY", "SCHEMA", "LATE_LABEL"] as const).map((kind) => (
-                <label key={kind} className="flex items-center gap-2 text-sm cursor-pointer">
+                <label key={kind} className="flex items-start gap-2 text-sm cursor-pointer">
                   <input
                     type="radio"
                     value={kind}
                     {...register("check_kind")}
                     className="text-accent focus:ring-accent"
                   />
-                  <span className="font-medium">{CHECK_KIND_LABELS[kind]}</span>
+                  <span><span className="font-medium">{CHECK_KIND_LABELS[kind]}</span><span className="block text-xs text-dim">{KIND_HELP[kind]}</span></span>
                 </label>
               ))}
             </div>
           </div>
 
-          {/* Check Settings & Worked Example (2-column layout) */}
+          {/* Check Settings & Example (2-column layout) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Left: Input configuration */}
             <div className="rounded-card border border-rule bg-surface p-4">
@@ -293,14 +305,14 @@ export function JobCreatePanel({
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="block text-sm font-medium text-ink">
-                      Expected Field Names <span className="text-bad">*</span>
+                      Fields to compare with the right answer <span className="text-bad">*</span>
                     </label>
                     <button
                       type="button"
                       onClick={() => append({ name: "" })}
                       className="text-xs font-semibold text-accent hover:underline"
                     >
-                      + Add field
+                      + Add a field
                     </button>
                   </div>
                   <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
@@ -335,14 +347,13 @@ export function JobCreatePanel({
                 <div className="text-sm">
                   <p className="font-medium text-ink">Nothing to set up</p>
                   <p className="mt-1 text-xs text-dim">
-                    Runs are stored as UNKNOWN. A person or another system labels each one later from the
-                    run's detail panel or with <code className="font-mono">POST /v1/runs/&#123;id&#125;/label</code>.
+                    Answers start as not checked yet. You or another system mark each one right or wrong later, from the AI call's detail panel or with <code className="font-mono">POST /v1/runs/&#123;id&#125;/label</code>.
                   </p>
                 </div>
               ) : (
                 <div>
                   <label htmlFor="schema-json" className="block text-sm font-medium text-ink mb-1">
-                    JSON Schema <span className="text-bad">*</span>
+                    The format to check (JSON schema) <span className="text-bad">*</span>
                   </label>
                   <textarea
                     id="schema-json"
@@ -361,25 +372,24 @@ export function JobCreatePanel({
             <div className="rounded-card border border-rule bg-bg p-4 flex flex-col justify-between">
               <div>
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-dim mb-2">
-                  Worked Example ({CHECK_KIND_LABELS[selectedKind]})
+                  Example ({CHECK_KIND_LABELS[selectedKind]})
                 </h4>
                 {selectedKind === "LATE_LABEL" ? (
                   <div className="space-y-3 text-xs">
                     <p className="text-dim">
-                      For work only a person can judge, such as routing a support ticket.
+                      For work only a person can judge, such as sorting a support ticket.
                     </p>
                     <div className="rounded-md border border-rule bg-surface p-2.5 text-dim">
-                      The model answers "billing". An agent later sees the ticket was about a refund and
-                      labels the run <span className="font-semibold text-bad">Fail</span>.
+                      The AI answers "billing". A support agent later sees the ticket was about a refund and marks the answer <span className="font-semibold text-bad">wrong</span>.
                     </div>
                   </div>
                 ) : selectedKind === "ANSWER_KEY" ? (
                   <div className="space-y-3 text-xs">
                     <p className="text-dim">
-                      A run passes when each listed field matches the expected answer.
+                      An answer is correct when each listed field matches the right answer.
                     </p>
                     <div className="rounded-md border border-rule bg-surface p-2.5">
-                      <div className="font-semibold text-ink mb-1">Sample expected fields:</div>
+                      <div className="font-semibold text-ink mb-1">Example fields:</div>
                       <ul className="list-disc list-inside space-y-0.5 font-mono text-dim">
                         <li>vendor</li>
                         <li>invoice_number</li>
@@ -391,7 +401,7 @@ export function JobCreatePanel({
                 ) : (
                   <div className="space-y-3 text-xs">
                     <p className="text-dim">
-                      A run passes when its output matches the schema.
+                      An answer is correct when it has the format you describe.
                     </p>
                     <div className="rounded-md border border-rule bg-surface p-2.5 font-mono overflow-x-auto text-dim">
                       <pre>
@@ -419,9 +429,9 @@ export function JobCreatePanel({
                 className="mt-1 h-4 w-4 rounded border-rule text-accent focus:ring-accent"
               />
               <div>
-                <span className="text-sm font-medium text-ink">Re-test Consent</span>
+                <span className="text-sm font-medium text-ink">Let us try your tasks on other models</span>
                 <p className="mt-0.5 text-xs text-dim">
-                  Allow this job's prompts to be replayed on another provider to test cheaper models.
+                  Allow this task's questions to be sent to other AI providers to see whether a cheaper model does as well.
                 </p>
               </div>
             </label>
@@ -441,7 +451,7 @@ export function JobCreatePanel({
               disabled={mutation.isPending}
               className="rounded-md bg-accent px-5 py-2 text-sm font-semibold text-on-accent shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {mutation.isPending ? "Creating..." : "Create Job"}
+              {mutation.isPending ? "Creating..." : "Create AI task"}
             </button>
           </div>
         </form>

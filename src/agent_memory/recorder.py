@@ -20,6 +20,7 @@ Configuration comes from the environment: MCM_API_URL (default http://127.0.0.1:
 from __future__ import annotations
 
 import atexit
+import json
 import logging
 import os
 import queue
@@ -218,6 +219,8 @@ def read_response(response: Any, *, include_arguments: bool = False) -> dict[str
     out: dict[str, Any] = {"model_version": _get(response, "model")}
 
     usage = _get(response, "usage")
+    if usage is None:  # Gemini keeps usage under usage_metadata (SDK) or usageMetadata (REST)
+        usage = _get(response, "usage_metadata") or _get(response, "usageMetadata")
     if _get(usage, "input_tokens") is not None:  # Anthropic
         out["tokens_in"] = _int(_get(usage, "input_tokens"))
         out["tokens_out"] = _int(_get(usage, "output_tokens"))
@@ -227,6 +230,19 @@ def read_response(response: Any, *, include_arguments: bool = False) -> dict[str
         cached = _int(_get(usage, "prompt_tokens_details", "cached_tokens"))
         out["tokens_in"] = max(_int(_get(usage, "prompt_tokens")) - cached, 0)
         out["tokens_out"] = _int(_get(usage, "completion_tokens"))
+        out["cache_read_tokens"] = cached
+    elif _get(usage, "prompt_token_count") is not None or _get(usage, "promptTokenCount") is not None:
+        # Gemini usageMetadata (SDK snake_case or REST camelCase). promptTokenCount already includes the
+        # cached tokens; thoughts are billed as output. Tool-use prompt tokens are added to input
+        # (assumption: billed as input; the docs do not state a rate).
+        def g(snake: str, camel: str) -> int:
+            return _int(_get(usage, snake)) or _int(_get(usage, camel))
+
+        cached = g("cached_content_token_count", "cachedContentTokenCount")
+        prompt = g("prompt_token_count", "promptTokenCount")
+        out["tokens_in"] = max(prompt - cached, 0) + g("tool_use_prompt_token_count", "toolUsePromptTokenCount")
+        out["tokens_out"] = g("candidates_token_count", "candidatesTokenCount") + g(
+            "thoughts_token_count", "thoughtsTokenCount")
         out["cache_read_tokens"] = cached
 
     content = _get(response, "content")  # Anthropic: a list of blocks
@@ -239,6 +255,14 @@ def read_response(response: Any, *, include_arguments: bool = False) -> dict[str
         text = _get(choices[0], "message", "content")
         if isinstance(text, str):
             out["output"] = text
+
+    candidates = _get(response, "candidates")  # Gemini: candidates[0].content.parts[].text
+    if "output" not in out and isinstance(candidates, list) and candidates:
+        parts = _get(candidates[0], "content", "parts")
+        if isinstance(parts, list):
+            texts = [t for t in (_get(part, "text") for part in parts) if isinstance(t, str)]
+            if texts:
+                out["output"] = "".join(texts)
 
     calls: list[dict[str, Any]] = []
     if isinstance(content, list):  # Anthropic: tool_use blocks
@@ -254,6 +278,15 @@ def read_response(response: Any, *, include_arguments: bool = False) -> dict[str
     if calls:
         out["tool_calls"] = sanitize_tool_calls(calls, keep_arguments=include_arguments)
     return out
+
+
+def estimate_tools_tokens(tools: Any) -> int | None:
+    """Estimated tokens of the tool definitions: len(json.dumps(tools, sort_keys=True)) // 4.
+    None when they cannot be serialised."""
+    try:
+        return len(json.dumps(tools, sort_keys=True, default=str)) // 4
+    except (TypeError, ValueError):
+        return None
 
 
 def was_cut_off(response: Any) -> bool:
@@ -297,6 +330,9 @@ class RunRecorder:
         prompt: str,
         model: str | None = None,
         model_version: str | None = None,
+        agent: str | None = None,
+        trace_id: str | None = None,
+        tools: list[Any] | None = None,
         **explicit: Any,
     ) -> None:
         """Record this call. Never raises.
@@ -306,12 +342,25 @@ class RunRecorder:
         resolved one). Anything the response does not carry can be passed as a keyword: tokens_in,
         tokens_out, cache_read_tokens, cache_write_tokens, cost_usd, output, tool_calls, latency_ms, provider,
         effort (the reasoning effort the call asked for, e.g. "low", so it is compared as its own option).
+
+        For multi-agent and tool-heavy apps, all optional: `agent` (which agent or role made the call,
+        at most 100 characters), `trace_id` (one id shared by every call that serves the same user
+        task, at most 200) and `tools` (the tool or function definitions sent with the request).
+        From `tools` the recorder sends `tools_tokens`, an ESTIMATE: len(json.dumps(tools,
+        sort_keys=True)) // 4, because providers do not report the size of tool definitions
+        separately (they are inside tokens_in).
         """
         try:
             data = read_response(response, include_arguments=self.send_tool_arguments) if response is not None else {}
             data.update({k: v for k, v in explicit.items() if v is not None})
             if "tool_calls" in data:  # an explicitly passed list gets the same rule as one read from a response
                 data["tool_calls"] = sanitize_tool_calls(data["tool_calls"], keep_arguments=self.send_tool_arguments)
+            if agent:
+                data["agent"] = str(agent)[:100]
+            if trace_id:
+                data["trace_id"] = str(trace_id)[:200]
+            if tools:
+                data["tools_tokens"] = estimate_tools_tokens(tools)
             resolved = model_version or data.pop("model_version", None) or model or "unknown"
             data["model_version"] = resolved
             self._payload = {

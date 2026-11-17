@@ -64,6 +64,12 @@ class DayPoint:
     passed: int
     failed: int  # UNKNOWN runs are in runs but in neither passed nor failed
     spend_usd: float  # priced runs only
+    tokens_in: int = 0  # uncached input
+    tokens_out: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    unpriced_runs: int = 0  # runs with cost_usd NULL (no known price): not in spend_usd
+    failed_spend_usd: float = 0.0  # actual cost of the runs whose outcome is FAIL
 
 
 async def daily(session: AsyncSession, project_id: str, *, days: int = 60, job_id=None,
@@ -76,7 +82,11 @@ async def daily(session: AsyncSession, project_id: str, *, days: int = 60, job_i
         select(day, Job.name, Run.model, func.count(Run.run_id),
                func.count(Run.run_id).filter(Run.outcome == "PASS"),
                func.count(Run.run_id).filter(Run.outcome == "FAIL"),
-               func.coalesce(func.sum(Run.cost_usd), 0))
+               func.coalesce(func.sum(Run.cost_usd), 0),
+               func.coalesce(func.sum(Run.tokens_in), 0), func.coalesce(func.sum(Run.tokens_out), 0),
+               func.coalesce(func.sum(Run.cache_read_tokens), 0), func.coalesce(func.sum(Run.cache_write_tokens), 0),
+               func.count(Run.run_id).filter(Run.cost_usd.is_(None)),
+               func.coalesce(func.sum(Run.cost_usd).filter(Run.outcome == "FAIL"), 0))
         .join(Job, Job.job_id == Run.job_id)
         .where(Run.project_id == project_id, Run.run_kind == "PRODUCTION", Run.created_at >= since)
         .group_by(day, Job.name, Run.model)
@@ -84,8 +94,10 @@ async def daily(session: AsyncSession, project_id: str, *, days: int = 60, job_i
     )
     if job_id is not None:
         query = query.where(Run.job_id == job_id)
-    return [DayPoint(day=d.date(), job=j, model=m, runs=n, passed=p, failed=f, spend_usd=float(s))
-            for d, j, m, n, p, f, s in (await session.execute(query)).all()]
+    return [DayPoint(day=d.date(), job=j, model=m, runs=n, passed=p, failed=f, spend_usd=float(s),
+                     tokens_in=int(ti), tokens_out=int(to), cache_read_tokens=int(cr), cache_write_tokens=int(cw),
+                     unpriced_runs=int(up), failed_spend_usd=float(fs))
+            for d, j, m, n, p, f, s, ti, to, cr, cw, up, fs in (await session.execute(query)).all()]
 
 
 @dataclass

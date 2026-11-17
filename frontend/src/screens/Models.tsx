@@ -26,12 +26,12 @@ function PriceBars({ models }: { models: Model[] }) {
   const priced = models.filter((m) => m.price_out_per_mtok !== null).sort((a, b) => (b.price_out_per_mtok ?? 0) - (a.price_out_per_mtok ?? 0));
   const max = Math.max(...priced.map((m) => Math.max(m.price_out_per_mtok ?? 0, m.price_in_per_mtok ?? 0)), 0.0001);
   const colors = colorMap(models.map((m) => m.model));
-  if (priced.length === 0) return <EmptyState title="No priced model in use yet" />;
+  if (priced.length === 0) return <EmptyState title="No model used yet" hint="When your app sends its first AI call, the AI models it uses and their prices show here. Start by creating an AI task and sending a call from your code." />;
   return (
     <div className="flex flex-col gap-4">
       <ul className="flex flex-wrap gap-4 text-xs text-dim" aria-label="Legend">
-        <li className="flex items-center gap-1.5"><span className="h-2 w-3.5 rounded-sm bg-dim/40" aria-hidden /> per million input tokens</li>
-        <li className="flex items-center gap-1.5"><span className="h-2 w-3.5 rounded-sm bg-accent" aria-hidden /> per million output tokens</li>
+        <li className="flex items-center gap-1.5"><span className="h-2 w-3.5 rounded-sm bg-dim/40" aria-hidden /> per million input tokens (what you send)</li>
+        <li className="flex items-center gap-1.5"><span className="h-2 w-3.5 rounded-sm bg-accent" aria-hidden /> per million output tokens (what the AI writes back)</li>
       </ul>
       <ul className="flex flex-col gap-3.5">
         {priced.map((m, i) => (
@@ -83,16 +83,16 @@ export default function Models() {
     <div className="flex flex-col gap-5">
       <header>
         <h1 className="text-3xl font-semibold tracking-tight">Models</h1>
-        <p className="mt-1 text-sm text-dim">Prices and retirement dates from the public price list, refreshed daily. A retired model is never recommended.</p>
+        <p className="mt-1 text-sm text-dim">What each AI model costs, and which ones their makers are shutting down. Use it to see what you pay per model and to spot a model you must replace. Prices come from the public price list, refreshed daily. A retired model is never recommended.</p>
       </header>
 
       <Reveal className="grid gap-4 lg:grid-cols-3">
         <Panel className="p-5 md:p-6 lg:col-span-2">
-          <PanelHeader title="What the models you run cost" hint="List price in US dollars per million tokens" />
+          <PanelHeader title="What the models you run cost" hint="List price in US dollars per million tokens. Tokens are the small pieces of text AI models are billed by; longer prompts and answers use more." />
           <div className="mt-5">{used.isPending ? <Skeleton className="h-48" /> : <PriceBars models={usedModels} />}</div>
         </Panel>
         <Panel className="p-5">
-          <PanelHeader title="Being retired" hint="Models you run that the provider is shutting down" />
+          <PanelHeader title="Being retired" hint="Models you use that their maker is shutting down. Move to another model before the shutdown date." />
           <div className="mt-4">
             {used.isPending ? (
               <Skeleton className="h-32" />
@@ -143,15 +143,15 @@ export default function Models() {
             ) : catalog.isError ? (
               <ErrorState error={catalog.error} onRetry={() => catalog.refetch()} />
             ) : all.length === 0 ? (
-              <EmptyState icon={<IconModels size={18} />} title="No model matches" />
+              <EmptyState icon={<IconModels size={18} />} title="No model matches" hint="Try a shorter name, or choose All to see every model." />
             ) : (
               <table className="w-full min-w-[640px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="text-[11px] uppercase tracking-wider text-muted">
                     <th className="px-3 py-2 font-semibold">Model</th>
                     <th className="px-3 py-2 font-semibold">Provider</th>
-                    <th className="px-3 py-2 text-right font-semibold">Input / M</th>
-                    <th className="px-3 py-2 text-right font-semibold">Output / M</th>
+                    <th className="px-3 py-2 text-right font-semibold">Input price per million tokens</th>
+                    <th className="px-3 py-2 text-right font-semibold">Output price per million tokens</th>
                     <th className="px-3 py-2 font-semibold">Status</th>
                   </tr>
                 </thead>

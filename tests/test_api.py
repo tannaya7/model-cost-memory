@@ -77,7 +77,7 @@ async def test_runs_are_newest_first_and_previews_are_short(client, seeded):
     assert [r["run_id"][-1] for r in page["items"]] == ["5", "4", "3", "2", "1"]
     assert page["next_cursor"] is None
     first = page["items"][0]
-    assert len(first["prompt_preview"]) == 200 and len(first["output_preview"]) == 200
+    assert first["prompt_preview"] == "P" * 240 + "…" and first["output_preview"] == "O" * 240 + "…"
     assert first["job"] == "ticket-classify" and first["cost_usd"] == 0.002
 
 
@@ -130,3 +130,54 @@ async def test_each_run_shows_its_importance_and_its_weight_in_the_recommendatio
                (await client.get("/v1/runs?job=invoice-extract", headers=auth(seeded["demo"]))).json()["items"]}
     old, new = weights[str(uuid.UUID(int=97))], weights[str(uuid.UUID(int=98))]
     assert old == pytest.approx(new ** 4, rel=1e-2)
+
+
+async def test_run_previews_collapse_whitespace_and_cut_at_240(client, seeded, session):
+    key = seeded["demo"]
+    job = (await session.execute(select(Job).where(Job.name == "ticket-classify"))).scalar_one()
+
+    def add(i, prompt, output, removed=None):
+        session.add(Run(
+            run_id=uuid.UUID(int=i), job_id=job.job_id, project_id="demo", prompt=prompt, prompt_hash="h",
+            model="m", model_version="v1", outcome="PASS", state="CHECKED", output=output,
+            created_at=T0 + timedelta(minutes=i), content_removed_at=removed,
+        ))
+
+    add(100, "hello\n\n  world\tagain", "short")
+    add(101, "x " * 400, "y" * 240)
+    add(102, None, None, removed=T0)
+    await session.commit()
+    items = {str(int(r["run_id"].replace("-", ""), 16)): r for r in (await client.get("/v1/runs", headers=auth(key))).json()["items"]}
+    short, long_, gone = items["100"], items["101"], items["102"]
+    assert short["prompt_preview"] == "hello world again" and short["output_preview"] == "short"
+    assert len(long_["prompt_preview"]) in (240, 241) and long_["prompt_preview"].endswith("…")
+    assert long_["output_preview"] == "y" * 240  # exactly 240: not cut
+    assert gone["prompt_preview"] is None and gone["output_preview"] is None
+
+
+async def test_patch_job_description(client, seeded, session):
+    key = seeded["demo"]
+    r = await client.patch("/v1/jobs/invoice-extract", headers=auth(key), json={"description": "  Reads invoices  "})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["description"] == "Reads invoices" and body["name"] == "invoice-extract"
+    assert body["check_kind"] == "ANSWER_KEY" and body["check_config"] == {"fields": ["total"]}
+    assert body["run_count"] == 4
+    for clear in ("", None, "   "):
+        r = await client.patch("/v1/jobs/invoice-extract", headers=auth(key), json={"description": clear})
+        assert r.status_code == 200 and r.json()["description"] is None
+    stored = (await session.execute(select(Job).where(Job.name == "invoice-extract"))).scalar_one()
+    await session.refresh(stored)
+    assert stored.description is None and stored.name == "invoice-extract"
+
+
+async def test_patch_job_rejects_too_long_unknown_and_other_projects(client, seeded, session):
+    key = seeded["demo"]
+    too_long = await client.patch("/v1/jobs/invoice-extract", headers=auth(key), json={"description": "x" * 501})
+    assert too_long.status_code == 422
+    assert (await client.patch("/v1/jobs/nope", headers=auth(key), json={"description": "a"})).status_code == 404
+    assert (await client.patch("/v1/jobs/secret-job", headers=auth(key), json={"description": "hacked"})).status_code == 404
+    other = (await session.execute(select(Job).where(Job.name == "secret-job"))).scalar_one()
+    await session.refresh(other)
+    assert other.description == "secret-job job"
+    assert (await client.patch("/v1/jobs/invoice-extract", json={"description": "a"})).status_code == 401

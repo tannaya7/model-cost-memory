@@ -20,6 +20,7 @@ const Overview = lazy(() => import("./screens/Overview"));
 const Jobs = lazy(() => import("./screens/Jobs"));
 const JobWorkspace = lazy(() => import("./screens/job/JobWorkspace"));
 const Models = lazy(() => import("./screens/Models"));
+const Compare = lazy(() => import("./screens/compare/Compare"));
 const Activity = lazy(() => import("./screens/Activity"));
 const Settings = lazy(() => import("./screens/Settings"));
 const RetestStart = lazy(() => import("./screens/Retest").then((m) => ({ default: m.RetestStart })));
@@ -70,6 +71,7 @@ const router = createBrowserRouter([
       { path: "jobs", element: <Jobs /> },
       { path: "jobs/:jobName", element: <JobWorkspace /> },
       { path: "models", element: <Models /> },
+      { path: "compare", element: <Compare /> },
       { path: "activity", element: <Activity /> },
       { path: "settings", element: <Settings /> },
       { path: "retest", element: <RetestStart /> },
@@ -86,7 +88,7 @@ const router = createBrowserRouter([
     ],
   },
   // Addresses from before projects were in the address: open them in the project last used.
-  ...["/jobs", "/jobs/:jobName", "/models", "/activity", "/settings", "/retest", "/retest/:retestId", "/runs"].map((path) => ({
+  ...["/jobs", "/jobs/:jobName", "/models", "/compare", "/activity", "/settings", "/retest", "/retest/:retestId", "/runs"].map((path) => ({
     path,
     element: <LegacyRedirect />,
   })),

@@ -42,7 +42,7 @@ describe("RecommendationCard", () => {
         recommendation={{ ...downgrade, verdict: "INSUFFICIENT_EVIDENCE", recommended: null, forecast: null, progress: 0.4 }}
       />,
     );
-    expect(screen.getByRole("heading", { name: /Gathering evidence for/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Still learning about/ })).toBeInTheDocument();
     expect(screen.getByText("40%")).toBeInTheDocument();
     expect(screen.queryByText("Recommended")).not.toBeInTheDocument();
   });

@@ -19,7 +19,9 @@ function Alerts() {
   const deprecated = useDeprecatedModels();
   const [show, setShow] = useState<"open" | "resolved" | "all">("open");
   const items: AlertListItem[] = [
-    ...(regressions.data ?? []).map((a) => ({ kind: "regression" as const, alert: a, timestamp: a.created_at })),
+    ...(regressions.data ?? [])
+      .filter((a) => !(a.kind === "MODEL_RETIRING" && (deprecated.data ?? []).some((m) => m.model === a.detail?.model)))
+      .map((a) => ({ kind: "regression" as const, alert: a, timestamp: a.created_at })),
     ...(deprecated.data ?? []).map((m) => ({ kind: "deprecation" as const, model: m, timestamp: m.shutdown_date ?? m.first_seen_at })),
   ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   const isOpen = (i: AlertListItem) => i.kind === "deprecation" || i.alert.resolved_at === null;
@@ -30,8 +32,7 @@ function Alerts() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-2xl text-sm text-dim">
-          The system checks every job every 15 minutes for two kinds of trouble: a new model version that answers worse, and a model that got worse
-          under the same name. It also warns when a model you run is being retired.
+          Every 15 minutes we check each of your AI tasks for a quality drop: a new version of a model that answers worse, or a model that quietly got worse under the same name. We also warn you about unusually high AI use, when you near your monthly spending limit or trial budget, and when a model you use is being shut down. Nothing here needs action unless a card appears.
         </p>
         <Segmented
           label="Which alerts"
@@ -45,8 +46,8 @@ function Alerts() {
       ) : shown.length === 0 ? (
         <EmptyState
           icon={<IconShield size={18} />}
-          title={show === "open" ? "Nothing needs attention" : "No alerts here"}
-          hint="When a model's answers get worse, it shows here and is sent to your webhook."
+          title={show === "open" ? "Nothing needs your attention" : "No alerts here"}
+          hint="We will tell you here if something goes wrong, like a model giving worse answers or being shut down."
         />
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
@@ -64,9 +65,9 @@ function Alerts() {
 const STAGES = [
   { key: "sdk", title: "Recorded", text: "The app's call is captured" },
   { key: "api", title: "Received", text: "Stored with its cost" },
-  { key: "check", title: "Checked", text: "Pass or fail" },
-  { key: "index", title: "Indexed", text: "Findable by similar prompt" },
-  { key: "consolidate", title: "Learned", text: "Folded into the verdict" },
+  { key: "check", title: "Checked", text: "Marked correct or wrong" },
+  { key: "index", title: "Indexed", text: "Filed so similar prompts can be found" },
+  { key: "consolidate", title: "Learned", text: "Added to our recommendation" },
 ] as const;
 
 function failed(ev: FlowEvent) {
@@ -107,8 +108,8 @@ function Live() {
       <Panel glow className="p-5 md:p-7">
         <PanelHeader
           eyebrow="Live pipeline"
-          title="Every run, as it moves through the system"
-          hint="Send a call through the SDK and watch it get recorded, checked and learned from."
+          title="Every AI call, as it moves through the system"
+          hint="Each AI call your app makes through our SDK appears here as it is recorded, checked and learned from. Nothing to do here but watch."
           actions={
             <>
               <span className="inline-flex items-center gap-2 rounded-full border border-rule px-3 py-1 text-xs font-semibold text-dim">
@@ -160,7 +161,7 @@ function Live() {
         <PanelHeader title="Event stream" hint="Newest first; the last 40" />
         {events.length === 0 ? (
           <div className="mt-4">
-            <EmptyState icon={<IconActivity size={18} />} title="Waiting for runs" hint="Nothing has crossed the pipeline since this page opened. Record a run with the SDK to see it here." />
+            <EmptyState icon={<IconActivity size={18} />} title="Waiting for AI calls" hint="No AI call has arrived since this page opened. Make an AI call through our SDK and it will show up here." />
           </div>
         ) : (
           <ul className="mt-4 flex flex-col">
@@ -177,7 +178,7 @@ function Live() {
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm text-ink">{ev.message}</span>
                     <span className="mt-0.5 block font-mono text-[11px] text-muted">
-                      {STAGES.find((s) => s.key === ev.stage)?.title ?? ev.stage} · {ev.run_id ? `run ${String(ev.run_id).slice(0, 8)}` : "system"} · {timeAgo(ev.ts)}
+                      {STAGES.find((s) => s.key === ev.stage)?.title ?? ev.stage} · {ev.run_id ? `call ${String(ev.run_id).slice(0, 8)}` : "system"} · {timeAgo(ev.ts)}
                     </span>
                   </span>
                 </motion.li>
@@ -203,7 +204,7 @@ export default function Activity() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Activity</h1>
-          <p className="mt-1 text-sm text-dim">What changed, what is running right now, and what the AI world is saying about your models.</p>
+          <p className="mt-1 text-sm text-dim">Alerts when something gets worse, AI calls arriving right now, and news about the models you use. Check the Alerts tab first.</p>
         </div>
         <Segmented<Tab>
           label="Activity views"
@@ -221,7 +222,7 @@ export default function Activity() {
       {tab === "news" && <NewsFeed />}
       {tab === "alerts" && open > 0 && (
         <p className="text-center text-xs text-muted">
-          Resolve an alert from its card once you have dealt with it. <Link to={p("/settings#alerts")} className="text-accent hover:underline">Set the webhook</Link> to get them in Slack or Discord.
+          Mark an alert as resolved from its card once you have dealt with it. <Link to={p("/settings#alerts")} className="text-accent hover:underline">Set the webhook</Link> to get them in Slack or Discord.
         </p>
       )}
     </div>

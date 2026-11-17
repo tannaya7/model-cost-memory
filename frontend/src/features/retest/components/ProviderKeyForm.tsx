@@ -38,13 +38,9 @@ export function ProviderKeyForm({ onSaved }: { onSaved: () => void }) {
   return (
     <Card className="space-y-4 border-accent/40 p-6">
       <div>
-        <h3 className="text-base font-semibold text-ink">Add the key re-tests should use</h3>
+        <h3 className="text-base font-semibold text-ink">Add the key trials on new models should use</h3>
         <p className="mt-1 text-xs text-dim">
-          Re-tests call the candidate model with your own provider key, so the spending is yours and stays
-          under the monthly cap above. Saving the key is your permission for re-tests to run within that cap,
-          including ones the system starts when a cheaper model appears. A job that has only ever used one
-          model gets one re-test of a cheaper model from this provider as soon as you save, with a small budget ($1 by default). Only
-          models with a known price are re-tested, so the cap always holds. The key is encrypted on the server and
+          A trial replays your past prompts on another model to see if it does as well. It uses your own provider key, so the spending is yours and stays under the monthly budget above. Saving the key lets trials run within that budget, including ones we start when a cheaper model appears. An AI task that has only ever used one model gets one trial of a cheaper model from this provider as soon as you save, with a small budget ($1 by default). Only models with a known price are tried, so the budget always holds. The key is encrypted on the server and
           only its last four characters are ever shown again. You can remove it at any time.
         </p>
       </div>

@@ -5,6 +5,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  ComposedChart,
   ErrorBar,
   Line,
   LineChart,
@@ -423,5 +424,63 @@ export function Ring({ share, size = 64, tone }: { share: number; size?: number;
         {Math.round(clamped * 100)}%
       </text>
     </svg>
+  );
+}
+
+/** This period as a filled line, the period before as a dashed line on the same days; the tooltip
+ * reads both. */
+export function CompareArea({
+  rows,
+  format,
+  height = 220,
+}: {
+  rows: Array<{ day: string; cur: number; prev: number; prevDay: string }>;
+  format: (v: number) => string;
+  height?: number;
+}) {
+  const animate = useAnimate();
+  return (
+    <div style={{ height }} className="w-full">
+      <ResponsiveContainer>
+        <ComposedChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+          <defs>
+            <linearGradient id="compare-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--color-accent)" stopOpacity={0.28} />
+              <stop offset="100%" stopColor="var(--color-accent)" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke={CHART.grid} vertical={false} strokeDasharray="4 4" />
+          <XAxis dataKey="day" tickFormatter={tickDay} tick={CHART.tickFont} axisLine={false} tickLine={false} minTickGap={32} />
+          <YAxis tickFormatter={(v: number) => format(v)} tick={CHART.tickFont} axisLine={false} tickLine={false} width={56} />
+          <Tooltip
+            cursor={{ stroke: "var(--color-accent)", strokeWidth: 1, strokeDasharray: "4 4" }}
+            content={({ active, payload }) => {
+              const row = active && payload?.length ? (payload[0].payload as { day: string; cur: number; prev: number; prevDay: string }) : null;
+              return row ? (
+                <TooltipCard
+                  title={tickDay(row.day)}
+                  rows={[
+                    { color: "var(--color-accent)", label: "This period", value: format(row.cur) },
+                    { color: "var(--color-muted)", label: `Same day before (${tickDay(row.prevDay)})`, value: format(row.prev) },
+                  ]}
+                />
+              ) : null;
+            }}
+          />
+          <Line type="monotone" dataKey="prev" name="Period before" stroke="var(--color-muted)" strokeWidth={1.5} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={animate} animationDuration={1100} />
+          <Area
+            type="monotone"
+            dataKey="cur"
+            name="This period"
+            stroke="var(--color-accent)"
+            strokeWidth={2.2}
+            fill="url(#compare-fill)"
+            activeDot={{ r: 5, stroke: "var(--color-surface)", strokeWidth: 2, fill: "var(--color-accent)" }}
+            isAnimationActive={animate}
+            animationDuration={1100}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
   );
 }

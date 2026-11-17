@@ -7,6 +7,14 @@ or Discord (`content`) incoming webhook as well as your own endpoint. Figures an
 prompt text. Header `X-MCM-Signature: sha256=<hex HMAC-SHA256 of the body with the project's
 webhook_secret>`, so the receiver can check the message is ours.
 
+Replay protection (modelled on Stripe's and Slack's schemes): every delivery also carries
+`X-MCM-Timestamp: <unix seconds>` and `X-MCM-Signature-V2: sha256=<hex HMAC-SHA256 of
+"<timestamp>.<body>">`. A receiver should recompute the V2 signature with a constant-time compare and
+reject a timestamp more than 5 minutes (TIMESTAMP_TOLERANCE_SECONDS) from its own clock. The old
+body-only `X-MCM-Signature` is still sent unchanged for a transition period (dual-send) so existing
+receivers keep working; it carries no replay protection, so move to V2 and then stop reading it.
+The secret is never logged.
+
 Backoff after a failed attempt: 1, 2, 4, ... minutes, capped at 6 hours, with up to 20% jitter. After
 MAX_ATTEMPTS failures (about a day and a half) delivery gives up (`delivery_failed_at`): the alert stays
 open in the web app, and saving a new webhook URL tries every given-up alert again.
@@ -46,10 +54,22 @@ def sign(secret: str, body: bytes) -> str:
     return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 
 
+TIMESTAMP_TOLERANCE_SECONDS = 300
+
+
+def sign_v2(secret: str, timestamp: str, body: bytes) -> str:
+    """Signature over "<timestamp>.<body>", so a captured request cannot be replayed later."""
+    return "sha256=" + hmac.new(secret.encode(), timestamp.encode() + b"." + body, hashlib.sha256).hexdigest()
+
+
 KIND_LABELS = {
     "VERSION_REGRESSION": "Regression after a model upgrade",
     "SILENT_DROP": "Pass rate dropped with no version change",
     "MODEL_DEPRECATED": "Recommended model is being retired",
+    "TOKEN_BURST": "Unusual token use",
+    "BUDGET": "Monthly budget",
+    "TRIAL_BUDGET": "Budget for trials on a new model",
+    "MODEL_RETIRING": "A model you use is being retired",
 }
 
 
@@ -113,7 +133,10 @@ async def deliver_pending(
         }, sort_keys=True).encode()
         headers = {"Content-Type": "application/json"}
         if secret:
-            headers["X-MCM-Signature"] = sign(secret, body)
+            stamp = str(int(datetime.now(UTC).timestamp()))
+            headers["X-MCM-Signature"] = sign(secret, body)  # legacy, body only: kept for existing receivers
+            headers["X-MCM-Timestamp"] = stamp
+            headers["X-MCM-Signature-V2"] = sign_v2(secret, stamp, body)
         async with gate:
             try:
                 await check_outbound(url, allow_private=allow_private)
