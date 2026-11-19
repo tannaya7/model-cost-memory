@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ProviderKeyInput, RetestCreateInput } from "../../../shared/api/types";
+import type { ProviderKeyInput, RetestCreateInput, RetestPreviewInput } from "../../../shared/api/types";
 import {
   deleteProviderKey,
   fetchJobRetests,
   fetchRetestLimits,
   fetchRetestStatus,
+  previewRetest,
   saveProviderKey,
   startRetest,
 } from "../api/retestApi";
@@ -15,6 +16,12 @@ export function useRetestLimits() {
   return useQuery({
     queryKey: retestLimitsKey,
     queryFn: fetchRetestLimits,
+  });
+}
+
+export function usePreviewRetest() {
+  return useMutation({
+    mutationFn: ({ jobName, input }: { jobName: string; input: RetestPreviewInput }) => previewRetest(jobName, input),
   });
 }
 

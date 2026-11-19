@@ -117,12 +117,12 @@ describe("a new project", () => {
 
     expect(await screen.findByLabelText("Project key")).toHaveTextContent("mcm_live_ab12cd34ef56gh78ij90");
     expect(calls).toContain("POST /v1/projects");
-    const next = screen.getByRole("button", { name: /Next: record AI calls/ });
+    const next = screen.getByRole("button", { name: /Next: connect your app/ });
     expect(next).toBeDisabled(); // not until the key is saved
     await u.click(screen.getByRole("checkbox", { name: /I have saved the key/ }));
     await u.click(next);
 
-    expect(await screen.findByText(/Wrap the model call you already make/)).toBeInTheDocument();
+    expect(await screen.findByText("Why does my app need a few lines of code?")).toBeInTheDocument();
     await u.click(screen.getByRole("button", { name: /Open the dashboard/ }));
     expect(await screen.findByTestId("where")).toHaveTextContent("/p/invoice-assistant");
   });

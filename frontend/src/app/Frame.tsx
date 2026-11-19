@@ -11,6 +11,7 @@ import { useLogout, useMe } from "../features/auth/hooks/useAuth";
 import { jobTitle } from "../features/jobs/jobTitle";
 import { useJobs } from "../features/jobs/hooks/useJobs";
 import { useProjects } from "../features/projects/hooks/useProjects";
+import { canAdminister, useMyRole } from "./useMyRole";
 import { projectPath } from "../shared/projectPath";
 import {
   IconActivity,
@@ -137,6 +138,7 @@ function ProjectSwitcher() {
 function AccountMenu({ onTour }: { onTour: () => void }) {
   const p = useP();
   const { mode } = useProject();
+  const role = useMyRole();
   const { data: user } = useMe();
   const logout = useLogout();
   const navigate = useNavigate();
@@ -172,8 +174,10 @@ function AccountMenu({ onTour }: { onTour: () => void }) {
             <div className="my-1 h-px bg-rule" />
             {[
               ...(user ? [{ to: "/projects", label: "All projects" }] : []),
-              { to: p("/settings"), label: mode === "demo" ? "About this demo" : "Project settings" },
-              { to: p("/settings#limits"), label: "Usage limits" },
+              ...(canAdminister(role) ? [
+                { to: p("/settings"), label: mode === "demo" ? "About this demo" : "Project settings" },
+                { to: p("/settings#limits"), label: "Usage limits" },
+              ] : []),
             ].map((item) => (
               <Link key={item.to} to={item.to} onClick={() => setOpen(false)} className="block rounded-[10px] px-3 py-2 text-sm text-dim hover:bg-surface-3 hover:text-ink">
                 {item.label}
@@ -196,6 +200,7 @@ function AccountMenu({ onTour }: { onTour: () => void }) {
                 <div className="my-1 h-px bg-rule" />
                 <button
                   type="button"
+                  title="Signs you out on every device"
                   onClick={async () => {
                     try {
                       await logout.mutateAsync();
@@ -227,6 +232,7 @@ interface Command {
 
 function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const p = useP();
+  const role = useMyRole();
   const jobs = useJobs();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
@@ -242,7 +248,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
       { label: "AI news", hint: "Stories about your models", to: p("/activity?tab=news") },
       { label: "Settings", hint: "Project name, keys, alert webhook and data retention (how long data is kept)", to: p("/settings") },
       { label: "Usage limits", hint: "Caps we warn you about before you reach them", to: p("/settings#limits") },
-    ];
+    ].filter((c) => canAdminister(role) || !c.to.includes("/settings"));
     const jobItems = (jobs.data ?? []).map((j) => ({ label: jobTitle(j.name), code: j.name, hint: "AI task", to: p(`/jobs/${encodeURIComponent(j.name)}`) }));
     const q = query.trim().toLowerCase();
     return [...jobItems, ...pages].filter((c) => !q || c.label.toLowerCase().includes(q) || (c.code ?? "").toLowerCase().includes(q) || c.hint.toLowerCase().includes(q)).slice(0, 9);
@@ -382,11 +388,12 @@ function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle
       collapsed && "justify-center px-0",
       active ? "text-accent-ink" : "text-dim hover:bg-surface-2 hover:text-ink",
     );
+  const role = useMyRole();
   const project = [
     { to: p("/retest"), label: "Model trials", icon: IconFlask, match: (on: boolean) => on },
     { to: p("/settings"), label: mode === "demo" ? "About this demo" : "Settings", icon: IconSettings, match: (on: boolean) => on && hash !== "#limits" },
     { to: p("/settings#limits"), label: "Usage limits", icon: IconBolt, match: (on: boolean) => on && hash === "#limits" },
-  ];
+  ].filter((i) => canAdminister(role) || (!i.to.endsWith("/settings") && !i.to.endsWith("#limits") && !i.to.endsWith("/retest")));
   return (
     <motion.aside
       initial={false}

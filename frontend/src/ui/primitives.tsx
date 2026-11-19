@@ -216,12 +216,14 @@ export function EmptyState({ icon, title, hint, action }: { icon?: ReactNode; ti
 
 export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
   const message = error instanceof Error ? error.message : "Something went wrong";
+  // Not allowed is not a glitch: say so, give the server's reason, and do not offer a retry that cannot help.
+  const denied = typeof error === "object" && error !== null && (error as { status?: number }).status === 403;
   return (
     <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-bad/30 bg-bad-soft px-4 py-3">
       <p className="flex items-center gap-2 text-sm text-bad">
-        <IconAlert size={16} /> Could not load this: {message}
+        <IconAlert size={16} /> {denied ? `Your role does not allow this: ${message}` : `Could not load this: ${message}`}
       </p>
-      {onRetry && (
+      {onRetry && !denied && (
         <Button size="sm" variant="secondary" onClick={onRetry}>
           Try again
         </Button>

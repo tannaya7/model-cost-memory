@@ -5,7 +5,7 @@ import type { BillingMode } from "./hooks/useBillingMode";
  * On a flat-fee subscription that wording is wrong, so the screens do not show it there. This is a plain
  * word check, not a promise to catch every phrasing: the server wording itself is unchanged.
  */
-const MONEY = /\$|\b(sav(?:e|es|ed|ing|ings)|cost|costs|costly|bill|bills|billed|billing|spend|spent|spending|budget|pay|paid)\b/i;
+const MONEY = /\$|\b(sav(?:e|es|ed|ing|ings)|cost|costs|costly|bill|bills|billed|billing|spend|spent|spending|budget|pay|paid|prices?|priced|pricing|cheap\w*|expensive)\b/i;
 
 export function hasMoneyWording(text: string | null | undefined): boolean {
   return Boolean(text) && MONEY.test(text as string);

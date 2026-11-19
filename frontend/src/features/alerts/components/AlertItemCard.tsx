@@ -153,6 +153,7 @@ function AlertCard({ alert }: { alert: Alert }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className={nk.tone === "bad" ? "text-bad" : "text-warn"}>{nk.icon}</span>
             <Badge tone={nk.tone}>{nk.title}</Badge>
+            {nk.tag && <Badge tone="neutral">{nk.tag}</Badge>}
             {isResolved && <Badge tone="ok">Resolved {formatLocalDate(alert.resolved_at!)}</Badge>}
           </div>
           <span className="font-mono text-xs text-dim">{formatLocalTimestamp(alert.created_at)}</span>
@@ -161,6 +162,9 @@ function AlertCard({ alert }: { alert: Alert }) {
         {nk.numbers && serverText(nk.numbers, mode, null) && <p className="text-xs text-dim">{nk.numbers}</p>}
         <div className="flex shrink-0 items-center gap-3">
           <Link to={p(nk.to)} className="text-xs font-semibold text-accent hover:underline">{nk.linkLabel}</Link>
+          {nk.href && (
+            <a href={nk.href} target="_blank" rel="noreferrer noopener" className="text-xs font-semibold text-accent hover:underline">{nk.hrefLabel}</a>
+          )}
           {!isResolved && (
             <button
               type="button"

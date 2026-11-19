@@ -56,8 +56,8 @@ export function allowanceWays(input: {
     if (l) {
       out.push({
         id: `loop:${t.trace_id}`,
-        title: "A possible loop",
-        text: `${l.step} ran ${l.repeats} times in a short stretch ${l.uses_arguments ? "with the same details" : "with the same question"}. Each repeat uses allowance without new progress.`,
+        title: "A possible repeated call",
+        text: `${l.step} ran ${l.repeats} times in a short stretch ${l.uses_arguments ? "with the same details" : "with the same question"}. Each repeat uses allowance. This can be valid, such as polling or retries, so check the calls before changing anything.`,
         measured: true,
       });
     }

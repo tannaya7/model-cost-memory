@@ -7,6 +7,7 @@ import { colorMap } from "../ui/charts/series";
 import { usd } from "../ui/format";
 import { IconClock, IconModels, IconSearch } from "../ui/icons";
 import { Button, EmptyState, ErrorState, ModelName, Panel, PanelHeader, Pill, Reveal, Segmented, Skeleton } from "../ui/primitives";
+import { AsOfLine, MakerLinks, PriceCheck, ProviderSays, WhereFrom, type ModelsMeta } from "./ModelReference";
 
 function daysUntil(date: string): number {
   return Math.ceil((Date.parse(`${date}T00:00:00Z`) - Date.now()) / 86_400_000);
@@ -74,6 +75,9 @@ export default function Models() {
   const catalog = useModels({ status: status === "ALL" ? undefined : status, q: q.trim() || undefined });
   const usedModels = used.data?.pages.flatMap((p) => p.items) ?? [];
   const all = catalog.data?.pages.flatMap((p) => p.items) ?? [];
+  // The page-level facts (where prices come from, when the makers' pages were read) ride on every page; the first will do.
+  const meta = (catalog.data?.pages[0] ?? used.data?.pages[0]) as unknown as ModelsMeta | undefined;
+  const basis = all.find((m) => m.reference)?.reference?.price_basis;
   const retiring = useMemo(
     () => usedModels.filter((m) => m.status !== "ACTIVE").sort((a, b) => (a.shutdown_date ?? "9").localeCompare(b.shutdown_date ?? "9")),
     [usedModels],
@@ -83,12 +87,14 @@ export default function Models() {
     <div className="flex flex-col gap-5">
       <header>
         <h1 className="text-3xl font-semibold tracking-tight">Models</h1>
-        <p className="mt-1 text-sm text-dim">What each model costs, and which are being shut down. Prices refresh daily.</p>
+        <p className="mt-1 max-w-2xl text-sm text-dim">What the models you run cost, which are being retired, and where each price comes from.</p>
+        <AsOfLine meta={meta} />
+        <WhereFrom meta={meta} basis={basis} />
       </header>
 
       <Reveal className="grid gap-4 lg:grid-cols-3">
         <Panel className="p-5 md:p-6 lg:col-span-2">
-          <PanelHeader title="What the models you run cost" hint="List price in US dollars per million tokens." />
+          <PanelHeader title="What the models you run cost" hint="List price in US dollars per million tokens. Where each number comes from is explained above." />
           <div className="mt-5">{used.isPending ? <Skeleton className="h-48" /> : <PriceBars models={usedModels} />}</div>
         </Panel>
         <Panel className="self-start p-5">
@@ -145,13 +151,14 @@ export default function Models() {
             ) : all.length === 0 ? (
               <EmptyState icon={<IconModels size={18} />} title="No model matches" hint="Try a shorter name, or choose All to see every model." />
             ) : (
-              <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[760px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="text-[11px] uppercase tracking-wider text-muted">
                     <th className="px-3 py-2 font-semibold">Model</th>
                     <th className="px-3 py-2 font-semibold">Provider</th>
                     <th className="px-3 py-2 text-right font-semibold">Input price per million tokens</th>
                     <th className="px-3 py-2 text-right font-semibold">Output price per million tokens</th>
+                    <th className="px-3 py-2 font-semibold">Checked against the maker's own pages</th>
                     <th className="px-3 py-2 font-semibold">Status</th>
                   </tr>
                 </thead>
@@ -163,10 +170,17 @@ export default function Models() {
                           <ModelName className="text-xs">{m.model}</ModelName>
                           {m.used_by_project && <Pill tone="accent" icon={false}>you use it</Pill>}
                         </span>
+                        <ProviderSays model={m.model} />
                       </td>
                       <td className="px-3 py-2.5 text-dim">{m.provider}</td>
                       <td className="px-3 py-2.5 text-right text-dim">{usd(m.price_in_per_mtok)}</td>
                       <td className="px-3 py-2.5 text-right text-dim">{usd(m.price_out_per_mtok)}</td>
+                      <td className="px-3 py-2.5">
+                        <span className="flex flex-col gap-1">
+                          <PriceCheck reference={m.reference} />
+                          <MakerLinks model={m.model} reference={m.reference} />
+                        </span>
+                      </td>
                       <td className="px-3 py-2.5"><StatusPill m={m} /></td>
                     </tr>
                   ))}

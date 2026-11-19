@@ -52,6 +52,6 @@ describe("PromptVersions", () => {
   it("with nothing to compare, explains how to tag a version", async () => {
     show(data({ source: "none", reason: "no_change", versions: [] }));
     expect(await screen.findByText("Only one version so far.")).toBeInTheDocument();
-    expect(screen.getByText(/RunRecorder\(job="your-task", prompt_version="v2"\)/)).toBeInTheDocument();
+    expect(screen.getByText(/record_ai_call\("your-task".*prompt_version="v2"\)/)).toBeInTheDocument();
   });
 });

@@ -3,11 +3,11 @@ import type {
   ProjectCreateInput,
   ProjectPatchInput,
 } from "../../../shared/api/types";
+import { fetchAllProjects } from "../../workspaces/api/workspacesApi";
 import {
   createProject,
   deleteProject,
   fetchProject,
-  fetchProjects,
   patchProject,
   regenerateProjectKey,
 } from "../api/projectsApi";
@@ -18,7 +18,7 @@ export const projectDetailKey = (id: string) => ["projects", id] as const;
 export function useProjects(enabled = true) {
   return useQuery({
     queryKey: projectsKey,
-    queryFn: fetchProjects,
+    queryFn: fetchAllProjects,
     enabled,
   });
 }

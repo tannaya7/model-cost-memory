@@ -116,16 +116,42 @@ function Toggle<T extends string>({ value, options, onChange, label }: { value: 
 function WidgetMenu({ id, onMove, onRemove, first, last }: { id: WidgetId; onMove: (by: -1 | 1) => void; onRemove: () => void; first: boolean; last: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
+    // Keyboard: the first usable item gets focus, Escape closes and puts focus back on the button, Tab out closes it.
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setOpen(false);
+        trigger.current?.focus();
+      }
+    };
+    const leave = (e: FocusEvent) => {
+      if (ref.current && !(e.relatedTarget instanceof Node && ref.current.contains(e.relatedTarget))) setOpen(false); // focus went elsewhere, or nowhere
+    };
     document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    document.addEventListener("keydown", key);
+    const node = ref.current;
+    node?.addEventListener("focusout", leave);
+    ref.current?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')?.focus();
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", key);
+      node?.removeEventListener("focusout", leave);
+    };
   }, [open]);
+  /** After a choice the menu closes and focus returns to the button, so a keyboard user is never dropped at the top of the page. */
+  const choose = (fn: () => void) => () => {
+    fn();
+    setOpen(false);
+    window.setTimeout(() => trigger.current?.focus(), 0);
+  };
   const item = "block w-full rounded-[8px] px-3 py-1.5 text-left text-sm text-dim hover:bg-surface-3 hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent";
   return (
     <div ref={ref} className="relative">
-      <button type="button" aria-label={`Options for ${WIDGETS[id].title}`} aria-expanded={open} onClick={() => setOpen((v) => !v)} className="grid h-8 w-8 place-items-center rounded-[8px] text-muted hover:bg-surface-2 hover:text-ink">
+      <button type="button" ref={trigger} aria-haspopup="menu" aria-label={`Options for ${WIDGETS[id].title}`} aria-expanded={open} onClick={() => setOpen((v) => !v)} className="grid h-8 w-8 place-items-center rounded-[8px] text-muted hover:bg-surface-2 hover:text-ink">
         <IconMore size={18} />
       </button>
       <AnimatePresence>
@@ -135,12 +161,14 @@ function WidgetMenu({ id, onMove, onRemove, first, last }: { id: WidgetId; onMov
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.97 }}
             transition={{ duration: 0.12 }}
+            role="menu"
+            aria-label={`Options for ${WIDGETS[id].title}`}
             className="absolute right-0 top-full z-30 mt-1 w-40 rounded-[12px] border border-rule-strong bg-surface p-1 shadow-xl"
           >
-            <button type="button" className={item} disabled={first} onClick={() => { onMove(-1); setOpen(false); }}>Move earlier</button>
-            <button type="button" className={item} disabled={last} onClick={() => { onMove(1); setOpen(false); }}>Move later</button>
-            <div className="my-1 h-px bg-rule" />
-            <button type="button" className={cx(item, "text-bad hover:text-bad")} onClick={() => { onRemove(); setOpen(false); }}>Remove</button>
+            <button type="button" role="menuitem" className={item} disabled={first} onClick={choose(() => onMove(-1))}>Move earlier</button>
+            <button type="button" role="menuitem" className={item} disabled={last} onClick={choose(() => onMove(1))}>Move later</button>
+            <div className="my-1 h-px bg-rule" role="separator" />
+            <button type="button" role="menuitem" className={cx(item, "text-bad hover:text-bad")} onClick={choose(onRemove)}>Remove</button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -303,6 +331,17 @@ function AllowanceList({ ctx, compact }: { ctx: Ctx; compact?: boolean }) {
   );
 }
 
+/** Says plainly that the plan's own meter is not available here. No provider reports a plan's remaining allowance or its
+ * reset time to this app, so none is shown, and an allowance size, a rollover or a reset is never guessed. */
+export function PlanMeterNotice() {
+  return (
+    <p className="relative mt-4 text-xs text-muted" data-testid="plan-meter">
+      <span className="font-semibold text-ink">Your plan's remaining allowance and reset time: not available.</span>{" "}
+      No provider reports them to this app, so we do not guess them, or whether unused usage carries over. The usage limits in Settings count the calls recorded here, against a cap and a reset time you enter yourself.
+    </p>
+  );
+}
+
 /** Subscription: the recommendation card becomes ways to make the allowance last, built only from measured facts. */
 function AllowancePanel({ ctx, labelled, compact }: { ctx: Ctx; labelled?: string; compact?: boolean }) {
   const p = useP();
@@ -322,6 +361,7 @@ function AllowancePanel({ ctx, labelled, compact }: { ctx: Ctx; labelled?: strin
         {!compact && <ButtonLink to={p("/jobs")} variant="primary" className="shrink-0">See every AI task <IconArrowRight size={16} /></ButtonLink>}
       </div>
       <AllowanceList ctx={ctx} compact={compact} />
+      <PlanMeterNotice />
       {compact && <div className="relative mt-auto pt-5"><ButtonLink to={p("/jobs")} variant="primary">See every AI task <IconArrowRight size={16} /></ButtonLink></div>}
     </Panel>
   );

@@ -21,6 +21,8 @@ export type CatalogEntry = {
   contextWindow?: number;
   officialUrl: string;
   asOf: string;
+  /** What the provider's own page says this family is for, word for word (an official claim, not a measurement). */
+  providerSays: string;
 };
 
 const CLAUDE = "https://platform.claude.com/docs/en/models/overview";
@@ -30,21 +32,21 @@ const AS_OF = "2026-11-13";
 
 export const MODEL_CATALOG: CatalogEntry[] = [
   // Provider text: "For long-running agentic coding and knowledge work"
-  { pattern: "claude-opus", provider: "Anthropic", name: "Claude Opus", bestFor: ["coding", "agents", "tool-use", "multimodal"], tier: 2, contextWindow: 1_000_000, officialUrl: CLAUDE, asOf: AS_OF },
+  { pattern: "claude-opus", provider: "Anthropic", name: "Claude Opus", bestFor: ["coding", "agents", "tool-use", "multimodal"], tier: 2, contextWindow: 1_000_000, officialUrl: CLAUDE, asOf: AS_OF, providerSays: "For long-running agentic coding and knowledge work" },
   // Provider text: "combination of speed and intelligence"
-  { pattern: "claude-sonnet", provider: "Anthropic", name: "Claude Sonnet", bestFor: ["balanced", "tool-use", "multimodal"], tier: 1, contextWindow: 1_000_000, officialUrl: CLAUDE, asOf: AS_OF },
+  { pattern: "claude-sonnet", provider: "Anthropic", name: "Claude Sonnet", bestFor: ["balanced", "tool-use", "multimodal"], tier: 1, contextWindow: 1_000_000, officialUrl: CLAUDE, asOf: AS_OF, providerSays: "combination of speed and intelligence" },
   // Provider text: "high-volume, latency-sensitive tasks such as classification, extraction, and routing"
-  { pattern: "claude-haiku", provider: "Anthropic", name: "Claude Haiku", bestFor: ["classification", "extraction", "fast-cheap", "tool-use", "multimodal"], tier: 0, contextWindow: 1_000_000, officialUrl: CLAUDE, asOf: AS_OF },
+  { pattern: "claude-haiku", provider: "Anthropic", name: "Claude Haiku", bestFor: ["classification", "extraction", "fast-cheap", "tool-use", "multimodal"], tier: 0, contextWindow: 1_000_000, officialUrl: CLAUDE, asOf: AS_OF, providerSays: "high-volume, latency-sensitive tasks such as classification, extraction, and routing" },
   // Provider text: "deep reasoning and coding capabilities"
-  { pattern: "gemini-[\\d.]+-pro", provider: "Google", name: "Gemini Pro", bestFor: ["reasoning", "coding"], tier: 2, officialUrl: GEMINI, asOf: AS_OF },
+  { pattern: "gemini-[\\d.]+-pro", provider: "Google", name: "Gemini Pro", bestFor: ["reasoning", "coding"], tier: 2, officialUrl: GEMINI, asOf: AS_OF, providerSays: "deep reasoning and coding capabilities" },
   // Provider text: "software engineering, autonomous agents, and complex enterprise workflows"; "speed and multimodal capabilities"
-  { pattern: "gemini-[\\d.]+-flash(?!-lite)", provider: "Google", name: "Gemini Flash", bestFor: ["coding", "agents", "fast-cheap", "multimodal"], tier: 1, officialUrl: GEMINI, asOf: AS_OF },
+  { pattern: "gemini-[\\d.]+-flash(?!-lite)", provider: "Google", name: "Gemini Flash", bestFor: ["coding", "agents", "fast-cheap", "multimodal"], tier: 1, officialUrl: GEMINI, asOf: AS_OF, providerSays: "software engineering, autonomous agents, and complex enterprise workflows" },
   // Provider text: "fastest, most cost-effective ... for high-throughput execution"; multimodal
-  { pattern: "gemini-[\\d.]+-flash-lite", provider: "Google", name: "Gemini Flash-Lite", bestFor: ["fast-cheap", "multimodal"], tier: 0, officialUrl: GEMINI, asOf: AS_OF },
+  { pattern: "gemini-[\\d.]+-flash-lite", provider: "Google", name: "Gemini Flash-Lite", bestFor: ["fast-cheap", "multimodal"], tier: 0, officialUrl: GEMINI, asOf: AS_OF, providerSays: "fastest, most cost-effective ... for high-throughput execution" },
   // Provider text: "for the most demanding work" / "for complex work at a lower cost"
-  { pattern: "gpt-[\\d.]+-(astra|sol)", provider: "OpenAI", name: "GPT-6 Astra and Sol", bestFor: ["complex-work"], tier: 2, contextWindow: 1_050_000, officialUrl: OPENAI, asOf: AS_OF },
+  { pattern: "gpt-[\\d.]+-(astra|sol)", provider: "OpenAI", name: "GPT-6 Astra and Sol", bestFor: ["complex-work"], tier: 2, contextWindow: 1_050_000, officialUrl: OPENAI, asOf: AS_OF, providerSays: "for the most demanding work / for complex work at a lower cost" },
   // Provider text: "most efficient model for focused, high-volume tasks"
-  { pattern: "gpt-[\\d.]+-luna", provider: "OpenAI", name: "GPT-6 Luna", bestFor: ["fast-cheap"], tier: 0, contextWindow: 1_050_000, officialUrl: OPENAI, asOf: AS_OF },
+  { pattern: "gpt-[\\d.]+-luna", provider: "OpenAI", name: "GPT-6 Luna", bestFor: ["fast-cheap"], tier: 0, contextWindow: 1_050_000, officialUrl: OPENAI, asOf: AS_OF, providerSays: "most efficient model for focused, high-volume tasks" },
 ];
 
 /** The entry whose pattern matches a model id, if any. */

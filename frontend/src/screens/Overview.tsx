@@ -1,22 +1,29 @@
 /** Overview: am I wasting money, is anything broken, where does the money go. Built from widgets the
  * person chooses (Add widget), over a period they choose, with the period's numbers to export. */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useSearchParams } from "react-router-dom";
 import { useProject } from "../app/project";
 import { useDaily } from "../features/insights/api/dailyApi";
 import { useJobs } from "../features/jobs/hooks/useJobs";
 import { FirstResults } from "../features/guide/FirstResults";
-import { IconCalendar, IconDownload, IconWidgets } from "../ui/icons";
+import { useWaitingForFirstCall, WaitingForFirstCall } from "../features/guide/WaitingForFirstCall";
+import { IconCalendar, IconWidgets } from "../ui/icons";
 import { Button, cx, EmptyState, ErrorState } from "../ui/primitives";
 import { useAllRecommendations } from "./shared";
 import { useBillingMode } from "../features/projects/hooks/useBillingMode";
 import { useToast } from "../ui/Toast";
-import { SECTIONS, useLayout, WIDGETS, type SectionId, type WidgetId } from "./overview/layout";
-import { periods, rangeLabel, toCsv } from "./overview/metrics";
+import { sectionTitle, useLayout, WIDGETS, type SectionId, type WidgetId } from "./overview/layout";
+import { periods, rangeLabel } from "./overview/metrics";
+import { ExportButton } from "../features/exports/ExportButton";
+import { canAdminister, useMyRole } from "../app/useMyRole";
 import { MonthProjection, UnitCost, WastedSpend } from "./overview/moneyWidgets";
 import { TokenUsage } from "./overview/TokenUsage";
 import { TokensWent } from "./overview/TokensWent";
+import { WhatChanged } from "./overview/WhatChanged";
+import { ToolServers } from "./overview/ToolServers";
+import { AgentTasks } from "./overview/AgentTasks";
+import { SavingsTracker } from "./overview/SavingsTracker";
 import { AgentsView } from "./overview/AgentsView";
 import { WidgetDrawer } from "./overview/WidgetDrawer";
 import { CorrectAnswers, SpendMonth } from "./overview/mergedWidgets";
@@ -49,6 +56,14 @@ function Widget({ id, ctx, shell }: { id: WidgetId; ctx: Ctx; shell: ShellProps 
       return <AgentsView ctx={ctx} shell={shell} />;
     case "tokens-went":
       return <TokensWent ctx={ctx} shell={shell} />;
+    case "what-changed":
+      return <WhatChanged shell={shell} />;
+    case "savings-tracker":
+      return <SavingsTracker shell={shell} />;
+    case "tool-servers":
+      return <ToolServers shell={shell} />;
+    case "agent-tasks":
+      return <AgentTasks shell={shell} />;
     case "projection":
       return <MonthProjection shell={shell} ctx={ctx} />;
     case "unit-cost":
@@ -80,6 +95,8 @@ export default function Overview() {
   const asked = Number(params.get("days"));
   const days = (PERIODS as readonly number[]).includes(asked) ? asked : 30;
   const [drawer, setDrawer] = useState(false);
+  const [moved, setMoved] = useState(""); // read out by a screen reader after a widget is moved with the menu
+  const [pending, setPending] = useState<{ id: WidgetId; before: number; by: -1 | 1 } | null>(null);
   const layout = useLayout(project);
   const toast = useToast();
   /** Removing a card only hides it, so it is applied at once and can be undone. */
@@ -89,8 +106,13 @@ export default function Overview() {
     toast({ message: `Removed "${WIDGETS[id].title}"`, undo: { label: "Undo", onUndo: () => layout.restore(before) } });
   };
   const { mode: billing } = useBillingMode();
+  const { mode: scope } = useProject();
+  const role = useMyRole();
+  // The server decides; the button is only left out for people it would refuse (a project key, a viewer, a member).
+  const canExport = scope === "owned" && canAdminister(role);
 
   const jobsQuery = useJobs();
+  const first = useWaitingForFirstCall();
   const { byJob, isPending: recsPending } = useAllRecommendations(jobsQuery.data);
   const daily = useDaily({ days: days * 2 });
   const points = useMemo(() => daily.data ?? [], [daily.data]);
@@ -100,6 +122,14 @@ export default function Overview() {
 
   // A flat fee has no bill to project, no money wasted and no unit price, so those are left out for a subscription.
   const shown = layout.ids.filter((id) => billing !== "subscription" || !BILL_WIDGETS.includes(id));
+  // Say where a moved widget really ended up (a move can pass a widget that is hidden for this pay mode).
+  useEffect(() => {
+    if (!pending) return;
+    const now = shown.indexOf(pending.id);
+    if (now === pending.before) setMoved(`${WIDGETS[pending.id].title} did not change place on this screen.`);
+    else setMoved(`${WIDGETS[pending.id].title} moved ${pending.by < 0 ? "earlier" : "later"}. It is now number ${now + 1} of ${shown.length}.`);
+    setPending(null);
+  }, [layout.ids]); // eslint-disable-line react-hooks/exhaustive-deps
   // Consecutive widgets of one section share a titled heading; widgets with no section (added from "Add widget") have none.
   const groups = shown.reduce<Array<{ section: SectionId | undefined; ids: WidgetId[] }>>((acc, id) => {
     const section = WIDGETS[id].section;
@@ -110,15 +140,6 @@ export default function Overview() {
   }, []);
   const unpricedOwner = UNPRICED_ORDER.find((id) => shown.includes(id));
   const ctx: Ctx = { unpricedOwner, days, points, cur, prev, curDone, prevDone, dailyPending: daily.isPending, jobs: jobsQuery.data, jobsPending: jobsQuery.isPending, byJob, recsPending, billing };
-
-  const exportCsv = () => {
-    const url = URL.createObjectURL(new Blob([toCsv(cur)], { type: "text/csv" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `model-cost-memory-${project}-last-${days}-days.csv`;
-    a.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -144,21 +165,28 @@ export default function Overview() {
             </select>
           </div>
           <Button onClick={() => setDrawer(true)}><IconWidgets size={16} /> Add widget</Button>
-          <Button variant="primary" onClick={exportCsv} disabled={cur.length === 0} title={cur.length === 0 ? "No AI calls recorded in this period, so there is nothing to download" : `Download the last ${days} days as a spreadsheet file (CSV)`}>
-            <IconDownload size={16} /> Export
-          </Button>
+          {canExport && (
+            <ExportButton
+              path={`/v1/insights/export.csv?days=${days}`}
+              what={`the last ${days} days`}
+              disabled={cur.length === 0}
+              title={cur.length === 0 ? "No AI calls recorded in this period, so there is nothing to download" : `Download the last ${days} days as a spreadsheet file (CSV)${billing === "per_use" ? "" : ". Dollar figures are list prices, not a bill"}`}
+            />
+          )}
         </div>
       </motion.div>
 
+      <div role="status" aria-live="polite" className="sr-only" data-testid="move-announcement">{moved}</div>
       <FirstResults floor={floorOf(byJob)} />
+      {first.waiting && <WaitingForFirstCall checking={first.checking} onCheck={first.check} />}
 
-      {layout.ids.length === 0 ? (
+      {first.waiting ? null : layout.ids.length === 0 ? (
         <EmptyState icon={<IconWidgets size={18} />} title="Your overview is empty" hint="Widgets are the cards that show your spending and answer quality. Choose Add widget to pick the ones you want." action={<Button variant="primary" onClick={() => setDrawer(true)}>Add widget</Button>} />
       ) : (
         <div className="flex flex-col gap-6">
           {groups.map((g, gi) => (
             <section key={`${g.section ?? "more"}-${gi}`} aria-labelledby={g.section ? `ov-section-${g.section}-${gi}` : undefined} className="flex flex-col gap-3">
-              {g.section && <h2 id={`ov-section-${g.section}-${gi}`} className="text-lg font-semibold tracking-tight text-ink">{SECTIONS[g.section]}</h2>}
+              {g.section && <h2 id={`ov-section-${g.section}-${gi}`} className="text-lg font-semibold tracking-tight text-ink">{sectionTitle(g.section, billing)}</h2>}
               <CardLevel.Provider value={g.section ? 3 : 2}>
                 <div className="grid grid-flow-row-dense grid-cols-1 gap-4 lg:grid-cols-3">
                   <AnimatePresence initial={false}>
@@ -177,7 +205,7 @@ export default function Overview() {
                           <Widget
                             id={id}
                             ctx={ctx}
-                            shell={{ id, first: i === 0, last: i === shown.length - 1, onMove: (by) => layout.move(id, by), onRemove: () => removeWidget(id) }}
+                            shell={{ id, first: i === 0, last: i === shown.length - 1, onMove: (by) => { setPending({ id, before: shown.indexOf(id), by }); layout.move(id, by); }, onRemove: () => removeWidget(id) }}
                           />
                         </motion.div>
                       );

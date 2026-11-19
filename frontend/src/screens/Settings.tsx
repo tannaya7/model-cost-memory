@@ -26,12 +26,15 @@ import { ApplyBar } from "../ui/ApplyBar";
 import { InlineConfirm } from "../ui/InlineConfirm";
 import { useToast } from "../ui/Toast";
 import { useDraftSection } from "../ui/useDraftSection";
+import { isNotices, useNotices } from "../features/notices/api/noticesApi";
 import { BudgetEditor } from "./overview/BudgetEditor";
 import { Button, cx, EmptyState, Panel, PanelHeader, Pill, Skeleton } from "../ui/primitives";
 
 const SECTIONS = [
   { id: "project", label: "Project" },
   { id: "alerts", label: "Alerts" },
+  { id: "notices", label: "Model notices" },
+  { id: "ai-summaries", label: "AI summaries" },
   { id: "privacy", label: "Data kept" },
   { id: "retests", label: "Model trials" },
   { id: "keys", label: "API keys" },
@@ -344,11 +347,301 @@ export function BudgetSection({ project }: { project: Project }) {
   const current = project.monthly_budget_usd ?? null;
   return (
     <Panel id="budget" className="scroll-mt-24 p-5 md:p-6">
-      <PanelHeader title={<span className="inline-flex items-center gap-1.5">Monthly spending limit <Help label="About the spending limit">We warn you at 85% and 95%, and if the month looks like it will go over. The spend is an estimate from your recorded calls at list prices.</Help></span>} hint="The most you want your AI calls to cost each month." />
+      <PanelHeader title={<span className="inline-flex items-center gap-1.5">Monthly spending limit <Help label="About the spending limit">We warn you at the percentages you choose under Budget alerts (85% and 95% unless you change them), and if even the low end of the forecast goes over. The spend is an estimate from your recorded calls at list prices.</Help></span>} hint="The most you want your AI calls to cost each month." />
       <p className="mt-3 text-sm text-ink">Current limit: <span className="font-semibold">{current === null ? "Not set" : `$${current.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(current) ? 0 : 2 })} a month`}</span></p>
       <div className="mt-3">
         <BudgetEditor id="monthly-budget" alwaysOpen />
       </div>
+    </Panel>
+  );
+}
+
+/** The warnings that can be chosen. 100 means the limit itself has been reached. */
+export const LEVEL_CHOICES = [50, 75, 85, 90, 95, 100] as const;
+const COMMON_ZONES = ["UTC", "America/Los_Angeles", "America/Denver", "America/Chicago", "America/New_York", "America/Sao_Paulo", "Europe/London", "Europe/Berlin", "Europe/Paris", "Asia/Dubai", "Asia/Kolkata", "Asia/Singapore", "Asia/Tokyo", "Australia/Sydney", "Pacific/Auckland"];
+
+/** Every timezone name the browser knows, UTC first; a short common list where the browser cannot list them. */
+export function timezoneChoices(current: string): string[] {
+  let all: string[] = [];
+  try {
+    all = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.("timeZone") ?? [];
+  } catch {
+    all = [];
+  }
+  return [...new Set(["UTC", current, ...(all.length ? all : COMMON_ZONES)])];
+}
+
+type AlertDraft = { levels: number[]; projected: boolean; tz: string; webhook: boolean };
+
+/** Which warnings the owner wants, in which timezone, and whether they also go to the webhook. They are always shown in
+ * the app. Nothing is blocked, and nothing leaves the app unless the webhook is turned on here. */
+export function BudgetAlertsSection({ project }: { project: Project }) {
+  const send = useProjectSave(project);
+  const hasWebhook = Boolean(project.webhook_url);
+  const d = useDraftSection<AlertDraft>({
+    saved: {
+      levels: [...(project.budget_alert_levels ?? [85, 95])].sort((a, b) => a - b),
+      projected: project.budget_alert_projected !== false,
+      tz: project.budget_timezone ?? "UTC",
+      webhook: project.budget_alert_webhook === true,
+    },
+    save: (v) => send({ budget_alert_levels: v.levels, budget_alert_projected: v.projected, budget_timezone: v.tz, budget_alert_webhook: v.webhook }),
+    success: "Budget alert settings saved",
+  });
+  const { levels, projected, tz, webhook } = d.value;
+  const turningWebhookOn = d.dirty && webhook && !d.saved.webhook;
+  let host = "your webhook";
+  try {
+    host = new URL(project.webhook_url ?? "").host || host;
+  } catch {
+    /* keep the plain wording */
+  }
+  const zones = timezoneChoices(tz);
+  const toggle = (n: number) => d.change({ ...d.value, levels: levels.includes(n) ? levels.filter((x) => x !== n) : [...levels, n].sort((a, b) => a - b) });
+  return (
+    <Panel id="budget-alerts" className="scroll-mt-24 p-5 md:p-6">
+      <PanelHeader title="Budget alerts" hint="Always shown in the app. Nothing is sent anywhere unless you turn it on here. They only warn: nothing is ever blocked." />
+      <fieldset className="mt-4">
+        <legend className="text-xs font-semibold text-dim">Warn me when spending reaches</legend>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {LEVEL_CHOICES.map((n) => (
+            <label key={n} className="inline-flex items-center gap-2 rounded-[10px] border border-rule bg-surface-2/50 px-3 py-1.5 text-sm text-ink">
+              <input type="checkbox" checked={levels.includes(n)} onChange={() => toggle(n)} className="h-4 w-4 accent-[var(--color-accent)]" />
+              {n}%
+            </label>
+          ))}
+        </div>
+        <p className="mt-1.5 text-xs text-muted">Of the monthly limit, counting spend that has already happened. Each warning comes once a month.</p>
+      </fieldset>
+
+      <label className="mt-4 flex items-start gap-3 rounded-[12px] border border-rule bg-surface-2/50 p-3">
+        <input type="checkbox" checked={projected} onChange={(e) => d.change({ ...d.value, projected: e.target.checked })} className="mt-1 h-4 w-4 accent-[var(--color-accent)]" />
+        <span>
+          <span className="block text-sm font-semibold text-ink">Also warn me when the forecast says I will go over</span>
+          <span className="text-xs text-dim">Only when even the low end of the forecast is above your limit. This is a forecast, not spend that has happened.</span>
+        </span>
+      </label>
+
+      <label className="mt-4 block">
+        <span className="text-xs font-semibold text-dim">Timezone for the month and its days</span>
+        <select value={tz} onChange={(e) => d.change({ ...d.value, tz: e.target.value })} className={cx(field.replace("w-full", "w-72"), "mt-1.5 block")} aria-label="Timezone for the month and its days">
+          {zones.map((z) => <option key={z} value={z}>{z}</option>)}
+        </select>
+        <span className="mt-1 block text-xs text-muted">The month starts and ends at midnight in this timezone. Now: {tz}.</span>
+      </label>
+
+      <div className="mt-4">
+        <p className="text-xs font-semibold text-dim">Where budget alerts go</p>
+        <ul className="mt-2 space-y-2">
+          <li className="text-sm text-ink">In the app <span className="text-xs text-muted">(always, in Activity)</span></li>
+          <li>
+            <label className={cx("flex items-start gap-3 rounded-[12px] border border-rule bg-surface-2/50 p-3", !hasWebhook && "opacity-70")}>
+              <input type="checkbox" checked={webhook} disabled={!hasWebhook} onChange={(e) => d.change({ ...d.value, webhook: e.target.checked })} className="mt-1 h-4 w-4 accent-[var(--color-accent)]" />
+              <span>
+                <span className="block text-sm font-semibold text-ink">Also send budget alerts to my webhook</span>
+                <span className="text-xs text-dim">{hasWebhook ? `They would be posted to ${host}. Off by default.` : "Add a webhook address in Alerts first, then you can turn this on."}</span>
+              </span>
+            </label>
+          </li>
+          <li className="text-sm text-muted">Email <span className="text-xs">(not available yet)</span></li>
+        </ul>
+      </div>
+      <ApplyBar
+        dirty={d.dirty}
+        applying={d.applying}
+        error={d.error}
+        onApply={d.apply}
+        onDiscard={d.discard}
+        applyLabel={turningWebhookOn ? "Send budget alerts there" : "Apply"}
+        discardLabel={turningWebhookOn ? "Keep them in the app only" : "Discard"}
+        review={turningWebhookOn ? <>Budget alerts, with your spending figures but no prompt text, will also be posted to {host}. You can turn this off at any time.</> : undefined}
+      />
+    </Panel>
+  );
+}
+
+const SOURCE_STATE: Record<string, string> = {
+  NEVER: "Not read yet",
+  OK: "Read",
+  UNREADABLE: "Could not be read (its layout may have changed)",
+  FETCH_FAILED: "Could not be fetched",
+};
+
+/** "17 Nov 2026" for a checked-at time. */
+const checkedOn = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : null;
+
+/** Deprecation and shutdown notices from the providers' own pages, for the models this project ran in the last 30 days.
+ * Information only: nothing is migrated, replaced or switched. They leave the app only if the owner opts in here. */
+export function ModelNoticesSection({ project }: { project: Project }) {
+  const q = useNotices();
+  const data = isNotices(q.data) ? q.data : null;
+  const send = useProjectSave(project);
+  const hasWebhook = Boolean(project.webhook_url);
+  const d = useDraftSection<boolean>({
+    saved: project.notice_alert_webhook === true,
+    save: (next) => send({ notice_alert_webhook: next }),
+    success: (next) => (next ? "Model notices will also go to your webhook" : "Model notices stay in the app"),
+  });
+  let host = "your webhook";
+  try {
+    host = new URL(project.webhook_url ?? "").host || host;
+  } catch {
+    /* keep the plain wording */
+  }
+  const turningOn = d.dirty && d.value && !d.saved;
+  const neverRead = data ? data.sources.every((x) => x.status === "NEVER") : false;
+  return (
+    <Panel id="notices" className="scroll-mt-24 p-5 md:p-6">
+      <PanelHeader title="Model notices" hint="What each provider's own page says about the models you used in the last 30 days. Information only: nothing is changed or switched for you." />
+      {q.isPending ? (
+        <Skeleton className="mt-4 h-24" />
+      ) : !data ? (
+        <p role="alert" className="mt-4 text-sm text-bad">Could not load the notices. Try again in a moment.</p>
+      ) : (
+        <>
+          {data.notices.length === 0 ? (
+            <p className="mt-4 text-sm text-dim" data-testid="no-notices">
+              {neverRead
+                ? "We have not read the providers' pages yet, so there is nothing to show. This is checked once a day."
+                : "No provider notice mentions a model you used in the last 30 days."}
+            </p>
+          ) : (
+            <ul className="mt-4 space-y-3" data-testid="notice-list">
+              {data.notices.map((n) => (
+                <li key={n.notice_id} className="rounded-[12px] border border-rule bg-surface-2/50 p-3">
+                  <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
+                    <span className="font-mono text-[13px]">{n.model}</span>
+                    <span className="rounded-full bg-surface-3 px-2 py-0.5 text-[11px] font-semibold text-muted">{n.status}</span>
+                    <span className="rounded-full bg-surface-3 px-2 py-0.5 text-[11px] font-semibold text-muted">Information only</span>
+                  </p>
+                  <p className="mt-1 text-sm text-dim">{n.text}</p>
+                  {!n.served_by_known && <p className="mt-1 text-xs text-muted">We could not tell where your calls are served. If you use a partner platform, its dates may differ.</p>}
+                  {n.replacement && <p className="mt-1 text-xs text-muted">The provider lists {n.replacement} as a replacement. We change nothing.</p>}
+                  <p className="mt-1 text-xs text-muted">
+                    Checked {checkedOn(n.checked_at)} on {n.source_name}.{" "}
+                    <a href={n.notice_url} target="_blank" rel="noreferrer noopener" className="font-semibold text-accent-ink hover:underline">Open the provider's notice ↗</a>
+                    {n.stale_note ? ` ${n.stale_note}` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+          {data.hosted_elsewhere.length > 0 && (
+            <p className="mt-3 text-xs text-muted" data-testid="elsewhere">
+              Not applied: {data.hosted_elsewhere.length === 1 ? "1 notice is" : `${data.hosted_elsewhere.length} notices are`} about a provider's own API, but your calls for {data.hosted_elsewhere.map((e) => e.model).join(", ")} name another host, which sets its own dates.
+            </p>
+          )}
+          <div className="mt-4 border-t border-rule pt-3">
+            <p className="text-xs font-semibold text-dim">Where these pages come from</p>
+            <ul className="mt-2 space-y-1.5" data-testid="notice-sources">
+              {data.sources.map((x) => (
+                <li key={x.source_id} className="text-xs text-muted">
+                  <a href={x.url} target="_blank" rel="noreferrer noopener" className="font-semibold text-ink hover:underline">{x.name}</a>
+                  {": "}
+                  {x.status === "OK"
+                    ? `${SOURCE_STATE.OK} ${checkedOn(x.last_ok_at)}${x.stale ? ". This reading is more than 7 days old" : ""}.`
+                    : `${SOURCE_STATE[x.status] ?? x.status}${x.last_ok_at ? `. Last good reading ${checkedOn(x.last_ok_at)}` : ""}.`}
+                  {" "}{x.covers}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </>
+      )}
+      <label className={cx("mt-4 flex items-start gap-3 rounded-[12px] border border-rule bg-surface-2/50 p-3", !hasWebhook && "opacity-70")}>
+        <input type="checkbox" checked={d.value} disabled={!hasWebhook} onChange={(e) => d.change(e.target.checked)} className="mt-1 h-4 w-4 accent-[var(--color-accent)]" />
+        <span>
+          <span className="block text-sm font-semibold text-ink">Also send model notices to my webhook</span>
+          <span className="text-xs text-dim">{hasWebhook ? `They would be posted to ${host}. Off by default. Notices are always shown in the app.` : "Add a webhook address in Alerts first, then you can turn this on."}</span>
+        </span>
+      </label>
+      <ApplyBar
+        dirty={d.dirty}
+        applying={d.applying}
+        error={d.error}
+        onApply={d.apply}
+        onDiscard={d.discard}
+        applyLabel={turningOn ? "Send notices there" : "Apply"}
+        discardLabel={turningOn ? "Keep them in the app only" : "Discard"}
+        review={turningOn ? <>Model notices (the model, the provider's date and a link to its page, no prompt text) will also be posted to {host}. You can turn this off at any time.</> : undefined}
+      />
+    </Panel>
+  );
+}
+
+/** Off by default. When on, the figures behind a recommendation go to an outside AI that writes two sentences. */
+export function AiSummariesSection({ project }: { project: Project }) {
+  const send = useProjectSave(project);
+  const host = project.ai_summary_host ?? null;
+  const d = useDraftSection<boolean>({
+    saved: project.ai_summary_consent === true,
+    save: (next) => send({ ai_summary_consent: next }),
+    success: (next) => (next ? "Plain-language summaries are on" : "Plain-language summaries are off"),
+  });
+  const turningOn = d.dirty && d.value && !d.saved;
+  const flat = project.billing_mode === "subscription";
+  return (
+    <Panel id="ai-summaries" className="scroll-mt-24 p-5 md:p-6">
+      <PanelHeader title="Plain-language summaries" hint="Two sentences under a recommendation, written by an outside AI from the figures. Off by default. Never changes a recommendation." />
+      <label className={cx("mt-4 flex items-start gap-3 rounded-[12px] border border-rule bg-surface-2/50 p-3", !host && "opacity-70")}>
+        <input type="checkbox" checked={d.value} disabled={!host && !d.value} onChange={(e) => d.change(e.target.checked)} className="mt-1 h-4 w-4 accent-[var(--color-accent)]" />
+        <span>
+          <span className="block text-sm font-semibold text-ink">Write a summary under each recommendation</span>
+          <span className="text-xs text-dim">{host ? `The figures would be sent to ${host}.` : "This server has no summary service, so there is nothing to turn on."}</span>
+        </span>
+      </label>
+      <ApplyBar
+        dirty={d.dirty}
+        applying={d.applying}
+        error={d.error}
+        onApply={d.apply}
+        onDiscard={d.discard}
+        applyLabel={turningOn ? "Send figures there" : "Apply"}
+        discardLabel={turningOn ? "Keep summaries off" : "Discard"}
+        review={turningOn ? (
+          <>
+            Sent to {host}: model names, correct-answer rates and their ranges{flat ? "" : ", and costs"}. Never your prompts, answers or any run text. A daily limit applies. The text is checked against the figures, and is not shown if it does not match. You can turn this off at any time, and the summary then disappears.
+          </>
+        ) : undefined}
+      />
+    </Panel>
+  );
+}
+
+/** Off by default. When on, trials of new models can start by themselves, spending your own provider budget, with no per-trial confirmation. */
+export function AutoTrialsSection({ project }: { project: Project }) {
+  const send = useProjectSave(project);
+  const d = useDraftSection<boolean>({
+    saved: project.auto_retests === true,
+    save: (next) => send({ auto_retests: next }),
+    success: (next) => (next ? "Automatic trials are on" : "Automatic trials are off"),
+  });
+  const turningOn = d.dirty && d.value && !d.saved;
+  return (
+    <Panel id="auto-trials" className="scroll-mt-24 p-5 md:p-6">
+      <PanelHeader title="Automatic trials" hint="Off by default. Normally every trial on another model starts only after you review and confirm it." />
+      <label className="mt-4 flex items-start gap-3 rounded-[12px] border border-rule bg-surface-2/50 p-3">
+        <input type="checkbox" checked={d.value} onChange={(e) => d.change(e.target.checked)} className="mt-1 h-4 w-4 accent-[var(--color-accent)]" />
+        <span>
+          <span className="block text-sm font-semibold text-ink">Let trials start by themselves</span>
+          <span className="text-xs text-dim">When a new model appears, when we are unsure about a cheaper one, or when you first add a provider key, a small trial may run on its own, within your monthly trial budget.</span>
+        </span>
+      </label>
+      <ApplyBar
+        dirty={d.dirty}
+        applying={d.applying}
+        error={d.error}
+        onApply={d.apply}
+        onDiscard={d.discard}
+        applyLabel={turningOn ? "Allow automatic trials" : "Apply"}
+        discardLabel={turningOn ? "Keep them off" : "Discard"}
+        review={turningOn ? (
+          <>
+            Past prompts of your AI tasks will be sent to the provider behind your stored key, and your own money spent, without asking each time. Each trial stays within its budget and your monthly trial budget. Your live traffic and code are never changed. You can turn this off again at any time.
+          </>
+        ) : undefined}
+      />
     </Panel>
   );
 }
@@ -428,7 +721,7 @@ function LimitsSection() {
     <Panel id="limits" className="scroll-mt-24 p-5 md:p-6">
       <PanelHeader
         title="Usage limits"
-        hint="A cap your plan or budget sets. We warn you before you reach it."
+        hint="You enter the cap and when it resets. We count the calls recorded here against it and warn you before you reach it. We cannot see your plan's own meter."
         actions={!adding && <Button size="sm" variant="primary" onClick={() => setAdding(true)}>Add a usage limit</Button>}
       />
       {adding && (
@@ -525,7 +818,7 @@ export default function Settings() {
     <div className="flex flex-col gap-5">
       <header>
         <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-dim">{project ? <>For <span className="text-ink [overflow-wrap:anywhere]">{project.name}</span>.</> : "For the project your key belongs to."}</p>
+        <p className="mt-1 text-sm text-dim">{project ? <>Name, keys, alerts, data retention and limits for <span className="text-ink [overflow-wrap:anywhere]">{project.name}</span>.</> : "Name, keys, alerts, data retention and limits for the project your key belongs to."}</p>
       </header>
       <div className="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
         <nav aria-label="Settings sections" className="hidden lg:block">
@@ -550,9 +843,12 @@ export default function Settings() {
             <>
               <ProjectSection project={project} />
               <AlertsSection project={project} />
+              <ModelNoticesSection project={project} />
+              <AiSummariesSection project={project} />
+              <AutoTrialsSection project={project} />
               <PrivacySection project={project} />
               <BillingSection project={project} />
-              {project.billing_mode === "subscription" ? <SubscriptionLimitPointer /> : <BudgetSection project={project} />}
+              {project.billing_mode === "subscription" ? <SubscriptionLimitPointer /> : <><BudgetSection project={project} /><BudgetAlertsSection project={project} /></>}
               <ToolInputsSection project={project} />
             </>
           ) : (

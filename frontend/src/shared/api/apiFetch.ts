@@ -118,3 +118,40 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   }
   return body as T;
 }
+
+export interface Download {
+  blob: Blob;
+  filename: string;
+  rows: number;
+  /** How many text values the server prefixed with an apostrophe so a spreadsheet would not run them as formulas. */
+  neutralized: number;
+}
+
+/** GET a file (a CSV). Sends the same key and project as apiFetch and fails the same way (a refusal is an ApiError with its reason). */
+export async function apiDownload(path: string): Promise<Download> {
+  const headers = new Headers();
+  const key = getApiKey();
+  if (key) headers.set("X-API-Key", key);
+  const project = getActiveProject();
+  if (project) headers.set("X-Project-Id", project);
+  const res = await fetch(path, { headers, credentials: "same-origin" });
+  if (!res.ok) {
+    const text = await res.text();
+    let body: unknown = null;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      body = text;
+    }
+    const detail = body && typeof body === "object" && "detail" in body ? describeDetail((body as { detail: unknown }).detail) : res.statusText;
+    throw new ApiError(res.status, detail || `Request failed (${res.status})`, body);
+  }
+  const named = /filename="?([^";]+)"?/.exec(res.headers.get("Content-Disposition") ?? "");
+  return {
+    blob: await res.blob(),
+    filename: named?.[1] ?? "export.csv",
+    rows: Number(res.headers.get("X-Export-Rows") ?? 0),
+    neutralized: Number(res.headers.get("X-Export-Neutralized") ?? 0),
+  };
+}
+

@@ -678,10 +678,8 @@ export default function Landing() {
                 <span className="ml-2 font-mono text-xs text-muted">your_app.py</span>
               </div>
               <pre tabIndex={0} aria-label="Example code" className="overflow-x-auto p-5 font-mono text-[13px] leading-relaxed text-dim"><code>
-<span className="text-accent">from</span> agent_memory.recorder <span className="text-accent">import</span> RunRecorder, provider_for{"\n\n"}
-<span className="text-accent">with</span> <span className="text-ink">RunRecorder</span>(job=<span className="text-ok">"invoice-extract"</span>, provider=provider_for(client.base_url)) <span className="text-accent">as</span> rec:{"\n"}
-{"    "}response = client.chat.completions.create(model=<span className="text-ok">"my-model"</span>, messages=[...]){"\n"}
-{"    "}rec.capture(response, prompt=prompt, model=<span className="text-ok">"my-model"</span>, expected={"{"}<span className="text-ok">"total"</span>: 1250.0{"}"})
+<span className="text-ink">record_ai_call</span>(<span className="text-ok">"invoice-extract"</span>, prompt, answer_text, <span className="text-ok">"my-model"</span>, response.model, <span className="text-ok">"openai"</span>, response.usage){"\n"}
+{"# one line after each AI call you already make; nothing to install"}
               </code></pre>
             </div>
           </Reveal>

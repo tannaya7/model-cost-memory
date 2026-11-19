@@ -3,6 +3,7 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/render";
 import { stubApi } from "../test/api";
+import { projectionFixture } from "../test/projection";
 import type { Job, Recommendation } from "../shared/api/types";
 import jobsSample from "../mocks/jobs.sample.json";
 import recSample from "../mocks/recommendation.sample.json";
@@ -125,18 +126,31 @@ describe("Overview", () => {
       "/v1/jobs/receipt-scan/recommendation": hold("receipt-scan"),
       "/v1/jobs": jobs,
       "/v1/insights/daily": Array.from({ length: 10 }, (_, i) => point(i + 1, 2, i % 3)),
+      "/v1/insights/projection": projectionFixture(),
       "/v1/news": { items: [], sources: [], your_models: [], updated_at: null, next_refresh_at: null },
     });
     renderWithProviders(<WithProject id="acme"><Overview /></WithProject>);
     expect(await screen.findByRole("heading", { name: /^Spend, last 30 days/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Money spent on wrong answers/ })).toBeInTheDocument();
-    expect(await screen.findByText(/answers that were checked and found wrong/)).toBeInTheDocument();
-    // honesty: the month-end figure says it is an estimate and gives a range
+    expect(screen.getByRole("heading", { name: /Spend on answers that failed their check/ })).toBeInTheDocument();
+    expect(await screen.findByText(/answers whose check failed/)).toBeInTheDocument();
+    // honesty: what has been spent is a fact; the month-end figure says it is an estimate and gives a range
     expect(await screen.findByText("estimate")).toBeInTheDocument();
-    expect(screen.getByText(/likely \$.* to \$/)).toBeInTheDocument();
+    expect(screen.getByTestId("forecast")).toHaveTextContent("$90.00 to $150");
+    expect(screen.getByTestId("forecast")).toHaveTextContent("Not spend that has happened");
+    expect(screen.getByTestId("actual")).toHaveTextContent("Spent so far this month");
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Set a monthly limit" }));
     expect(await screen.findByLabelText("Monthly spending limit in US dollars")).toBeInTheDocument();
     expect(screen.getByText("The limit only warns, it never blocks.")).toBeInTheDocument();
+  });
+
+  it("for a project with no call yet, says it is waiting, shows no example data and no empty cards", async () => {
+    stubApi({ "/v1/jobs": [], "/v1/news": { items: [], sources: [], your_models: [], updated_at: null, next_refresh_at: null } });
+    renderWithProviders(<WithProject id="acme"><Overview /></WithProject>);
+    expect(await screen.findByRole("heading", { name: "Waiting for your first call" }, { timeout: 15_000 })).toBeInTheDocument();
+    expect(screen.getByText(/Nothing here is example data/)).toBeInTheDocument();
+    expect(screen.queryByText(/You could save/)).toBeNull();
+    expect(screen.queryByText("No AI calls yet")).toBeNull(); // not seven empty cards under the guide
+    expect(screen.queryByText(/\$\d/)).toBeNull();
   });
 });

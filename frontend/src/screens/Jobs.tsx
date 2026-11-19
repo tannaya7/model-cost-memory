@@ -8,6 +8,7 @@ import { useSpendInsights } from "../features/insights/hooks/useSpendInsights";
 import { jobTitle, TASK_EXPLAINER, TASK_SHORT } from "../features/jobs/jobTitle";
 import { CHECK_KIND_LABELS } from "../features/jobs/checkKinds";
 import { JobCreatePanel } from "../features/jobs/components/JobCreatePanel";
+import { ConnectGuide } from "../features/jobs/components/ConnectGuide";
 import { useJobs } from "../features/jobs/hooks/useJobs";
 import { Sparkline } from "../ui/charts/charts";
 import { pivot } from "../ui/charts/data";
@@ -34,6 +35,7 @@ export default function Jobs() {
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [connect, setConnect] = useState<string[] | null>(null); // the connection guide, for these task names
 
   const runsByJob = useMemo(() => {
     const { rows, names } = pivot(daily.data ?? [], "job", "runs", days);
@@ -62,15 +64,28 @@ export default function Jobs() {
           <h1 className="text-3xl font-semibold tracking-tight">AI tasks</h1>
           <p className="mt-1 max-w-2xl text-sm text-dim">{TASK_SHORT}</p>
         </div>
-        <Button variant="primary" onClick={() => setCreating(true)}>
-          <IconPlus size={16} /> New AI task
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setConnect((jobs ?? []).map((j) => j.name))}>How to connect your app</Button>
+          <Button variant="primary" onClick={() => setCreating(true)}>
+            <IconPlus size={16} /> New AI task
+          </Button>
+        </div>
       </header>
 
       {notice && (
         <p role="status" className="rounded-[12px] border border-ok/30 bg-ok-soft px-4 py-2.5 text-sm text-ok">
           {notice}
         </p>
+      )}
+
+      {connect && (
+        <section aria-label="Connect your app" className="panel p-5">
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="text-lg font-semibold">Connect your app</h2>
+            <Button size="sm" variant="ghost" onClick={() => setConnect(null)}>Close</Button>
+          </div>
+          <div className="mt-3"><ConnectGuide tasks={connect} /></div>
+        </section>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -102,12 +117,12 @@ export default function Jobs() {
       {jobsQuery.isError && !jobs ? (
         <ErrorState error={jobsQuery.error} onRetry={() => jobsQuery.refetch()} />
       ) : jobsQuery.isPending ? (
-        <div className="flex flex-col gap-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-24" />)}</div>
+        <div role="status" aria-label="Loading your AI tasks" className="flex flex-col gap-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-24" />)}</div>
       ) : shown.length === 0 ? (
         <EmptyState
           icon={<IconJobs size={18} />}
           title={jobs?.length ? "No AI task matches" : "No AI tasks yet"}
-          hint={jobs?.length ? "Try another filter or search." : `${TASK_EXPLAINER} You create a task here first, then send calls for it from your code. Example: name "invoice-extract", what it does: "Pull the total amount out of an invoice".`}
+          hint={jobs?.length ? "Try another filter or search." : `${TASK_EXPLAINER} Add the tasks your app does, in your own words, for example "Read invoices". Then we show you how to connect your app, with a ready message you can send to whoever built it.`}
           action={!jobs?.length && <Button variant="primary" onClick={() => setCreating(true)}>Create your first AI task</Button>}
         />
       ) : (
@@ -135,6 +150,12 @@ export default function Jobs() {
                       </p>
                     )}
                     <p className="mt-1 text-[11px] text-muted">{CHECK_KIND_LABELS[job.check_kind]}</p>
+                    {job.run_count === 0 && (
+                      <p className="mt-1.5 rounded-[8px] bg-surface-2 px-2.5 py-1.5 text-xs text-dim" data-testid="waiting-for-first-call">
+                        <strong className="font-semibold text-ink">Waiting for its first AI call.</strong> Your app needs to send a call under the name{" "}
+                        <code className="font-mono text-ink">{job.name}</code>; until then there is nothing to measure or recommend. Use &ldquo;How to connect your app&rdquo; above.
+                      </p>
+                    )}
                   </div>
                   <div className="col-span-full flex min-w-0 flex-wrap items-center gap-2 xl:col-auto">
                     {rec ? <VerdictPill verdict={rec.verdict as Verdict} rec={rec} /> : <Pill tone="neutral">{job.run_count === 0 ? "No AI calls yet" : "No recommendation yet"}</Pill>}
@@ -172,7 +193,7 @@ export default function Jobs() {
         <p className="text-center text-xs text-muted">Line: AI calls per day, last {period} days.</p>
       </Reveal>
 
-      <JobCreatePanel isOpen={creating} onClose={() => setCreating(false)} onSuccess={(message) => { setCreating(false); setNotice(message); }} />
+      <JobCreatePanel isOpen={creating} onClose={() => setCreating(false)} onSuccess={(message) => { setCreating(false); setNotice(message); }} onCreated={(name) => setConnect([name])} />
     </div>
   );
 }

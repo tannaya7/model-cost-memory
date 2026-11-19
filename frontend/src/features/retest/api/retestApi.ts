@@ -4,11 +4,21 @@ import type {
   ProviderKeyInput,
   RetestCreateInput,
   RetestLimits,
+  RetestPreview,
+  RetestPreviewInput,
   RetestStatus,
 } from "../../../shared/api/types";
 
 export function fetchRetestLimits(): Promise<RetestLimits> {
   return apiFetch<RetestLimits>("/v1/retest/limits");
+}
+
+/** Asks what a replay would send, where, and cost. Makes no provider call and changes nothing. */
+export function previewRetest(jobName: string, input: RetestPreviewInput): Promise<RetestPreview> {
+  return apiFetch<RetestPreview>(`/v1/jobs/${encodeURIComponent(jobName)}/retest/preview`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export function startRetest(

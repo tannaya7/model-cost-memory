@@ -102,20 +102,6 @@ export function splitBy(points: DayPoint[], by: "job" | "model", metric: Metric)
   return [...totals].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
 }
 
-/** The points as a CSV file's text, for Export. */
-export function toCsv(points: DayPoint[]): string {
-  const cols = ["day", "job", "model", "runs", "passed", "failed", "spend_usd"] as const;
-  const text = new Set<string>(["day", "job", "model"]);
-  // Text columns that start with = + - @ tab or CR are prefixed with ' so a spreadsheet never runs them
-  // as a formula (OWASP CSV injection). Numeric columns are left alone so negatives stay numbers.
-  const cell = (v: unknown, guard: boolean) => {
-    let s = String(v ?? "");
-    if (guard && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  return [cols.join(","), ...points.map((p) => cols.map((c) => cell(p[c], text.has(c))).join(","))].join("\n") + "\n";
-}
-
 /** "14 Oct – 13 Nov 2026" for the period ending today. */
 export function rangeLabel(days: number, today: Date = new Date()): string {
   const end = new Date(utcMidnight(today));
@@ -261,12 +247,12 @@ export function unitCosts(cur: DayPoint[], prev: DayPoint[], curDone: DayPoint[]
     const passed = sum(c, "passed");
     const now = per1kOf(c);
     const before = per1kOf(p);
-    const sameJob = (x: DayPoint) => job === "All jobs" || x.job === job;
+    const sameJob = (x: DayPoint) => job === "All AI tasks" || x.job === job;
     return { job, spend, passed, unpriced: unpricedRuns(c), per1k: now, prevPer1k: before, change: delta(per1kOf(curDone.filter(sameJob)), per1kOf(prevDone.filter(sameJob))) };
   };
   const names = [...new Set(cur.map((x) => x.job))];
   const jobs = names
     .map((name) => make(name, cur.filter((x) => x.job === name), prev.filter((x) => x.job === name)))
     .sort((a, b) => (b.per1k ?? Infinity) - (a.per1k ?? Infinity) || b.spend - a.spend);
-  return { all: make("All jobs", cur, prev), jobs };
+  return { all: make("All AI tasks", cur, prev), jobs };
 }

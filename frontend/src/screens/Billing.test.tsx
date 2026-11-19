@@ -127,7 +127,7 @@ describe("Overview by billing mode", () => {
     // the top two ideas show first; the rest are one click away
     await userEvent.setup().click(await screen.findByRole("button", { name: /Show \d+ more idea/ }));
     expect(screen.getByText(/A smaller model may use less of your allowance\. We cannot say how much/)).toBeInTheDocument();
-    for (const gone of [/Saving available/, /You could save/, /Saved per month/, /^Spend$/, /Money spent on wrong answers/, /spending is heading/]) {
+    for (const gone of [/Saving available/, /You could save/, /Saved per month/, /^Spend$/, /Spend on answers that failed their check/, /spending is heading/]) {
       // widgets that leave on a billing change stay on screen for their short exit animation, so wait for them to go
       await waitFor(() => expect(screen.queryByText(gone)).toBeNull());
     }

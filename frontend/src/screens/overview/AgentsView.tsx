@@ -52,13 +52,13 @@ function AgentCard({ a }: { a: AgentUsage }) {
   );
 }
 
-/** One soft line under a possible loop found without tool inputs, pointing at the Settings switch while it is off. */
+/** One soft line under a possible repeated call found without tool inputs, pointing at the Settings switch while it is off. */
 function LoopInputsHint() {
   const sw = useToolInputsSwitch();
   if (!sw.canEdit || !sw.ready || sw.on) return null;
   return (
     <span className="mt-1 block text-xs text-dim">
-      Loops where the question changes each step are easy to miss. You can <Link className="underline" to="/settings#tool-inputs">turn on keeping tool inputs</Link> to catch more of them.
+      A repeated call whose details change each step is easy to miss. You can <Link className="underline" to="/settings#tool-inputs">turn on keeping tool inputs</Link> so repeats can be compared on their details.
     </span>
   );
 }
@@ -164,7 +164,7 @@ export function AgentsBody({ days }: { days: number }) {
           <ul className="space-y-2">{d.tools.slice(0, 3).map((t) => <ToolRow key={t.job} t={t} />)}</ul>
         </section>
       )}
-      <p className="text-xs text-muted">Counts are measured from the last {days} days of live calls. Labels such as "works like an agent" are our best reading of your calls and may be wrong. Possible loops are in beta.</p>
+      <p className="text-xs text-muted">Counts are measured from the last {days} days of live calls. Labels such as "works like an agent" are our best reading of your calls and may be wrong. Possible repeated calls are in beta.</p>
     </div>
   );
 }

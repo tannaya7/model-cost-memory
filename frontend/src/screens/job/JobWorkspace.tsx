@@ -62,7 +62,8 @@ export default function JobWorkspace() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
             <h1 className="truncate text-[28px] font-semibold tracking-tight md:text-[34px]">{jobTitle(jobName)}</h1>
-            <p className="mt-1">
+            <p className="mt-1 text-sm text-dim">Cost, quality and our advice for this one AI task.</p>
+            <p className="mt-1.5">
               <span title="name in your code" className="rounded-md border border-rule bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-dim">{jobName}</span>
               <span className="ml-2 text-xs text-muted">name in your code</span>
             </p>

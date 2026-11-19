@@ -8,6 +8,7 @@ import { ApiError } from "../../../shared/api/apiFetch";
 import type { JobCreate } from "../../../shared/api/types";
 import { CHECK_KIND_LABELS } from "../checkKinds";
 import { jobTitle } from "../jobTitle";
+import { CODE_NAME_NOTE, codeName } from "../taskName";
 import { useModalFocus } from "../../../ui/useModalFocus";
 
 const jobFormSchema = z
@@ -15,11 +16,8 @@ const jobFormSchema = z
     name: z
       .string()
       .min(1, "Give the task a name")
-      .max(100, "Name must be at most 100 characters")
-      .regex(
-        /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
-        "Use only letters, numbers, dashes and underscores, with no spaces, starting with a letter or number.",
-      ),
+      .max(100, "Keep the name under 100 characters")
+      .refine((v) => codeName(v).length > 0, "Use at least one letter or number."),
     description: z.string().max(500, "Keep the description under 500 characters").optional(),
     // TEST_COMMAND needs a code sandbox, which v1 does not have; the backend rejects it.
     check_kind: z.enum(["ANSWER_KEY", "SCHEMA", "LATE_LABEL"]),
@@ -80,10 +78,13 @@ export function JobCreatePanel({
   isOpen,
   onClose,
   onSuccess,
+  onCreated,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (message: string) => void;
+  /** Called with the short name the app must use, so the screen can show how to connect it. */
+  onCreated?: (name: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [serverError, setServerError] = useState<string | null>(null);
@@ -131,7 +132,8 @@ export function JobCreatePanel({
     mutationFn: (data: JobCreate) => createJob(data),
     onSuccess: (job) => {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
-      onSuccess(`AI task "${jobTitle(job.name)}" created. To send calls for it, add job="${job.name}" in your code: RunRecorder(job="${job.name}", provider=...)`);
+      onSuccess(`AI task "${jobTitle(job.name)}" created. Next, connect your app so its AI calls arrive here. The steps are just below.`);
+      onCreated?.(job.name);
       reset();
       setServerError(null);
       onClose();
@@ -161,7 +163,7 @@ export function JobCreatePanel({
     }
 
     mutation.mutate({
-      name: values.name.trim(),
+      name: codeName(values.name),
       description: values.description?.trim() || null,
       check_kind: values.check_kind,
       check_config: checkConfig,
@@ -196,7 +198,7 @@ export function JobCreatePanel({
               Create an AI task
             </h2>
             <p className="text-xs text-dim">
-              An AI task is one kind of work your app asks an AI to do. Create it here first, then send calls for it from your code.
+              An AI task is one kind of work your app asks an AI to do, like reading invoices. Add it here, and we will show you how to connect your app to it.
             </p>
           </div>
           <button
@@ -232,12 +234,12 @@ export function JobCreatePanel({
           {/* Job Name */}
           <div>
             <label htmlFor="job-name" className="block text-sm font-medium text-ink">
-              Task name (used in your code, no spaces) <span className="text-bad">*</span>
+              Task name, in your own words <span className="text-bad">*</span>
             </label>
             <input
               id="job-name"
               type="text"
-              placeholder="e.g. invoice-extract"
+              placeholder="e.g. Read invoices"
               {...register("name")}
               className="mt-1 w-full rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink placeholder:text-dim focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
@@ -245,10 +247,12 @@ export function JobCreatePanel({
               <p className="mt-1 text-xs text-bad">{errors.name.message}</p>
             )}
             <p className="mt-1 text-xs text-dim">
-              Example: invoice-extract. Letters, numbers, dashes and underscores only.
+              Type it like you would say it, for example &ldquo;Read invoices&rdquo; or &ldquo;Answer support emails&rdquo;.
             </p>
-            {typedName && !errors.name && (
-              <p className="mt-1 text-xs text-dim">It will show as: <span className="font-semibold text-ink">{jobTitle(typedName)}</span></p>
+            {codeName(typedName) && !errors.name && (
+              <p className="mt-1 text-xs text-dim">
+                Your app will use the short name <code className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-ink">{codeName(typedName)}</code>. {CODE_NAME_NOTE}
+              </p>
             )}
           </div>
 
@@ -324,7 +328,7 @@ export function JobCreatePanel({
                             aria-label={`Remove field ${index + 1}`}
                             className="rounded p-1 text-dim hover:bg-bg hover:text-bad"
                           >
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
                           </button>

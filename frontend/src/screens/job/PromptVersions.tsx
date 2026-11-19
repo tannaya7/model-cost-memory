@@ -108,8 +108,8 @@ function HowToTag() {
   return (
     <div className="mt-3 rounded-[12px] border border-rule bg-surface-2/50 p-3 text-[13px] text-dim">
       <p className="font-semibold text-ink">How to tag a version</p>
-      <p className="mt-1">Add <code className="rounded bg-surface-3 px-1 font-mono text-xs">prompt_version</code> to the recorder in your code, and change it whenever you change the prompt:</p>
-      <pre className="mt-2 overflow-x-auto rounded-md bg-surface-3 p-2 font-mono text-xs text-ink">{`with RunRecorder(job="your-task", prompt_version="v2") as rec:\n    ...`}</pre>
+      <p className="mt-1">Add <code className="rounded bg-surface-3 px-1 font-mono text-xs">prompt_version</code> to the line that sends each call, and change it whenever you change the prompt:</p>
+      <pre className="mt-2 overflow-x-auto rounded-md bg-surface-3 p-2 font-mono text-xs text-ink">{`record_ai_call("your-task", prompt, answer_text, "my-model", response.model, "openai", response.usage, prompt_version="v2")`}</pre>
       <p className="mt-2">Calls recorded after that appear here as separate versions.</p>
     </div>
   );

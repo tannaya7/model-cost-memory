@@ -6,6 +6,7 @@ import { WithProject } from "../../app/project";
 import type { Project } from "../../shared/api/types";
 import { BudgetSection } from "../Settings";
 import { MonthProjection } from "./moneyWidgets";
+import { projectionFixture } from "../../test/projection";
 
 afterEach(() => {
   localStorage.clear();
@@ -30,6 +31,7 @@ function account(budget: number | null) {
       return json({ ...project });
     }
     if (url.startsWith("/v1/insights/daily")) return json(daily);
+    if (url.startsWith("/v1/insights/projection")) return json(projectionFixture());
     return json([]);
   }));
   return { project, patches };

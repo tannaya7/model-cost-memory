@@ -111,7 +111,7 @@ describe("Settings: keep the inputs of tool calls", () => {
   });
 });
 
-describe("possible-loop hint", () => {
+describe("possible-repeated-call hint", () => {
   const shell = { id: "agents", first: false, last: false, onMove: () => {}, onRemove: () => {} } as unknown as ShellProps;
   const ctx = { days: 30 } as unknown as Ctx;
   const insights = (uses: boolean) => ({
@@ -135,12 +135,12 @@ describe("possible-loop hint", () => {
   it("stays quiet when the switch is on or the loop already used inputs", async () => {
     api(true, false);
     const { unmount } = show();
-    await screen.findByText(/Possible loop:/);
+    await screen.findByText(/Possible repeated call:/);
     await waitFor(() => expect(screen.queryByRole("link", { name: /turn on keeping/ })).toBeNull());
     unmount();
     api(false, true);
     show();
-    await screen.findByText(/Possible loop:/);
+    await screen.findByText(/Possible repeated call:/);
     expect(screen.queryByRole("link", { name: /turn on keeping/ })).toBeNull();
   });
 });

@@ -112,7 +112,14 @@ export function RequireUser() {
   const me = useMe();
   const location = useLocation();
   if (me.isPending) return <Waiting />;
-  if (me.data) return <Outlet />;
+  if (me.data) {
+    // A first sign-in lands on the welcome page once. Unknown flags (an older server) never block anyone.
+    const flags = (me.data as { ui_flags?: Record<string, boolean> | null }).ui_flags;
+    if (flags && !flags.welcome_seen && location.pathname !== "/welcome") {
+      return <Navigate to={`/welcome?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+    }
+    return <Outlet />;
+  }
   // Projects need a signed-in person; a saved project key is only used where someone chose /key.
   return <Navigate to={`/signin?next=${encodeURIComponent(location.pathname)}`} replace />;
 }

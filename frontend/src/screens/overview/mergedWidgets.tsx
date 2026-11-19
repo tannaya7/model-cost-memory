@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useP } from "../../app/project";
+import { CostReceipt } from "../../features/insights/components/CostReceipt";
 import { CountUp } from "../../shared/motion/CountUp";
 import { CompareArea } from "../../ui/charts/charts";
 import { count, usd } from "../../ui/format";
@@ -48,6 +49,7 @@ function SpendCard({ ctx, shell, noMenu, stacked }: { ctx: Ctx; shell: ShellProp
             </div>
             <CompareArea rows={rows} format={(v) => usd(v, { compact: true })} height={150} />
           </div>
+          <CostReceipt days={days} />
           <div className="border-t border-rule pt-3">
             <MonthProjection shell={shell} embedded />
           </div>

@@ -36,7 +36,7 @@ describe("agent wording", () => {
     const plain = agentBadges(agent()).map((b) => b.text).join(" ");
     expect(plain).toContain("Has a tool list");
     expect(plain).not.toMatch(/MCP|server/i);
-    expect(agentBadges(agent({ tool_source: "mcp", tool_servers: ["github"] })).map((b) => b.text)).toContain("Tool names look like tool servers (MCP): github");
+    expect(agentBadges(agent({ tool_source: "mcp", tool_servers: ["github"] })).map((b) => b.text)).toContain("Likely MCP: tool names look like tool servers (github)");
   });
 
   it("only gives the tool-list tip from 10,000 tokens", () => {
@@ -46,7 +46,7 @@ describe("agent wording", () => {
 
   it("marks the agent and tool-server badges as not sure", () => {
     expect(agentBadges(agent({ works_like_agent: "yes" })).find((b) => b.id === "agent")).toMatchObject({ text: "Looks like an agent", sure: false });
-    expect(agentBadges(agent({ tool_source: "mcp", tool_servers: [] })).find((b) => b.id === "mcp")).toMatchObject({ text: "Tool names look like tool servers (MCP)", sure: false });
+    expect(agentBadges(agent({ tool_source: "mcp", tool_servers: [] })).find((b) => b.id === "mcp")).toMatchObject({ text: "Likely MCP: tool names look like tool servers", sure: false });
   });
 
   it("words money by billing mode: dollars per use, tokens for a subscription, both labelled", () => {
@@ -54,16 +54,18 @@ describe("agent wording", () => {
     expect(usedText(1.2, 5000, "subscription")).toBe("5,000 tokens");
     expect(usedText(1.2, 5000, "both")).toBe("5,000 tokens · $1.20 at list prices");
     const t = trace({ possible_loop: { step: "the search tool", repeats: 6, cost_usd: 1.9, uses_arguments: false } });
-    expect(loopText(t, "per_use")).toMatch(/costing about \$1\.90\./);
+    expect(loopText(t, "per_use")).toMatch(/The recorded cost of those calls was \$1\.90\./);
     expect(loopText(t, "subscription")).not.toMatch(/\$|cost/);
     expect(loopText(t, "both")).toMatch(/at list prices/);
     expect(toolListTip(tool(), "subscription")).toMatch(/use fewer tokens/);
     expect(toolListTip(tool(), "per_use")).toMatch(/lower the cost/);
   });
 
-  it("describes a possible loop softly", () => {
+  it("describes a possible repeated call softly, never as waste or a loop", () => {
     const t = trace({ possible_loop: { step: "the search tool", repeats: 6, cost_usd: 1.9, uses_arguments: false } });
-    expect(loopText(t)).toMatch(/^Possible loop: the search tool ran 6 times/);
+    expect(loopText(t)).toMatch(/^Possible repeated call: the search tool ran 6 times/);
+    expect(loopText(t)).toContain("This can be valid, such as polling or retries.");
+    expect(loopText(t)).not.toMatch(/waste|loop|stuck|runaway/i);
     expect(loopText(trace())).toBeNull();
   });
 });
@@ -83,10 +85,10 @@ describe("AgentsView", () => {
     expect(screen.getByText(/may be large/)).toBeInTheDocument();
   });
 
-  it("flags a possible loop as beta", async () => {
+  it("flags a possible repeated call as beta", async () => {
     stubApi({ "/v1/insights/agents": reply({ traces: [trace({ possible_loop: { step: "the search tool", repeats: 5, cost_usd: 0.4, uses_arguments: true } })] }) });
     renderWithProviders(<AgentsView ctx={ctx} shell={shell} />);
-    expect(await screen.findByText(/Possible loop: the search tool ran 5 times/)).toBeInTheDocument();
+    expect(await screen.findByText(/Possible repeated call: the search tool ran 5 times/)).toBeInTheDocument();
     expect(screen.getByText("Beta")).toBeInTheDocument();
   });
 

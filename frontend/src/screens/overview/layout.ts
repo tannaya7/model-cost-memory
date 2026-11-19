@@ -8,6 +8,10 @@ export type WidgetId =
   | "projection"
   | "tokens"
   | "tokens-went"
+  | "tool-servers"
+  | "agent-tasks"
+  | "what-changed"
+  | "savings-tracker"
   | "agents"
   | "wasted-spend"
   | "unit-cost"
@@ -27,6 +31,12 @@ export type WidgetId =
 export type SectionId = "spend" | "quality" | "next";
 export const SECTIONS: Record<SectionId, string> = { spend: "What am I spending?", quality: "Are my answers still good?", next: "What should I do next?" };
 
+/** The section's heading for how the project pays: a flat fee has nothing to "spend", and a mixed project is not all spending. */
+export function sectionTitle(id: SectionId, mode: "per_use" | "subscription" | "both"): string {
+  if (id !== "spend" || mode === "per_use") return SECTIONS[id];
+  return mode === "subscription" ? "What am I using?" : "What am I using and spending?";
+}
+
 export type Thumb = "kpi" | "line" | "gauge" | "split" | "pills" | "table" | "list" | "area" | "steps" | "hero";
 
 /** Every widget there is. `span` is its width in a three-column grid. */
@@ -40,9 +50,13 @@ export const WIDGETS: Record<WidgetId, { title: string; text: string; tag: strin
   projection: { title: "Where this month's spending is heading", text: "An estimate of your bill at month end, with an optional monthly limit and a warning as you near it.", tag: "Limit", span: 1, thumb: "gauge" , legacy: true },
   tokens: { title: "Token usage", text: "Tokens are the small pieces of text AI models read and write. See how many you use each day, who uses the most, and how fast a usage limit is filling.", tag: "Usage", span: 2, thumb: "area" },
   agents: { title: "What is using your tokens", text: "Which agents use the most tokens, their heaviest tasks, what tools they use, and how big your tool list is. Worked out from your calls.", tag: "Usage", span: 2, thumb: "split" },
+  "savings-tracker": { title: "Savings since you switched", text: "After you change the model a task runs on: the observed change in cost per correct answer (it can be negative) and, kept apart, an estimate of cost avoided with its assumptions. Needs 14 comparable days on each side, otherwise it says not enough data. Never counts recommendations or trials.", tag: "Savings", span: 2, thumb: "list" },
+  "what-changed": { title: "What changed", text: "What changed in your AI calls since the period before: calls, tokens, cached share, repeated calls, models, tasks and spend, with what else was recorded at the same time. It shows what changed, never a cause.", tag: "Changes", span: 2, thumb: "list" },
+  "agent-tasks": { title: "Agent tasks", text: "Each task as a tree of which call started which, with totals that count every call once, any call repeated more than a threshold you choose, and equivalent tasks compared. A repeat is a possibility, never a verdict. Analysis only.", tag: "Usage", span: 2, thumb: "list" },
+  "tool-servers": { title: "MCP and tool servers", text: "Which tool servers your app's calls use, how often, from which AI task, and how long those requests took. A server is marked likely when only a tool name suggests it. Analysis only: nothing is called or changed.", tag: "Usage", span: 2, thumb: "list" },
   "tokens-went": { title: "Where your tokens went", text: "Which prompts use the most tokens, how much of each is the same in every call, and plain tips to make them cheaper.", tag: "Usage", span: 2, thumb: "split" },
-  "unit-cost": { title: "What 1,000 correct answers cost you", text: "Spending divided by correct answers, for each AI task, so a cheap model that is often wrong cannot hide.", tag: "Unit cost", span: 2, thumb: "table" },
-  "wasted-spend": { title: "Money spent on wrong answers", text: "How much of your spending went on answers that were checked and found wrong, and which AI tasks they came from.", tag: "Waste", span: 1, thumb: "split" , section: "spend" },
+  "unit-cost": { title: "What 1,000 correct answers cost you", text: "An estimate: the average cost of a call divided by the share of checked calls that passed, for each AI task, so a cheap model that is often wrong cannot hide.", tag: "Unit cost", span: 2, thumb: "table" },
+  "wasted-spend": { title: "Spend on answers that failed their check", text: "How much of your spending went on answers whose check failed, and which AI tasks they came from. A failed check can be a deliberate test.", tag: "Failed checks", span: 1, thumb: "split" , section: "spend" },
   "pass-gauge": { title: "Correct answers", text: "The share of checked answers that were correct, against a target you set.", tag: "Quality", span: 1, thumb: "gauge" , legacy: true },
   "spend-split": { title: "Where the money goes", text: "Which AI tasks or models take the biggest share of your spending or AI calls.", tag: "Spend", span: 2, thumb: "split" , section: "spend" },
   "busiest-day": { title: "Busiest day", text: "AI calls on each day of the week, so you know when your app asks an AI the most.", tag: "Traffic", span: 1, thumb: "pills" },

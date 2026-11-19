@@ -18,7 +18,7 @@ export function agentBadges(a: AgentUsage): Badge[] {
   if (a.works_like_agent === "yes") out.push({ id: "agent", text: "Looks like an agent", sure: false });
   else if (a.works_like_agent === "probably") out.push({ id: "agent", text: "Might look like an agent", sure: false });
   if (a.uses_tools) out.push({ id: "tools", text: "Uses tools", sure: true });
-  if (a.tool_source === "mcp") out.push({ id: "mcp", text: (a.tool_servers ?? []).length ? `Tool names look like tool servers (MCP): ${(a.tool_servers ?? []).join(", ")}` : "Tool names look like tool servers (MCP)", sure: false });
+  if (a.tool_source === "mcp") out.push({ id: "mcp", text: (a.tool_servers ?? []).length ? `Likely MCP: tool names look like tool servers (${(a.tool_servers ?? []).join(", ")})` : "Likely MCP: tool names look like tool servers", sure: false });
   else if (a.tool_source === "tool_list") out.push({ id: "list", text: "Has a tool list", sure: true });
   return out;
 }
@@ -36,8 +36,9 @@ export function loopText(t: TraceUsage, mode: BillingMode = "per_use"): string |
   if (!l) return null;
   const how = l.uses_arguments ? "with the same details" : "with the same question";
   const cost = l.cost_usd < 0.01 ? "under 1 cent" : `$${l.cost_usd.toFixed(2)}`;
-  if (mode === "subscription") return `Possible loop: ${l.step} ran ${l.repeats} times in a short stretch ${how}.`;
-  return `Possible loop: ${l.step} ran ${l.repeats} times in a short stretch ${how}, costing about ${cost}${mode === "both" ? " at list prices" : ""}.`;
+  const valid = "This can be valid, such as polling or retries.";
+  if (mode === "subscription") return `Possible repeated call: ${l.step} ran ${l.repeats} times in a short stretch ${how}. ${valid}`;
+  return `Possible repeated call: ${l.step} ran ${l.repeats} times in a short stretch ${how}. The recorded cost of those calls was ${cost}${mode === "both" ? " at list prices" : ""}. ${valid}`;
 }
 
 export function toolListTip(t: ToolsUsage, mode: BillingMode = "per_use"): string | null {

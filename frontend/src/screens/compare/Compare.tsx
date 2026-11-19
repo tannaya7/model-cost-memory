@@ -16,6 +16,8 @@ import { count, pct, usd } from "../../ui/format";
 import { ButtonLink, cx, EmptyState, Panel, Pill, Skeleton } from "../../ui/primitives";
 import { useProject as useAccountProject } from "../../features/projects/hooks/useProjects";
 import { CompareChart } from "./CompareChart";
+import { DifferenceChart } from "./DifferenceChart";
+import { UntestedList } from "./UntestedList";
 import { SuggestionDisclaimer } from "./profile/Disclaimer";
 import { MIN_CHECKED_ANSWERS, TOO_FEW_LABEL, UNTESTED_LABEL } from "./wilson";
 import { Help } from "../../ui/Help";
@@ -161,7 +163,8 @@ export default function Compare() {
   const preset = PRESETS.find((x) => String(x) === params.get("x")) ?? 1;
   const volumeTokens = customTokens ?? Math.round(actualTokens * preset);
   const factor = customTokens && actualTokens > 0 ? customTokens / actualTokens : customTokens ? 1 : preset;
-  const budget = num(params.get("budget")) ?? accountProject.data?.monthly_budget_usd ?? null;
+  // A flat fee has no dollar budget to fit, so a subscription project never plans against one.
+  const budget = billing === "subscription" ? null : num(params.get("budget")) ?? accountProject.data?.monthly_budget_usd ?? null;
 
   const rec0 = rec.data ?? null;
   const checkedRuns = rec0?.evidence.n_runs ?? 0;
@@ -171,7 +174,8 @@ export default function Compare() {
   const jobRuns = jobUse.runs;
   const avgTokens = jobRuns > 0 && jobUse.monthlyIn + jobUse.monthlyOut > 0 ? { in: (jobUse.monthlyIn / jobUse.monthlyRuns) || 0, out: (jobUse.monthlyOut / jobUse.monthlyRuns) || 0 } : null;
   const runsPerMonth = jobUse.monthlyRuns * factor;
-  const suggestions = rec0 && !unchecked ? suggestForCheckedJob({ rec: rec0, catalog, avgTokens, runsPerMonth, budgetUsd: budget, providers }) : [];
+  // Models that were not tried under the same conditions are never ranked: no suggestions from them.
+  const suggestions = rec0 && !unchecked && rec0.evidence?.state !== "not_comparable" ? suggestForCheckedJob({ rec: rec0, catalog, avgTokens, runsPerMonth, budgetUsd: budget, providers }) : [];
   const from = account.from || new Date().toISOString().slice(0, 10);
   const to = account.to || from;
 
@@ -230,7 +234,7 @@ export default function Compare() {
             </div>
             <span className="font-normal text-muted">{actualTokens ? (rough ? `Still learning: ${count(volumeTokens)} tokens a month is a rough guess from ${daysWord(account.span)} of use` : `${count(volumeTokens)} tokens a month (you use about ${count(actualTokens)} now)`) : "No token counts recorded yet."}</span>
           </div>
-          <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
+          {billing !== "subscription" && <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
             Monthly budget (US dollars)
             <input
               inputMode="decimal"
@@ -242,7 +246,7 @@ export default function Compare() {
                 set({ budget: v === null ? null : String(v) });
               }}
             />
-          </label>
+          </label>}
         </div>
         {providerNames.length > 0 && (
           <div className="mt-4 flex flex-wrap items-center gap-1.5" role="group" aria-label="Provider">
@@ -275,7 +279,10 @@ export default function Compare() {
       )}
 
       {!jobName ? (
-        <EmptyState title="No AI tasks yet" hint="Create an AI task and send some AI calls. Then you can compare models." />
+        <>
+          <EmptyState title="No AI tasks yet" hint="Create an AI task and send some AI calls. Then you can compare models, measured on your own work." />
+          <ProfileSuggestPanel job={null} usage={usage} />
+        </>
       ) : unchecked ? (
         <>
           <Panel className="p-5">
@@ -300,13 +307,21 @@ export default function Compare() {
             </NotEnoughData>
           )}
           <Panel className="p-5">
-            <CompareChart rec={rec0} catalog={catalog} avgTokens={avgTokens} providers={providers} listPrice={billing !== "per_use"} />
-            {!avgTokens && <p className="mt-2 text-xs text-muted">No token counts yet, so unused models cannot be priced.</p>}
+            <CompareChart rec={rec0} job={jobName} providers={providers} providerOf={(m) => catalog.find((c) => c.model === m || c.model.startsWith(m))?.provider} listPrice={billing !== "per_use"} />
+          </Panel>
+          {rec0.evidence?.state !== "not_comparable" && (
+            <Panel className="p-5">
+              <DifferenceChart rec={rec0} allowed={(m) => providers.length === 0 || providers.includes(catalog.find((c) => c.model === m || c.model.startsWith(m))?.provider ?? "")} />
+            </Panel>
+          )}
+          <Panel className="p-5">
+            <UntestedList rec={rec0} catalog={catalog} avgTokens={avgTokens} providers={providers} job={jobName} />
+            {!avgTokens && <p className="mt-2 text-xs text-muted">No token counts yet, so untested models cannot be priced.</p>}
           </Panel>
           <section aria-label="Suggestions" className="flex flex-col gap-3">
             <h2 className="text-lg font-semibold">Suggestions</h2>
             {suggestions.length === 0 ? (
-              <p className="text-sm text-dim">Nothing to suggest for these filters.</p>
+              <p className="text-sm text-dim">{rec0.evidence?.state === "not_comparable" ? "Not compared: these models were not tried on the same prompt version, so nothing is suggested." : "Nothing to suggest for these filters."}</p>
             ) : (
               <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {suggestions.map((s) => (

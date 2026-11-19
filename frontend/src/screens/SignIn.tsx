@@ -56,7 +56,7 @@ export default function SignIn() {
   const navigate = useNavigate();
   const config = useAuthConfig();
   const [email, setEmail] = useState("");
-  const [error, setError] = useState<string | null>(searchParams.get("error") === "google" ? "Google sign-in did not finish. Please try again." : null);
+  const [error, setError] = useState<string | null>(searchParams.get("error") === "google" ? "Google sign-in did not finish. Please try again." : searchParams.get("error") === "unverified" ? "Google says this email address is not verified, so it cannot be used to sign in. Verify it with Google, or use another account." : null);
   const next = safeNext(searchParams.get("next"));
   const isMock = import.meta.env.DEV && import.meta.env.VITE_USE_MOCK === "true";
 

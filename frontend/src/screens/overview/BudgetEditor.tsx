@@ -40,7 +40,7 @@ export function BudgetAnalysisCard({ a, onClose }: { a: BudgetAnalysis; onClose:
       <p className="text-[11px] text-muted">{ESTIMATE_LABEL}</p>
       {a.belowSpent && (
         <p className="mt-2 rounded-md border border-warn/40 bg-warn/10 p-2 text-ink">
-          You have already used about {usd(a.spent)} (estimate), above this limit. The 85% and 95% warnings will not fire again this month.
+          You have already used about {usd(a.spent)} (estimate), above this limit. A warning for this new limit will be raised at the next hourly check.
         </p>
       )}
       <p className="mt-2">
@@ -192,7 +192,7 @@ export function BudgetEditor({ id, alwaysOpen = false }: { id: string; alwaysOpe
             onDiscard={d.discard}
             review={
               preview?.belowSpent ? (
-                <>You have already used about {usd(preview.spent)} (estimate), above this limit. The 85% and 95% warnings will not fire again this month.</>
+                <>You have already used about {usd(preview.spent)} (estimate), above this limit. A warning for this new limit will be raised at the next hourly check.</>
               ) : undefined
             }
           />

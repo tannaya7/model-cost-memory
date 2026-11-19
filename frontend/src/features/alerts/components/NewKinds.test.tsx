@@ -3,6 +3,8 @@ import { screen } from "@testing-library/react";
 import { renderWithProviders } from "../../../test/render";
 import { stubApi } from "../../../test/api";
 import type { Alert } from "../../../shared/api/types";
+import jobsSample from "../../../mocks/jobs.sample.json";
+import recSample from "../../../mocks/recommendation.sample.json";
 import { WithProject } from "../../../app/project";
 import Overview from "../../../screens/Overview";
 import { AlertItemCard } from "./AlertItemCard";
@@ -22,7 +24,7 @@ function alert(kind: Alert["kind"], detail: Alert["detail"], summary: string, jo
 const cases: { a: Alert; title: string; numbers: RegExp; href: string }[] = [
   {
     a: alert("TOKEN_BURST", { tokens_last_hour: 62000, usual_tokens_per_hour: 18000, top_job: "invoice-extract", top_job_tokens: 50000 }, "AI use is far above normal.", "invoice-extract"),
-    title: "Unusually high AI use",
+    title: "Usage heads-up",
     numbers: /Last hour: 62,000 tokens\. Usual hour: 18,000 tokens\./,
     href: "/p/acme/jobs/invoice-extract?tab=tokens",
   },
@@ -64,6 +66,10 @@ describe("alerts about use and spending", () => {
 
   it("lists an open new-kind alert under Needs your attention on the Overview", async () => {
     stubApi({
+      "/v1/jobs": jobsSample, // an alert comes from recorded calls, so this project has tasks with runs (and is not "waiting")
+      "/v1/jobs/invoice-extract/recommendation": recSample,
+      "/v1/jobs/ticket-classify/recommendation": recSample,
+      "/v1/jobs/receipt-scan/recommendation": recSample,
       "/v1/alerts": [cases[1].a],
       "/v1/news": { items: [], sources: [], your_models: [], updated_at: null, next_refresh_at: null },
     });

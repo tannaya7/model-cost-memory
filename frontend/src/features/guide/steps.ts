@@ -32,7 +32,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: "tasks",
     title: "AI tasks",
-    body: "An AI task is one kind of work your code asks an AI to do, such as reading invoices. Each job name in your code becomes one task.",
+    body: "An AI task is one kind of work your code asks an AI to do, such as reading invoices. The task name you put in your code decides which AI task a call belongs to.",
     later: "Once calls arrive, each task is listed here with its own cost and results.",
     target: "tasks",
   },
@@ -62,6 +62,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
 export interface GuideFlags {
   tour_seen?: boolean;
   first_results_seen?: boolean;
+  welcome_seen?: boolean;
 }
 
 /** The tour opens by itself once: for a signed-in owner, on a project with no calls yet, who has not seen it. */

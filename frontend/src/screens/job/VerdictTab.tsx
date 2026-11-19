@@ -12,6 +12,7 @@ import { Help } from "../../ui/Help";
 import { TwoStageBar } from "../../ui/NotEnoughData";
 import { confidenceWords, promisingDetails, promisingLine, promisingOf, PROMISING_ACTION, PROMISING_LABEL, TRIAL_BUDGET_NOTE, twoStage } from "../promising";
 import { evidenceSoFar } from "../shared";
+import { EvidenceBasis } from "./EvidenceBasis";
 import { buildWhy } from "./why";
 import { NOT_A_BENCHMARK, volumeWords, wrongAnswerWords } from "../forecastText";
 import { serverText } from "../../features/projects/moneyWording";
@@ -300,6 +301,7 @@ export function VerdictTab({ rec }: { rec: Recommendation }) {
             Based on {rec.evidence.n_runs.toLocaleString("en")} checked answers. Older answers count less.{" "}
             <Link to={`?tab=runs`} className="text-accent hover:underline">See the AI calls</Link>
           </p>
+          <EvidenceBasis rec={rec} />
         </Panel>
       </Reveal>
       </details>

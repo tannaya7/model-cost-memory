@@ -279,7 +279,7 @@ describe("Settings: monthly spending limit analysis", () => {
   it("a limit below what is already spent is warned about before Apply, and still allowed", async () => {
     const { project, patches } = account({ daily: series("2026-10-01", 10) });
     const user = await setLimit(userEvent.setup(), project, "100");
-    expect(await screen.findByText(/You have already used about \$160 \(estimate\), above this limit\. The 85% and 95% warnings will not fire again this month\./)).toBeInTheDocument();
+    expect(await screen.findByText(/You have already used about \$160 \(estimate\), above this limit\. A warning for this new limit will be raised at the next hourly check\./)).toBeInTheDocument();
     await apply(user);
     await card();
     expect(patches()).toHaveLength(1);

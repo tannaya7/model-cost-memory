@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { byWeekday, compareSeries, delta, monthProjection, passRate, periods, rangeLabel, splitBy, sum, toCsv, unitCosts, unpricedRuns, wastedSpend, type DayPoint } from "./metrics";
+import { byWeekday, compareSeries, delta, monthProjection, passRate, periods, rangeLabel, splitBy, sum, unitCosts, unpricedRuns, wastedSpend, type DayPoint } from "./metrics";
 
 const today = new Date("2026-11-13T15:00:00Z"); // a Friday
 const pt = (day: string, job: string, model: string, runs: number, spend: number, passed = 0, failed = 0) =>
@@ -43,11 +43,6 @@ describe("overview numbers", () => {
       { name: "invoice", value: 3.5 },
       { name: "tickets", value: 0.5 },
     ]);
-  });
-
-  it("exports CSV with quoting where a value needs it", () => {
-    const csv = toCsv([pt("2026-11-13", 'say "hi", please', "mini", 1, 0.25, 1, 0)]);
-    expect(csv).toBe('day,job,model,runs,passed,failed,spend_usd\n2026-11-13,"say ""hi"", please",mini,1,1,0,0.25\n');
   });
 
   it("labels the period", () => {

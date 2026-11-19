@@ -16,6 +16,10 @@ const Landing = lazy(() => import("./screens/Landing"));
 const SignIn = lazy(() => import("./screens/SignIn"));
 const Projects = lazy(() => import("./screens/Projects"));
 const NewProject = lazy(() => import("./screens/NewProject"));
+const Company = lazy(() => import("./screens/Company"));
+const CompanyOverview = lazy(() => import("./screens/CompanyOverview"));
+const Welcome = lazy(() => import("./screens/Welcome"));
+const JoinCompany = lazy(() => import("./screens/JoinCompany"));
 const UseKey = lazy(() => import("./screens/UseKey"));
 const Overview = lazy(() => import("./screens/Overview"));
 const Jobs = lazy(() => import("./screens/Jobs"));
@@ -62,6 +66,10 @@ const router = createBrowserRouter([
     children: [
       { path: "/projects", element: page(<Projects />) },
       { path: "/projects/new", element: page(<NewProject />) },
+      { path: "/welcome", element: page(<Welcome />) },
+      { path: "/company/:orgId", element: page(<Company />) },
+      { path: "/company/:orgId/overview", element: page(<CompanyOverview />) },
+      { path: "/join/:token", element: page(<JoinCompany />) },
     ],
   },
   {
