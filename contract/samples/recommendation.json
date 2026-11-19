@@ -5,6 +5,12 @@
     "model_version": "acme-large-2026-06-01"
   },
   "evidence": {
+    "check": {
+      "kind": "human_label",
+      "label": "Reported by your app",
+      "text": "Pass or fail was reported by your app. We cannot see how it was decided."
+    },
+    "comparison": "unpaired",
     "evidence_weight": 1032.5,
     "failing_runs": [
       {
@@ -23,13 +29,21 @@
       }
     ],
     "floor": 25.0,
-    "n_runs": 1084
+    "limitations": [],
+    "n_runs": 1084,
+    "paired": null,
+    "state": "enough",
+    "state_note": "",
+    "window_from": null,
+    "window_to": null
   },
   "forecast": null,
   "job": "invoice-extract",
   "models": [
     {
       "catalog_status": "ACTIVE",
+      "cost_p50_usd": null,
+      "cost_p90_usd": null,
       "cost_per_success_usd": 0.03502839116719243,
       "effective_n": 560.0,
       "eligible": true,
@@ -41,13 +55,19 @@
       "n_runs": 640,
       "pass_rate_high": 0.9959105982039863,
       "pass_rate_low": 0.9786541334305231,
+      "priced_runs": null,
+      "retest_runs": null,
       "shutdown_date": null,
       "status": "GOOD_ENOUGH",
+      "unpriced_runs": null,
+      "vs_current": null,
       "weighted_pass_rate": 0.990625,
       "why": "Highest pass rate we can be sure of"
     },
     {
       "catalog_status": "ACTIVE",
+      "cost_p50_usd": null,
+      "cost_p90_usd": null,
       "cost_per_success_usd": 0.003129807692307692,
       "effective_n": 380.0,
       "eligible": true,
@@ -59,13 +79,28 @@
       "n_runs": 420,
       "pass_rate_high": 0.9964533432507873,
       "pass_rate_low": 0.9746817339948289,
+      "priced_runs": null,
+      "retest_runs": null,
       "shutdown_date": null,
       "status": "GOOD_ENOUGH",
+      "unpriced_runs": null,
+      "vs_current": {
+        "against": "acme-large",
+        "confidence": 0.99,
+        "gap_points": -0.014880952380946777,
+        "high_points": 1.8780289607058,
+        "low_points": -2.4609511471311016,
+        "margin_points": 3.0,
+        "method": "unpaired",
+        "status": "GOOD_ENOUGH"
+      },
       "weighted_pass_rate": 0.9904761904761905,
       "why": "At most 3 points worse than acme-large, with high confidence (about 97.5%, one-sided)"
     },
     {
       "catalog_status": "ACTIVE",
+      "cost_p50_usd": null,
+      "cost_p90_usd": null,
       "cost_per_success_usd": 0.0009391304347826086,
       "effective_n": 21.0,
       "eligible": false,
@@ -77,8 +112,21 @@
       "n_runs": 24,
       "pass_rate_high": 0.9932789480693299,
       "pass_rate_low": 0.7816352845828939,
+      "priced_runs": null,
+      "retest_runs": null,
       "shutdown_date": null,
       "status": "BELOW_FLOOR",
+      "unpriced_runs": null,
+      "vs_current": {
+        "against": "acme-large",
+        "confidence": 0.99,
+        "gap_points": -3.2291666666666607,
+        "high_points": 0.89325830420647,
+        "low_points": -28.97034517131204,
+        "margin_points": 3.0,
+        "method": "unpaired",
+        "status": "UNSURE"
+      },
       "weighted_pass_rate": 0.9583333333333334,
       "why": "Evidence 22.5 of the 25 needed to judge it"
     }

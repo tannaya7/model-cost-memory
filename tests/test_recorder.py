@@ -34,6 +34,10 @@ def test_reads_an_anthropic_shaped_response():
     assert data == {
         "model_version": "model-a-2026-09", "tokens_in": 800, "tokens_out": 120,
         "cache_read_tokens": 300, "cache_write_tokens": 50, "output": '{"total": 12.5}',
+        # the canonical ledger keys added by usage_ledger.py (additive; the old keys are unchanged)
+        "usage_shape": "anthropic_messages",
+        "usage_raw": {"input_tokens": 800, "output_tokens": 120, "cache_read_input_tokens": 300,
+                      "cache_creation_input_tokens": 50},
     }
 
 
@@ -47,8 +51,9 @@ def test_reads_plain_dicts_and_survives_missing_fields():
     data = read_response({"model": "m", "usage": {"prompt_tokens": 5, "completion_tokens": 2},
                           "choices": [{"message": {"content": "hi"}}]})
     assert data["tokens_in"] == 5 and data["output"] == "hi"
-    assert read_response(object()) == {"model_version": None}
-    assert read_response(None) == {"model_version": None}
+    # No usage block at all: the counts are left unset and the shape says "none" (unknown, not zero).
+    assert read_response(object()) == {"model_version": None, "usage_shape": "none"}
+    assert read_response(None) == {"model_version": None, "usage_shape": "none"}
 
 
 class Server:
@@ -281,7 +286,9 @@ def test_reads_a_gemini_response_object_cached_inside_prompt_and_thoughts_as_out
 def test_reads_a_gemini_rest_dict_with_tool_use_tokens():
     data = read_response({"usageMetadata": {"promptTokenCount": 500, "toolUsePromptTokenCount": 40,
                                             "candidatesTokenCount": 10}})
-    assert data["tokens_in"] == 540 and data["tokens_out"] == 10 and data["cache_read_tokens"] == 0
+    # Tool-use prompt tokens are kept apart: Google does not document how they are billed, so they are not priced.
+    assert data["tokens_in"] == 500 and data["tokens_out"] == 10 and data["cache_read_tokens"] == 0
+    assert data["tool_use_input_tokens"] == 40 and data["usage_shape"] == "gemini"
 
 
 # --- provider usage shapes (research_notes/Provider facts retry/provider_usage_and_pricing.md) ---

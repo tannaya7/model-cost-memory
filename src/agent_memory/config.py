@@ -125,6 +125,9 @@ class Settings:
     operator_webhook_url: str = ""
     # Outbound URLs (webhooks, re-test endpoints) must be public addresses unless this is on (urls.py).
     allow_private_urls: bool = False
+    # Read the providers' own deprecation pages once a day for model notices (notices/service.py). Public pages only;
+    # nothing about any project is sent. Off with MODEL_NOTICES_ENABLED=false.
+    model_notices_enabled: bool = True
     # Abuse limits (ratelimit.py). Requests per minute per project key, and per IP for requests without
     # one; runs a project may record per UTC day; live-stream connections per IP and in all.
     rate_limit_key_per_minute: int = 1200
@@ -174,6 +177,7 @@ class Settings:
             summary_effort=os.environ.get("SUMMARY_EFFORT", cls.summary_effort),
             summary_daily_limit=_int("SUMMARY_DAILY_LIMIT", 200),
             allow_private_urls=_bool("ALLOW_PRIVATE_URLS"),
+            model_notices_enabled=os.environ.get("MODEL_NOTICES_ENABLED", "true").strip().lower() not in ("0", "false", "no"),
             operator_webhook_url=os.environ.get("OPERATOR_WEBHOOK_URL", ""),
             rate_limit_key_per_minute=_int("RATE_LIMIT_KEY_PER_MINUTE", 1200),
             rate_limit_ip_per_minute=_int("RATE_LIMIT_IP_PER_MINUTE", 120),

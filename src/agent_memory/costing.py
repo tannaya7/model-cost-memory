@@ -99,7 +99,8 @@ class Price:
     input_per_mtok: Decimal
     output_per_mtok: Decimal
     cache_read_per_mtok: Decimal
-    cache_write_per_mtok: Decimal
+    cache_write_per_mtok: Decimal  # the 5-minute write price
+    cache_write_1h_per_mtok: Decimal | None = None  # an exact 1-hour write price; None = input x WRITE_1H_FACTOR
 
     @classmethod
     def from_input_output(
@@ -131,22 +132,26 @@ FREE = Price(Decimal(0), Decimal(0), Decimal(0), Decimal(0))  # local models cos
 
 def compute_cost(
     price: Price, tokens_in: int, tokens_out: int, cache_read_tokens: int = 0, cache_write_tokens: int = 0,
-    cache_write_1h_tokens: int = 0,
+    cache_write_1h_tokens: int = 0, factor: Decimal = Decimal(1),
 ) -> Decimal:
     """Cost in US dollars, rounded to six places (the precision stored on the run).
 
     `cache_write_1h_tokens` is the part of `cache_write_tokens` written to the 1-hour cache, priced at
     2x the input price instead of the 5-minute 1.25x ("1-hour cache write 2x base input price",
-    Anthropic pricing page). It is clamped to the total writes.
+    Anthropic pricing page). It is clamped to the total writes. `factor` is a verified price modifier
+    (pricing.py: the Anthropic batch discount, the US-region multiplier); it scales the whole total before the
+    single rounding, so rounding happens once.
     """
     one_hour = max(0, min(cache_write_1h_tokens, cache_write_tokens))
     write_total = Decimal(cache_write_tokens - one_hour) * price.cache_write_per_mtok
     if one_hour:
-        write_total += Decimal(one_hour) * price.input_per_mtok * WRITE_1H_FACTOR
+        write_total += Decimal(one_hour) * (
+            price.cache_write_1h_per_mtok if price.cache_write_1h_per_mtok is not None
+            else price.input_per_mtok * WRITE_1H_FACTOR)
     total = (
         Decimal(tokens_in) * price.input_per_mtok
         + Decimal(tokens_out) * price.output_per_mtok
         + Decimal(cache_read_tokens) * price.cache_read_per_mtok
         + write_total
-    ) / MILLION
+    ) * factor / MILLION
     return total.quantize(SIX_PLACES, rounding=ROUND_HALF_UP)

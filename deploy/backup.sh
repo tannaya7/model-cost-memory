@@ -26,7 +26,10 @@ BACKUP_PING_URL="$(setting BACKUP_PING_URL)"
 ping() { [ -z "$BACKUP_PING_URL" ] || curl -fsS -m 10 --retry 3 -o /dev/null "$BACKUP_PING_URL$1" || true; }
 trap 'status=$?; [ "$status" -eq 0 ] || ping /fail' EXIT  # any failure, including an empty dump
 
+# The dumps hold customers' prompts: only the user running this script may read them (new files 600, the folder 700).
+umask 077
 mkdir -p backups
+chmod 700 backups
 file="backups/mcm-$(date +%F-%H%M).dump"
 
 docker compose exec -T db pg_dump -U memory -Fc memory > "$file"

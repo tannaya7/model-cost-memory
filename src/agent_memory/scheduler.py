@@ -13,6 +13,7 @@
   news             every hour     fetches the AI news feeds (news/); the web app can ask sooner
   token-burst      every hour     alerts when the last hour's tokens are far above the usual hour (alerts/watch.py)
   budget-alerts    daily          soft alerts at 85% and 95% of the monthly budget, and when projected over it
+  model-notices daily        reads the providers' own deprecation and pricing pages; tells projects about notices for models they use
   retirement-alerts daily         alerts when a model a project ran lately is retired or about to be
   retention        daily          clears the prompt, answer, tool calls and answer key of runs older
                                   than their project's retention (retention.py)
@@ -41,6 +42,8 @@ from sqlalchemy.pool import NullPool
 from .alerts.notifier import deliver_pending
 from .alerts.service import catalog_alerts
 from .alerts.watch import check_budgets, check_retirements, check_trial_budgets, check_token_bursts
+from .catalog.official import sync_official_prices
+from .notices.service import check_notices, sync_sources
 from .catalog.sync import fetch_price_list, sync_catalog
 from .config import Settings, check_startup, get_settings, load_dotenv_file, normalize_database_url
 from .heartbeat import LEADER, record, tracked
@@ -100,6 +103,18 @@ async def run_budget_alerts(sessions: async_sessionmaker[AsyncSession], settings
         return len(await check_budgets(session)) + len(await check_trial_budgets(session))
 
 
+async def run_model_notices(sessions: async_sessionmaker[AsyncSession], settings: Settings | None = None) -> int:
+    """Read the providers' own deprecation and pricing pages, then tell projects about notices for models they use.
+    Information only: the pricing pages only feed the "as the maker states it" label beside the catalog's price."""
+    settings = settings or get_settings()
+    if not settings.model_notices_enabled:
+        return 0
+    async with sessions() as session:
+        await sync_sources(session)
+        await sync_official_prices(session)
+        return len(await check_notices(session))
+
+
 async def run_retirement_alerts(sessions: async_sessionmaker[AsyncSession], settings: Settings | None = None) -> int:
     async with sessions() as session:
         return len(await check_retirements(session))
@@ -153,8 +168,11 @@ def build_scheduler(sessions: async_sessionmaker[AsyncSession], settings: Settin
                       args=[sessions, settings], id="catalog-sync", **common)
     scheduler.add_job(tracked("retention", run_retention), "cron", hour=4, minute=0,
                       args=[sessions, settings], id="retention", **common)
-    scheduler.add_job(tracked("budget-alerts", run_budget_alerts), "cron", hour=5, minute=0,
+    # Hourly, not daily: a threshold crossed at 06:00 is noticed within the hour. Each alert still fires once (deduped).
+    scheduler.add_job(tracked("budget-alerts", run_budget_alerts), "interval", hours=1,
                       args=[sessions, settings], id="budget-alerts", **common)
+    scheduler.add_job(tracked("model-notices", run_model_notices), "cron", hour=5, minute=15,
+                      args=[sessions, settings], id="model-notices", **common)
     scheduler.add_job(tracked("retirement-alerts", run_retirement_alerts), "cron", hour=5, minute=30,
                       args=[sessions, settings], id="retirement-alerts", **common)
     return scheduler

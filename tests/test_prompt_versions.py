@@ -27,7 +27,8 @@ def test_tagged_side_by_side_and_summary():
     c = r.comparison
     assert c.side_by_side is True
     assert "Version v2 sends about 32% fewer input tokens than Version v1." in c.summary
-    assert "Correct answers look about the same, but only 60 were checked." in c.summary
+    assert "Correct answers: not enough to tell whether they differ (80% for Version v1 and 80% for Version v2, from 60 and 60 checked answers)." in c.summary
+    assert "look about the same" not in c.summary
     for word in ("better", "worse", "saves", "because"):
         assert word not in c.summary
 
@@ -162,3 +163,28 @@ def test_f20_a_b_a_detected_names_the_live_version_as_newer():
     r = build_versions(rows)
     assert r.source == "detected" and len(r.versions) == 2
     assert (r.comparison.older, r.comparison.newer) == ("Detected version 2", "Detected version 1")
+
+
+def _version(label, checked, rate):
+    from datetime import UTC, datetime
+
+    from agent_memory.insights.prompt_versions import Version
+    from agent_memory.recommend.stats import wilson, z_for
+    low, high = wilson(rate, checked, z_for(0.95))
+    t = datetime(2026, 11, 1, tzinfo=UTC)
+    return Version(label=label, kind="tagged", first_seen=t, last_seen=t, calls=checked, typical_tokens_in=100.0,
+                   typical_tokens_out=50.0, cache_read_share=None, priced_calls=checked, unpriced_calls=0,
+                   cost_per_call=0.01, checked=checked, correct_rate=rate, rate_low=low, rate_high=high)
+
+
+def test_overlapping_ranges_are_never_called_the_same():
+    """Audit F21: 70% v 95% at 25 checked each, and 85% v 95% at 100 each, have overlapping per-version ranges
+    but are compared as a difference, so the wording follows the difference, not the overlap."""
+    from agent_memory.insights.prompt_versions import summarise
+    small = summarise(_version("v1", 25, 0.70), _version("v2", 25, 0.95))
+    assert "look about the same" not in small and "not enough to tell" not in small.split("Correct answers")[0]
+    assert "Correct answers differ" in small  # 25 each: the Newcombe interval for 70 v 95 excludes zero
+    mid = summarise(_version("v1", 100, 0.85), _version("v2", 100, 0.95))
+    assert "Correct answers differ: 85% for v1 and 95% for v2" in mid
+    unsure = summarise(_version("v1", 25, 0.85), _version("v2", 25, 0.90))
+    assert "not enough to tell whether they differ" in unsure and "same" not in unsure.split("Correct answers")[1].replace("not proof they are the same", "")

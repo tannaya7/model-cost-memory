@@ -56,7 +56,8 @@ class FakeProvider:
 @pytest.fixture
 async def world(session):
     key = generate_key()
-    session.add(Project(project_id="demo", api_key_hash=hash_key(key), retest_monthly_cap_usd=Decimal("10")))
+    session.add(Project(project_id="demo", api_key_hash=hash_key(key), retest_monthly_cap_usd=Decimal("10"),
+                        auto_retests=True))  # these tests exercise the automatic triggers, which are opt-in
     session.add(CatalogEntry(model="mini", model_version="mini", provider="acme", price_in_per_mtok=Decimal("1"),
                              price_out_per_mtok=Decimal("2")))  # $0.0012 per replayed run
     await session.flush()
@@ -186,14 +187,23 @@ async def test_re_tests_refuse_to_start_without_consent(session, world, change, 
     assert exc.value.code == code
 
 
+async def confirmed(client, headers, **body):
+    """The two steps a person takes: preview (no provider call), then start with its confirmation."""
+    preview = (await client.post("/v1/jobs/invoice/retest/preview", headers=headers, json=body)).json()
+    assert preview["can_start"] is True, preview
+    return {**body, "confirmation": preview["confirmation"]}
+
+
 async def test_without_a_provider_key_the_web_app_is_told_to_ask_for_it(client, session, world):
     key, _, _ = world
     await session.delete(await session.get(ProviderKey, "demo"))
     await session.commit()
+    preview = (await client.post("/v1/jobs/invoice/retest/preview", headers={"X-API-Key": key},
+                                 json={"candidate_model": "mini", "budget_usd": 1})).json()
+    assert preview["can_start"] is False and preview["blocked"]["code"] == "provider_key_required"
     response = await client.post("/v1/jobs/invoice/retest", headers={"X-API-Key": key},
-                                 json={"candidate_model": "mini", "budget_usd": 1})
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "provider_key_required"
+                                 json={"candidate_model": "mini", "budget_usd": 1, "confirmation": "x" * 40})
+    assert response.status_code == 409  # no confirmation is valid, so nothing starts
 
 
 async def test_the_api_queues_a_re_test_and_reports_progress_and_limits(client, engine, world):
@@ -202,11 +212,10 @@ async def test_the_api_queues_a_re_test_and_reports_progress_and_limits(client, 
     assert (await client.post("/v1/jobs/invoice/retest", headers=headers,
                               json={"candidate_model": "mini", "budget_usd": 0})).status_code == 422
     queued = (await client.post("/v1/jobs/invoice/retest", headers=headers,
-                                json={"candidate_model": "mini", "budget_usd": 1, "sample_size": 10})).json()
+                                json=await confirmed(client, headers, candidate_model="mini", budget_usd=1, sample_size=10))).json()
     assert (queued["status"], queued["runs_planned"], queued["trigger"]) == ("QUEUED", 10, "MANUAL")
-    again = await client.post("/v1/jobs/invoice/retest", headers=headers,
-                              json={"candidate_model": "mini", "budget_usd": 1})
-    assert again.json()["detail"]["code"] == "already_running"
+    again = await client.post("/v1/jobs/invoice/retest/preview", headers=headers, json={"candidate_model": "mini", "budget_usd": 1})
+    assert again.json()["blocked"]["code"] == "already_running"
 
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     assert await run_queued(sessions, settings=SETTINGS, client_factory=factory(FakeProvider())) == 1

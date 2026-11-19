@@ -33,6 +33,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from .privacy import sanitize_tool_calls
+from .usage_ledger import legacy_columns, read_usage
 
 log = logging.getLogger("agent_memory.recorder")
 
@@ -204,10 +205,6 @@ def _get(obj: Any, *path: str) -> Any:
     return obj
 
 
-def _int(value: Any) -> int:
-    return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0
-
-
 def read_response(response: Any, *, include_arguments: bool = False) -> dict[str, Any]:
     """Pull model, usage and output out of an Anthropic-, OpenAI- (Chat or Responses), DeepSeek- or
     Gemini-shaped response (object or dict).
@@ -232,60 +229,18 @@ def read_response(response: Any, *, include_arguments: bool = False) -> dict[str
     usage = _get(response, "usage")
     if usage is None:  # Gemini keeps usage under usage_metadata (SDK) or usageMetadata (REST)
         usage = _get(response, "usage_metadata") or _get(response, "usageMetadata")
-    if _get(usage, "input_tokens") is not None and _get(usage, "input_tokens_details") is not None:
-        # OpenAI Responses API (ResponseUsage). cached_tokens "counts billed reads and excludes tokens charged
-        # as writes" and both sit INSIDE input_tokens: "ordinaryInputTokens = inputTokens - cachedTokens -
-        # cacheWriteTokens" (https://developers.openai.com/api/docs/guides/prompt-caching). Reasoning tokens
-        # (output_tokens_details.reasoning_tokens) are a detail of output_tokens, so they are not added again.
-        cached = _int(_get(usage, "input_tokens_details", "cached_tokens"))
-        written = _int(_get(usage, "input_tokens_details", "cache_write_tokens"))
-        out["tokens_in"] = max(_int(_get(usage, "input_tokens")) - cached - written, 0)
-        out["tokens_out"] = _int(_get(usage, "output_tokens"))
-        out["cache_read_tokens"] = cached
-        out["cache_write_tokens"] = written
-    elif _get(usage, "input_tokens") is not None:  # Anthropic
-        out["tokens_in"] = _int(_get(usage, "input_tokens"))
-        out["tokens_out"] = _int(_get(usage, "output_tokens"))
-        out["cache_read_tokens"] = _int(_get(usage, "cache_read_input_tokens"))
-        out["cache_write_tokens"] = _int(_get(usage, "cache_creation_input_tokens"))
-        # usage.cache_creation {ephemeral_5m_input_tokens, ephemeral_1h_input_tokens}; the total
-        # cache_creation_input_tokens "equals the sum of the values in the cache_creation object"
-        # (https://platform.claude.com/docs/en/build-with-claude/prompt-caching). Absent -> 5m rate.
-        one_hour = _int(_get(usage, "cache_creation", "ephemeral_1h_input_tokens"))
-        if one_hour:
-            out["cache_write_1h_tokens"] = min(one_hour, out["cache_write_tokens"])
-    elif _get(usage, "prompt_cache_hit_tokens") is not None:
-        # DeepSeek: "prompt_tokens ... equals prompt_cache_hit_tokens + prompt_cache_miss_tokens"
-        # (https://api-docs.deepseek.com/api/create-chat-completion). Misses are the full-price input.
-        hit = _int(_get(usage, "prompt_cache_hit_tokens"))
-        miss = _get(usage, "prompt_cache_miss_tokens")
-        out["tokens_in"] = _int(miss) if miss is not None else max(_int(_get(usage, "prompt_tokens")) - hit, 0)
-        out["tokens_out"] = _int(_get(usage, "completion_tokens"))
-        out["cache_read_tokens"] = hit
-    elif _get(usage, "prompt_tokens") is not None:  # OpenAI Chat Completions and compatible servers (incl. Ollama)
-        # prompt_tokens_details.cached_tokens ("Cached tokens present in the prompt") and cache_write_tokens
-        # are both inside prompt_tokens; reasoning tokens are inside completion_tokens ("still counted in the
-        # total completion tokens for purposes of billing").
-        cached = _int(_get(usage, "prompt_tokens_details", "cached_tokens"))
-        written = _int(_get(usage, "prompt_tokens_details", "cache_write_tokens"))
-        out["tokens_in"] = max(_int(_get(usage, "prompt_tokens")) - cached - written, 0)
-        out["tokens_out"] = _int(_get(usage, "completion_tokens"))
-        out["cache_read_tokens"] = cached
-        if written:
-            out["cache_write_tokens"] = written
-    elif _get(usage, "prompt_token_count") is not None or _get(usage, "promptTokenCount") is not None:
-        # Gemini usageMetadata (SDK snake_case or REST camelCase). promptTokenCount already includes the
-        # cached tokens; thoughts are billed as output. Tool-use prompt tokens are added to input
-        # (assumption: billed as input; the docs do not state a rate).
-        def g(snake: str, camel: str) -> int:
-            return _int(_get(usage, snake)) or _int(_get(usage, camel))
-
-        cached = g("cached_content_token_count", "cachedContentTokenCount")
-        prompt = g("prompt_token_count", "promptTokenCount")
-        out["tokens_in"] = max(prompt - cached, 0) + g("tool_use_prompt_token_count", "toolUsePromptTokenCount")
-        out["tokens_out"] = g("candidates_token_count", "candidatesTokenCount") + g(
-            "thoughts_token_count", "thoughtsTokenCount")
-        out["cache_read_tokens"] = cached
+    # One read of the provider's usage block into the canonical ledger (usage_ledger.py documents which fields
+    # are inside or additional to which). The four old columns are derived from it; the ledger's own fields
+    # keep "not reported" apart from zero.
+    ledger = read_usage(usage)
+    out.update(legacy_columns(ledger))
+    out["usage_shape"] = ledger["shape"]
+    if ledger["raw"]:
+        out["usage_raw"] = ledger["raw"]
+    if ledger["fields"]["reasoning"] is not None:
+        out["reasoning_tokens"] = ledger["fields"]["reasoning"]
+    if ledger["fields"]["tool_use_input"] is not None:
+        out["tool_use_input_tokens"] = ledger["fields"]["tool_use_input"]
 
     content = _get(response, "content")  # Anthropic: a list of blocks
     choices = _get(response, "choices")  # OpenAI: a list of choices
@@ -341,14 +296,22 @@ def _read_tool_calls(content: Any, choices: Any, candidates: Any, output: Any) -
     - Gemini candidates[].content.parts[].functionCall {name, args, id?} (REST) / function_call (SDK).
     """
     calls: list[dict[str, Any]] = []
+    failed: dict[Any, bool] = {}  # MCP results by the call they answer: a result is never a call of its own
     if isinstance(content, list):
         for b in content:
             kind = _get(b, "type")
             if kind in ("tool_use", "server_tool_use"):
                 calls.append({"id": _get(b, "id"), "name": _get(b, "name"), "arguments": _get(b, "input")})
             elif kind == "mcp_tool_use":
-                calls.append({"id": _get(b, "id"), "name": _mcp_name(_get(b, "server_name"), _get(b, "name")),
-                              "arguments": _get(b, "input")})
+                call = {"id": _get(b, "id"), "name": _mcp_name(_get(b, "server_name"), _get(b, "name")), "arguments": _get(b, "input")}
+                if _get(b, "server_name"):  # provider-reported only when the response itself names the server
+                    call.update(server=_get(b, "server_name"), source="provider")
+                calls.append(call)
+            elif kind == "mcp_tool_result":
+                failed[_get(b, "tool_use_id")] = bool(_get(b, "is_error"))
+        for call in calls:
+            if call.get("source") == "provider" and call.get("id") in failed:
+                call["failed"] = failed[call["id"]]
     if isinstance(choices, list) and choices:
         for c in _get(choices[0], "message", "tool_calls") or []:
             if _get(c, "function", "name") is not None or _get(c, "custom") is None:
@@ -363,11 +326,13 @@ def _read_tool_calls(content: Any, choices: Any, candidates: Any, output: Any) -
             if kind not in _RESPONSES_CALL_TYPES:
                 continue
             name = _get(item, "name") or kind
+            call = {"id": _get(item, "call_id") or _get(item, "id"), "name": name,
+                    "arguments": _get(item, "arguments") if _get(item, "arguments") is not None else _get(item, "input")}
             if kind == "mcp_call":
-                name = _mcp_name(_get(item, "server_label"), name)
-            calls.append({"id": _get(item, "call_id") or _get(item, "id"), "name": name,
-                          "arguments": _get(item, "arguments") if _get(item, "arguments") is not None
-                          else _get(item, "input")})
+                call["name"] = _mcp_name(_get(item, "server_label"), name)
+                if _get(item, "server_label"):
+                    call.update(server=_get(item, "server_label"), source="provider", failed=_get(item, "error") is not None)
+            calls.append(call)
     if isinstance(candidates, list) and candidates:
         parts = _get(candidates[0], "content", "parts")
         for part in parts if isinstance(parts, list) else []:
@@ -429,6 +394,8 @@ class RunRecorder:
         model_version: str | None = None,
         agent: str | None = None,
         trace_id: str | None = None,
+        span_id: str | None = None,
+        parent_span_id: str | None = None,
         tools: list[Any] | None = None,
         **explicit: Any,
     ) -> None:
@@ -442,7 +409,8 @@ class RunRecorder:
 
         For multi-agent and tool-heavy apps, all optional: `agent` (which agent or role made the call,
         at most 100 characters), `trace_id` (one id shared by every call that serves the same user
-        task, at most 200) and `tools` (the tool or function definitions sent with the request).
+        task, at most 200), `span_id` (this call's own id) with `parent_span_id` (the span_id of the call that
+        started it, so a task can be shown as a tree; each at most 200) and `tools` (the tool or function definitions sent with the request).
         From `tools` the recorder sends `tools_tokens`, an ESTIMATE: len(json.dumps(tools,
         sort_keys=True)) // 4, because providers do not report the size of tool definitions
         separately (they are inside tokens_in).
@@ -456,6 +424,10 @@ class RunRecorder:
                 data["agent"] = str(agent)[:100]
             if trace_id:
                 data["trace_id"] = str(trace_id)[:200]
+            if span_id:
+                data["span_id"] = str(span_id)[:200]
+            if parent_span_id:
+                data["parent_span_id"] = str(parent_span_id)[:200]
             if tools:
                 data["tools_tokens"] = estimate_tools_tokens(tools)
             resolved = model_version or data.pop("model_version", None) or model or "unknown"

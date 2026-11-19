@@ -1,6 +1,10 @@
 """Token burst detection: is token use in the latest window far above the trailing average?
 
-Pure: it takes points and a clock and returns a verdict. Not yet wired into the scheduler.
+Pure: it takes points and a clock and returns a verdict. watch.check_token_bursts runs it every hour and states the
+window, the baseline, the factor and the volume floor in the alert.
+
+This is a usage heads-up from hour-long totals of recorded calls. It is not a prediction of provider throttling: it
+reads no provider signal and cannot see a short, second-by-second rate limit.
 """
 
 from __future__ import annotations

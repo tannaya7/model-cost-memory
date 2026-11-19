@@ -3,11 +3,12 @@
 from agent_memory.models import Base
 
 
-def test_the_seventeen_tables_exist():
+def test_the_twenty_seven_tables_exist():
     assert set(Base.metadata.tables) == {
         "projects", "jobs", "runs", "recommendations", "outbox", "model_catalog", "alerts", "retests", "provider_keys",
         "users", "flow_events", "model_prices", "usage_limits", "recommendation_summaries", "scheduler_heartbeats",
-        "news_items", "task_summaries",
+        "news_items", "task_summaries", "price_versions", "notice_sources", "model_notices", "price_sources", "official_prices",
+        "organisations", "memberships", "org_invites", "org_events", "org_notice_acks",
     }
 
 

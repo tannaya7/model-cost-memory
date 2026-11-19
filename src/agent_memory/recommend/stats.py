@@ -89,3 +89,31 @@ def assess(candidate: Sample, reference: Sample, *, margin: float, z: float) -> 
     if high < -margin:
         return "CLEARLY_WORSE"
     return "UNSURE"
+
+
+def paired_difference(both: int, only_first: int, only_second: int, neither: int, z: float) -> tuple[float, float]:
+    """Newcombe's method 10 (Stat Med 1998;17:2635-50) for p(first) - p(second) when the SAME prompts were
+    answered by both models: the two Wilson intervals combined with the correlation of the paired outcomes,
+    using the paper's continuity correction. Use it instead of `difference` only for prompts both models ran;
+    runs of different models on different requests are unpaired, and `difference` is the right method for them.
+    A positive correlation (the usual case: hard prompts are hard for both) makes this narrower than the
+    unpaired interval for the same counts, which is why pairing needs fewer answers."""
+    a, b, c, d = both, only_first, only_second, neither
+    n = a + b + c + d
+    if min(a, b, c, d) < 0:
+        raise ValueError("counts cannot be negative")
+    if n == 0:
+        return -1.0, 1.0
+    p1, p2 = (a + b) / n, (a + c) / n
+    l1, u1 = wilson(p1, n, z)
+    l2, u2 = wilson(p2, n, z)
+    spread = (a + b) * (c + d) * (a + c) * (b + d)
+    cross = a * d - b * c
+    if spread == 0 or cross < 0:
+        phi = cross / math.sqrt(spread) if spread and cross < 0 else 0.0
+    else:
+        phi = max(0.0, cross - n / 2) / math.sqrt(spread)
+    delta = p1 - p2
+    low = math.sqrt(max(0.0, (p1 - l1) ** 2 - 2 * phi * (p1 - l1) * (u2 - p2) + (u2 - p2) ** 2))
+    high = math.sqrt(max(0.0, (u1 - p1) ** 2 - 2 * phi * (u1 - p1) * (p2 - l2) + (p2 - l2) ** 2))
+    return max(-1.0, delta - low), min(1.0, delta + high)

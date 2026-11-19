@@ -57,12 +57,13 @@ def pick_slug(name: str | None, taken: set[str] | frozenset[str]) -> str:
     return candidate
 
 
-async def unique_slug_for(session: AsyncSession, owner_user_id, name: str | None) -> str:
-    """A slug for a new project that none of this owner's projects already uses.
-
-    Uniqueness is per owner today. When company accounts arrive it moves to the organisation (migration 0022).
-    """
-    rows = await session.execute(select(Project.slug).where(Project.owner_user_id == owner_user_id))
+async def unique_slug_for(session: AsyncSession, owner_user_id, name: str | None, organisation_id=None) -> str:
+    """A slug for a new project that nothing else in the same workspace uses: the company's, or the person's personal one."""
+    if organisation_id is not None:
+        where = Project.organisation_id == organisation_id
+    else:
+        where = (Project.owner_user_id == owner_user_id) & Project.organisation_id.is_(None)
+    rows = await session.execute(select(Project.slug).where(where))
     return pick_slug(name, set(rows.scalars()))
 
 
@@ -84,15 +85,17 @@ async def create_project(
     name: str | None = None,
     owner_user_id=None,
     slug: str | None = None,
+    organisation_id=None,
 ) -> tuple[Project, str]:
     """Create a project and return it with its key. The key is returned once and never stored."""
     if not PROJECT_ID.match(project_id):
         raise ValueError("project id must be 3-40 characters: lowercase letters, digits and hyphens")
     if slug is None:
         # Owned projects get a readable name from their display name; operator-made ones keep their id.
-        slug = await unique_slug_for(session, owner_user_id, name) if owner_user_id is not None else project_id
+        slug = await unique_slug_for(session, owner_user_id, name, organisation_id) if owner_user_id is not None else project_id
     project = Project(
         project_id=project_id, slug=slug, webhook_url=webhook_url, name=name or project_id, owner_user_id=owner_user_id,
+        organisation_id=organisation_id,
         retest_monthly_cap_usd=Decimal(str(retest_monthly_cap_usd)), store_tool_arguments=store_tool_arguments,
         billing_mode=billing_mode,
         webhook_secret=generate_webhook_secret(),

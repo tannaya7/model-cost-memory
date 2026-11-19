@@ -241,3 +241,13 @@ async def test_f22_input_size_band_counts_cached_tokens(client, session):
     await session.commit()
     body = (await client.get("/v1/jobs/doc/insights", headers={"X-API-Key": key})).json()
     assert [b["group"] for b in body["by_input_size"]] != ["under 8k"]
+
+
+async def test_the_welcome_flag_is_saved_per_account_and_nothing_else_is_accepted(client, dev_login):
+    await dev_login(client, "new@example.com")
+    assert (await client.get("/v1/me")).json()["ui_flags"] == {}
+    saved = await client.patch("/v1/me/ui-flags", json={"welcome_seen": True})
+    assert saved.status_code == 200 and saved.json()["ui_flags"] == {"welcome_seen": True}
+    assert (await client.patch("/v1/me/ui-flags", json={"name": "x"})).status_code == 422
+    await dev_login(client, "other@example.com")
+    assert (await client.get("/v1/me")).json()["ui_flags"] == {}

@@ -48,6 +48,7 @@ from ..pipeline.decay import current_versions, family_key
 from ..pipeline.scoring import stability_days
 from ..versions import normalize
 from .app_chosen import APP_CHOSEN_REASON, is_app_chosen
+from . import evidence as ev
 from .promising import Group, Promising, is_promising, needed_per_model, weighted, ONE_SIDED_95
 from .stats import Sample, assess, confidence_words, difference, wilson, z_for
 
@@ -74,6 +75,12 @@ class ModelInput:
     shutdown_date: date | None = None
     catalog_note: str | None = None  # set when providers disagree on the model's shutdown
     history: list[Group] | None = None  # checked answers over time, only for the Promising level
+    # How the counted runs break down (None = not measured, never 0): drives the compare chart's "missing data" notes.
+    priced_runs: int | None = None
+    unpriced_runs: int | None = None
+    retest_runs: int | None = None  # of the counted runs, how many were re-tests (still the user's own prompts)
+    cost_p50_usd: float | None = None  # typical call (median) over the last SPREAD_DAYS days; needs MIN_SPREAD_RUNS
+    cost_p90_usd: float | None = None  # the expensive tail: 1 call in 10 costs at least this
 
 
 @dataclass
@@ -388,6 +395,22 @@ class JobRecommendation:
     settings: Settings
     run_ids: list = field(default_factory=list)  # every counted run: what a stored verdict rests on
     forecast: Forecast | None = None
+    check_kind: str = ""
+    window_from: datetime | None = None  # first and last checked answer counted
+    window_to: datetime | None = None
+    state: str = "enough"  # evidence.State: enough / not_enough / not_comparable / no_recommendation
+    state_note: str = ""
+    limitations: list[str] = field(default_factory=list)
+    paired: ev.PairedEvidence | None = None  # same prompts through both models, when re-tests made pairs
+
+
+def _spread_fields(s: dict | None) -> dict:
+    """The breakdown counts, and the cost percentiles only when enough priced calls stand behind them."""
+    if not s:
+        return {}
+    enough = s["w"] >= MIN_SPREAD_RUNS and s.get("p50") is not None
+    return {"priced_runs": s["n"] - s["unpriced"], "unpriced_runs": s["unpriced"], "retest_runs": s["retest"],
+            "cost_p50_usd": float(s["p50"]) if enough else None, "cost_p90_usd": float(s["p90"]) if enough else None}
 
 
 def _weighted(s: str) -> str:
@@ -439,6 +462,26 @@ FROM buckets
 GROUP BY 1, 2, 3, 4
 """).bindparams(bindparam("now", type_=TIMESTAMP(timezone=True)), bindparam("job", type_=UUID(as_uuid=True)),
                 bindparam("s_current", type_=Float), bindparam("s_superseded", type_=Float))
+
+
+SPREAD_DAYS = 60
+MIN_SPREAD_RUNS = 20  # under this many priced calls a percentile says nothing
+SPREAD = text("""
+SELECT model, model_version, effort,
+       count(*) AS n,
+       count(*) FILTER (WHERE cost_usd IS NULL) AS unpriced,
+       count(*) FILTER (WHERE run_kind = 'RETEST') AS retest,
+       count(*) FILTER (WHERE cost_usd IS NOT NULL AND created_at > :since) AS windowed,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY cost_usd::float8)
+           FILTER (WHERE cost_usd IS NOT NULL AND created_at > :since) AS p50,
+       percentile_cont(0.9) WITHIN GROUP (ORDER BY cost_usd::float8)
+           FILTER (WHERE cost_usd IS NOT NULL AND created_at > :since) AS p90
+FROM runs
+WHERE job_id = :job AND outcome IN ('PASS', 'FAIL') AND state NOT IN ('ARCHIVED', 'INGESTION_FAILED')
+  AND invalid_at IS NULL AND created_at <= :now
+GROUP BY 1, 2, 3
+""").bindparams(bindparam("now", type_=TIMESTAMP(timezone=True)), bindparam("since", type_=TIMESTAMP(timezone=True)),
+                bindparam("job", type_=UUID(as_uuid=True)))
 
 
 @dataclass
@@ -496,6 +539,19 @@ async def recommend(
     for m, v, e, at, n, passes in hist_rows:
         history[option_name(family_key(m, v), e)].append(Group(at=at, n=int(n), passes=int(passes)))
 
+    # Counts and cost percentiles per option. Percentiles cannot be merged across versions, so the version with the
+    # most priced calls in the window speaks for the option (the compare page says "the most-used version").
+    spread: dict[str, dict] = {}
+    for sm, sv, se, sn, sun, sre, sw, p50, p90 in (
+        await session.execute(SPREAD, {"job": job.job_id, "now": now, "since": now - timedelta(days=SPREAD_DAYS)})
+    ).all():
+        s = spread.setdefault(option_name(family_key(sm, sv), se), {"n": 0, "unpriced": 0, "retest": 0, "w": -1})
+        s["n"] += int(sn)
+        s["unpriced"] += int(sun)
+        s["retest"] += int(sre)
+        if int(sw) > s["w"]:
+            s["w"], s["p50"], s["p90"] = int(sw), p50, p90
+
     # One entry per option: a model family, at the reasoning effort its runs name (options.py).
     families: dict[str, _Family] = defaultdict(_Family)
     for r in rows:
@@ -547,6 +603,7 @@ async def recommend(
             mean_cost_usd=mean_cost,
             catalog_status=life.status, shutdown_date=life.shutdown_date, catalog_note=life.note,
             history=history.get(name),
+            **_spread_fields(spread.get(name)),
         ))
     advised = (
         await session.execute(
@@ -559,6 +616,49 @@ async def recommend(
         margin=settings.tolerance_points, confidence=settings.confidence_level,
         switch_confidence=settings.switch_confidence, advised=advised, now=now, stability_days=stab[False],
     )
+
+    # Could the two models be compared fairly? Only ever tried on different prompt versions means a difference
+    # could be the prompt. Then no move is advised (evidence.not_comparable); the verdict becomes HOLD.
+    versions_by_option: dict[str, set[str]] = defaultdict(set)
+    for m, v, e, pv in (
+        await session.execute(
+            select(Run.model, Run.model_version, Run.effort, Run.prompt_version)
+            .where(*_counted(job), Run.prompt_version.is_not(None)).distinct()
+        )
+    ).all():
+        versions_by_option[option_name(family_key(m, v), e)].add(pv)
+    moving = decision.recommended.model if decision.recommended else None
+    cur_name = decision.current.model if decision.current else None
+    rivals = [n for n in (moving, decision.reference.model if decision.reference else None,
+                          decision.promising.model if decision.promising else None, *decision.retest_candidates)
+              if n and n != cur_name]
+    unfair = next((r for r in (ev.not_comparable(versions_by_option, cur_name, n) for n in rivals) if r), None)
+    if unfair and decision.verdict in ("DOWNGRADE", "SWITCH"):
+        decision.warnings.append(unfair)
+        decision.verdict, decision.recommended = "HOLD", decision.current
+        decision.next_step = "Run both models on the same prompt version, then re-check"
+
+    # The window the checked answers span, and pairs: re-tests replay real prompts, so a candidate and the model
+    # in use can have answered the SAME prompts, which is compared as pairs (evidence.paired_evidence).
+    win = (await session.execute(
+        select(func.min(Run.created_at), func.max(Run.created_at)).where(*_counted(job), Run.created_at <= now)
+    )).one()
+    other = next((n for n in (moving if moving != cur_name else None,
+                              decision.promising.model if decision.promising else None,
+                              *decision.retest_candidates) if n and n != cur_name), None)
+    paired = None
+    if cur_name and other:
+        outcomes: dict[str, dict[str, bool]] = defaultdict(dict)
+        hashes = select(Run.prompt_hash).where(*_counted(job), Run.run_kind == "RETEST")
+        for h, m, v, e, o in (
+            await session.execute(
+                select(Run.prompt_hash, Run.model, Run.model_version, Run.effort, Run.outcome)
+                .where(*_counted(job), Run.prompt_hash.in_(hashes), Run.created_at <= now)
+                .order_by(Run.created_at)  # the latest answer to a prompt stands
+            )
+        ).all():
+            outcomes[option_name(family_key(m, v), e)][h] = o == "PASS"
+        paired = ev.paired_evidence(other, cur_name, outcomes, z_for(settings.confidence_level))
 
     # The monthly volume is the calls that ran on the model in use, not every call of the job: calls on
     # the cheaper candidate itself are not spend the switch would change.
@@ -586,8 +686,21 @@ async def recommend(
         )
     ).all() if shown_versions else []
     run_ids = (await session.execute(select(Run.run_id).where(*_counted(job)))).scalars().all() if with_run_ids else []
+    n_all = sum(f.n_runs for f in families.values())
+    basis = ev.basis_for(job.check_kind)
+    window_days = (win[1] - win[0]).total_seconds() / 86400.0 if win[0] and win[1] else None
+    eff = [m.sample.effective_n for m in decision.models if m.sample]
+    ref = decision.reference
+    state, state_note = ev.classify(
+        decision.verdict, current_known=decision.current is not None,
+        app_chosen=bool(decision.current and is_app_chosen(decision.current.model)),
+        reference_passes_none=bool(ref and ref.sample and ref.sample.pass_rate <= 0),
+        open_questions=any(m.status in ("UNSURE", "BELOW_FLOOR") for m in decision.models if m is not decision.current)
+        or bool(decision.retest_candidates),
+        not_comparable_reason=unfair,
+    )
     return JobRecommendation(
-        job=job.name, decision=decision, n_runs=sum(f.n_runs for f in families.values()),
+        job=job.name, decision=decision, n_runs=n_all,
         evidence_weight=sum(f.total for f in families.values()),
         failing_runs=[
             FailingRun(r.run_id, family_key(r.model, r.model_version), r.model_version, r.outcome_reason, r.created_at)
@@ -595,4 +708,8 @@ async def recommend(
         ],
         computed_at=now, settings=settings, run_ids=list(run_ids),
         forecast=forecast(decision, runs_per_month, confidence=settings.confidence_level),
+        check_kind=job.check_kind, window_from=win[0], window_to=win[1], state=state, state_note=state_note,
+        limitations=ev.limitations(unpaired=paired is None, effective_n=sum(eff) if eff else None, n_runs=n_all,
+                                   window_days=window_days, basis=basis),
+        paired=paired,
     )

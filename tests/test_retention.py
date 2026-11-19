@@ -86,7 +86,9 @@ async def test_clearing_works_in_batches(session):
 
 async def test_re_tests_never_pick_a_run_whose_prompt_was_cleared(session):
     job = await _project(session, "acme")
-    session.add_all([_run(job, 100), _run(job, 1)])
+    recent = _run(job, 1)
+    recent.tool_calls = None  # replays leave out runs that used tools, so this one must not have any
+    session.add_all([_run(job, 100), recent])
     await session.commit()
     await clear_old_content(session, now=NOW)
     sources = await sample_sources(session, job, "big", 10)

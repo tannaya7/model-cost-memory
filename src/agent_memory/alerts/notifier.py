@@ -62,10 +62,25 @@ def sign_v2(secret: str, timestamp: str, body: bytes) -> str:
     return "sha256=" + hmac.new(secret.encode(), timestamp.encode() + b"." + body, hashlib.sha256).hexdigest()
 
 
+def verify_v2(secret: str, timestamp: str, body: bytes, signature: str, *, now: float | None = None,
+              tolerance: int = TIMESTAMP_TOLERANCE_SECONDS) -> bool:
+    """What a receiver should do with X-MCM-Timestamp and X-MCM-Signature-V2: true only if the timestamp is a whole number of
+    seconds within `tolerance` of the receiver's clock (past or future) AND the signature matches, compared in constant time.
+    A captured request replayed after the window, or with its timestamp edited, fails. Inside the window a replay still passes:
+    a receiver that must refuse even those keeps the alert_id values it has seen."""
+    if not timestamp.isascii() or not timestamp.isdigit():
+        return False
+    clock = datetime.now(UTC).timestamp() if now is None else now
+    if abs(clock - int(timestamp)) > tolerance:
+        return False
+    return hmac.compare_digest(sign_v2(secret, timestamp, body), signature)
+
+
 KIND_LABELS = {
     "VERSION_REGRESSION": "Regression after a model upgrade",
     "SILENT_DROP": "Pass rate dropped with no version change",
     "MODEL_DEPRECATED": "Recommended model is being retired",
+    "MODEL_NOTICE": "Provider notice about a model you use",
     "TOKEN_BURST": "Unusual token use",
     "BUDGET": "Monthly budget",
     "TRIAL_BUDGET": "Budget for trials on a new model",
@@ -120,6 +135,11 @@ async def deliver_pending(
                    # A subscription project pays a flat price, so an old money alert (BUDGET, which also carries
                    # the PROJECTED level) is never sent out in dollars. TRIAL_BUDGET stays: trials spend real money.
                    ~((Alert.kind == "BUDGET") & (Project.billing_mode == "subscription")),
+                   # Budget alerts are always shown in the app; they are sent to the webhook only if the owner opted in.
+                   ~((Alert.kind == "BUDGET") & (Project.budget_alert_webhook.is_(False))),
+                   # Model notices (and the older price-list retirement alerts) are always shown in the app and are sent
+                   # to the webhook only if the owner opted in.
+                   ~(Alert.kind.in_(("MODEL_NOTICE", "MODEL_RETIRING", "MODEL_DEPRECATED")) & (Project.notice_alert_webhook.is_(False))),
                    (Alert.next_attempt_at.is_(None)) | (Alert.next_attempt_at <= now))
             .order_by(Alert.created_at).limit(BATCH).with_for_update(of=Alert, skip_locked=True)
         )

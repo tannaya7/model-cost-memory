@@ -10,7 +10,6 @@ Constants marked "our choice" are not from a provider or a vendor doc; they are 
 
 from __future__ import annotations
 
-import calendar
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -19,7 +18,8 @@ from sqlalchemy import Float, cast, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..catalog.lifecycle import lifecycles, most_used
-from ..models import Alert, Job, Project, Run
+from ..models import Alert, Job, ModelNotice, NoticeSource, Project, Run
+from ..insights.projection import WINDOW_DAYS, month_projection
 from ..options import split_option
 from ..versions import normalize
 from .burst import detect_token_burst
@@ -27,15 +27,21 @@ from .service import raise_alert
 
 # Token burst. Every number here is our choice: the research verified only that a heads-up with a volume
 # floor is wanted, not the values.
-BURST_WINDOW_MINUTES = 60
-BURST_BASELINE_WINDOWS = 24
+BURST_WINDOW_MINUTES = 60  # the measurement window: one hour of recorded calls
+BURST_BASELINE_WINDOWS = 24  # compared with the average hour of the 24 hours before it
 BURST_FACTOR = 3.0  # the latest hour must be more than 3x the usual hour
-MIN_BURST_TOKENS = 50_000  # our choice: an hour under this many tokens is never a burst, however quiet before
+MIN_BURST_TOKENS = 50_000  # the volume floor: an hour under this many tokens is never reported, however quiet before
+# A usage heads-up, not a forecast of provider throttling. It sees hour-long totals of the calls this app recorded. It
+# cannot see a provider's rate limits or the second-by-second token bucket a provider may apply, and no provider signal
+# is read here, so a short spike that a provider limits is not something it promises to notice.
+BURST_RULE = (f"A usage heads-up: the last {BURST_WINDOW_MINUTES} minutes of recorded calls used more than {BURST_FACTOR:g}x the "
+              f"average hour of the {BURST_BASELINE_WINDOWS} hours before, and at least {MIN_BURST_TOKENS:,} tokens. "
+              "It is not a prediction that your provider will limit you.")
 SUPPRESS = timedelta(hours=24)  # LiteLLM's budget-alert TTL is 86,400 s; we use 24 hours for all three kinds
 
 # Budget. 85% and 95% of actual spend with 24-hour dedupe is LiteLLM's documented behaviour.
 BUDGET_LEVELS = (85, 95)
-PROJECTION_DAYS = 7  # our choice: average of the last 7 full days; needs 7 days of data (AWS: no forecast on short history)
+# The forecast rules (7 full days, at least 5 with spend, paused after 48 hours of silence) live in insights/projection.py.
 
 # Retirement. 60 days ahead and 30 days of recent use are our choices (60 echoes Anthropic's minimum notice).
 RETIRING_WITHIN_DAYS = 60
@@ -95,9 +101,12 @@ async def check_token_bursts(session: AsyncSession, *, now: datetime | None = No
             session, job, "TOKEN_BURST", f"TOKEN_BURST|{now:%Y-%m-%dT%H}",
             {"tokens_last_hour": verdict.latest_tokens, "usual_tokens_per_hour": usual,
              "top_job": job.name, "top_job_tokens": top_tokens,
-             "summary": f"Your AI calls used {verdict.latest_tokens:,} tokens in the last hour, against about "
-                        f"{usual:,} in a usual hour. The AI task that used the most was {job.name} "
-                        f"({top_tokens:,} tokens)."},
+             "window_minutes": BURST_WINDOW_MINUTES, "baseline_windows": BURST_BASELINE_WINDOWS,
+             "factor": BURST_FACTOR, "floor_tokens": MIN_BURST_TOKENS, "heads_up": True,
+             "summary": f"Usage heads-up: your AI calls used {verdict.latest_tokens:,} tokens in the last hour, against "
+                        f"about {usual:,} in a usual hour (the average of the 24 hours before). The AI task that used "
+                        f"the most was {job.name} ({top_tokens:,} tokens). This compares your own recorded usage; it is "
+                        f"not a prediction that your provider will limit you, and it cannot see short provider-side limits."},
             now=now)
         if alert:
             raised.append(alert)
@@ -107,85 +116,95 @@ async def check_token_bursts(session: AsyncSession, *, now: datetime | None = No
 
 # ---------------------------------------------------------------- monthly budget
 
-def month_bounds(now: datetime) -> tuple[datetime, datetime]:
-    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    return start, start + timedelta(days=calendar.monthrange(now.year, now.month)[1])
-
-
-async def _spend(session: AsyncSession, project_id: str, start: datetime, end: datetime) -> Decimal:
-    """Priced spend of the app's own PRODUCTION calls (the same runs the Overview counts; re-test and shadow calls are not the app's spend, trials are counted by the trial cap) in [start, end). Unpriced runs (cost NULL) are not counted, never treated as free."""
-    return Decimal((await session.execute(
-        select(func.coalesce(func.sum(Run.cost_usd), 0))
-        .where(Run.project_id == project_id, Run.run_kind == "PRODUCTION", Run.cost_usd.is_not(None),
+async def _unpriced(session: AsyncSession, project_id: str, start: datetime, end: datetime) -> int:
+    """Production calls this month whose cost is unknown: they are in no spend figure, and a budget alert says so."""
+    return int((await session.execute(
+        select(func.count(Run.run_id))
+        .where(Run.project_id == project_id, Run.run_kind == "PRODUCTION", Run.cost_usd.is_(None),
                Run.created_at >= start, Run.created_at < end)
     )).scalar_one())
 
 
-async def _projected(
-    session: AsyncSession, project_id: str, spent: Decimal, now: datetime, end: datetime
-) -> Decimal | None:
-    """Spent so far plus the last 7 full UTC days' average per day for each remaining day; None without 7 days of data."""
-    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    first = (await session.execute(
-        select(func.min(Run.created_at)).where(Run.project_id == project_id, Run.run_kind == "PRODUCTION",
-                                               Run.cost_usd.is_not(None))
-    )).scalar_one()
-    # Enough data = the first priced run falls on the UTC day 7 days ago or earlier (the web app's rule: the
-    # day itself counts). The first, partial day counts as a full day in the average (can under-state by up to 1/7).
-    if first is None or first >= today - timedelta(days=PROJECTION_DAYS - 1):
-        return None  # under 7 days of data: no forecast (our choice, after AWS's no-forecast-on-short-history rule)
-    week = await _spend(session, project_id, today - timedelta(days=PROJECTION_DAYS), today)
-    remaining_days = Decimal(str((end - now).total_seconds() / 86400))
-    return spent + week / PROJECTION_DAYS * remaining_days
+def basis_note(unpriced: int, mode: str = "per_use") -> str:
+    """How a budget figure was worked out, in a sentence the alert carries (so a figure is never read as the bill).
+    For a project that pays per use AND by subscription, the figure also covers calls the subscription pays for."""
+    gap = (f" {unpriced:,} call{'s' if unpriced != 1 else ''} with no known price {'are' if unpriced != 1 else 'is'} "
+           "not counted.") if unpriced else ""
+    mixed = (" It includes calls a subscription may cover, at list price, so it can be higher than what you are "
+             "billed per use.") if mode == "both" else ""
+    return f" This is an estimate from recorded calls at public list prices, not your bill.{mixed}{gap}"
+
+
+def _money(x: Decimal | float) -> str:
+    return f"${float(x):,.2f}"
 
 
 async def check_budgets(session: AsyncSession, *, now: datetime | None = None) -> list[Alert]:
-    """Soft alerts only. The highest of 85%/95% crossed fires once per level per month; a projected-over
-    alert fires once per month. The job runs daily, so no kind repeats within 24 hours except a higher level."""
+    """Soft alerts only: nothing is ever blocked, throttled or changed. Two separate kinds of alert:
+
+    ACTUAL  one per threshold the owner chose (default 85% and 95%) of the budget, when spend that has already happened
+            crosses it. The highest threshold crossed fires once per month for that budget; a higher one fires later.
+    PROJECTED  a forecast, not a fact: raised once a month when even the LOW end of the forecast range is above the
+            budget, and only if the owner left that warning on. No forecast is made on a short or sparse history.
+
+    The month and its days are in the project's own timezone. A change of budget starts fresh (the budget is part of
+    the dedupe key). Subscription projects have no dollar alerts. Alerts always appear in the app; where they are also
+    sent is decided by the owner (notifier.deliver_pending)."""
     now = now or datetime.now(UTC)
-    start, end = month_bounds(now)
-    month = f"{now:%Y-%m}"
     raised: list[Alert] = []
     projects = (await session.execute(select(Project).where(
         Project.monthly_budget_usd.is_not(None), Project.billing_mode != "subscription"))).scalars().all()
     # A subscription pays a flat fee, so a dollar spending limit means nothing there: the limit is kept, no alert fires.
     for project in projects:
         budget = Decimal(project.monthly_budget_usd)
-        spent = await _spend(session, project.project_id, start, now + timedelta(microseconds=1))
+        proj = await month_projection(session, project, now)
+        start = proj.period_start
+        spent = proj.actual_usd
         top = (await session.execute(
             select(Run.job_id).where(Run.project_id == project.project_id, Run.run_kind == "PRODUCTION",
-                                     Run.cost_usd.is_not(None), Run.created_at >= start)
+                                     Run.cost_usd.is_not(None), Run.created_at >= start, Run.created_at <= now)
             .group_by(Run.job_id).order_by(func.sum(Run.cost_usd).desc()).limit(1)
         )).scalar_one_or_none()
         if top is None:
             continue  # no priced spend this month, nothing to say
         job = await session.get(Job, top)
         percent = spent / budget * 100
-        crossed = [lv for lv in BUDGET_LEVELS if percent >= lv]
+        note = basis_note(proj.unpriced_runs, project.billing_mode or "per_use")
+        where = f"in {proj.month} ({proj.timezone})"
+        levels = sorted(project.budget_alert_levels if project.budget_alert_levels is not None else BUDGET_LEVELS)
+        crossed = [lv for lv in levels if percent >= lv]
+        stamp = f"{budget:f}"  # a new budget re-arms the thresholds
         if crossed:
             level = max(crossed)
-            key = f"BUDGET|{level}|{month}"  # once per level per month, whether or not it was resolved
+            key = f"BUDGET|{level}|{proj.month}|{stamp}"  # once per level per month and budget, resolved or not
             if not await _alerted(session, project.project_id, "BUDGET", start, key):
                 alert = await raise_alert(
                     session, job, "BUDGET", key,
-                    {"level": str(level), "month": month, "budget_usd": float(budget), "spent_usd": float(spent),
-                     "summary": f"You have used {int(percent)}% of your ${float(budget):,.2f} monthly AI "
-                                f"budget (${float(spent):,.2f} so far this month). Nothing is blocked; this is "
-                                f"a heads-up, and provider cost data can lag a little."},
+                    {"level": str(level), "kind": "actual", "month": proj.month, "timezone": proj.timezone,
+                     "budget_usd": float(budget), "spent_usd": float(spent), "currency": proj.currency,
+                     "unpriced_runs": proj.unpriced_runs,
+                     "summary": f"You have used {int(percent)}% of your {_money(budget)} monthly AI budget "
+                                f"({_money(spent)} spent so far {where}). This is spend that has already happened. "
+                                f"Nothing is blocked; this is a heads-up, and the newest calls may not be counted "
+                                f"yet.{note}"},
                     now=now)
                 if alert:
                     raised.append(alert)
-        projected = await _projected(session, project.project_id, spent, now, end)
-        if projected is not None and projected > budget:
-            key = f"BUDGET|PROJECTED|{month}"
+        if project.budget_alert_projected is not False and proj.state == "ok" and proj.vs_budget == "over":
+            key = f"BUDGET|PROJECTED|{proj.month}|{stamp}"
             if not await _alerted(session, project.project_id, "BUDGET", start, key):  # once a month
                 alert = await raise_alert(
                     session, job, "BUDGET", key,
-                    {"level": "PROJECTED", "month": month, "budget_usd": float(budget), "spent_usd": float(spent),
-                     "projected_usd": float(projected),
-                     "summary": f"At the pace of the last {PROJECTION_DAYS} days, this month's AI spend is "
-                                f"heading for about ${float(projected):,.2f}, over your ${float(budget):,.2f} "
-                                f"budget (${float(spent):,.2f} so far). Nothing is blocked."},
+                    {"level": "PROJECTED", "kind": "projected", "month": proj.month, "timezone": proj.timezone,
+                     "budget_usd": float(budget), "spent_usd": float(spent), "currency": proj.currency,
+                     "projected_usd": float(proj.projected_likely_usd),
+                     "projected_low_usd": float(proj.projected_low_usd), "projected_high_usd": float(proj.projected_high_usd),
+                     "unpriced_runs": proj.unpriced_runs,
+                     "summary": f"This is a forecast, not spend that has happened. At the pace of the last "
+                                f"{WINDOW_DAYS} full days, {proj.month} ({proj.timezone}) is heading for "
+                                f"{_money(proj.projected_low_usd)} to {_money(proj.projected_high_usd)} (likely "
+                                f"{_money(proj.projected_likely_usd)}), even the low end over your {_money(budget)} budget "
+                                f"({_money(spent)} spent so far). Nothing is blocked.{note}"},
                     now=now)
                 if alert:
                     raised.append(alert)
@@ -238,6 +257,14 @@ def _day(d: date) -> str:
     return f"{d:%d %b %Y}"
 
 
+async def _has_official_notice(session: AsyncSession, model: str) -> bool:
+    """Is there a listed notice for this exact model on a provider page that has been read successfully?"""
+    return (await session.execute(
+        select(ModelNotice.notice_id).join(NoticeSource, NoticeSource.source_id == ModelNotice.source_id)
+        .where(ModelNotice.model == model, ModelNotice.listed.is_(True), NoticeSource.last_ok_at.is_not(None)).limit(1)
+    )).first() is not None
+
+
 async def check_retirements(session: AsyncSession, *, now: datetime | None = None) -> list[Alert]:
     """MODEL_RETIRING for a project when a model it ran in the last 30 days is retired or has a shutdown
     date within 60 days; once per model and shutdown date. Dates read "not before": Google's table dates
@@ -261,6 +288,8 @@ async def check_retirements(session: AsyncSession, *, now: datetime | None = Non
         soon = life.shutdown_date is not None and life.shutdown_date <= today + timedelta(days=RETIRING_WITHIN_DAYS)
         if not (life.status == "RETIRED" or (life.status == "DEPRECATED" and soon)):
             continue
+        if await _has_official_notice(session, name):
+            continue  # the provider's own page says something about it: that notice is the one to read
         when = life.shutdown_date.isoformat() if life.shutdown_date else "retired"
         key = f"MODEL_RETIRING|{name}|{when}"
         if await _alerted(session, project_id, "MODEL_RETIRING", None, key):
@@ -270,10 +299,12 @@ async def check_retirements(session: AsyncSession, *, now: datetime | None = Non
             text = (f"{name} has been retired by its provider"
                     + (f" (shutdown date: {_day(life.shutdown_date)})" if life.shutdown_date else "")
                     + f". Your AI task {job.name} ran it in the last {RECENT_USE_DAYS} days. "
-                      "Check your provider's notice and plan a move to another model.")
+                      "This comes from a public price list (a third-party list, not the provider's own notice): "
+                      "check your provider's own page. Nothing is changed for you.")
         else:
             text = (f"{name} is being retired, not before {_day(life.shutdown_date)}. Your AI task {job.name} "
-                    f"ran it in the last {RECENT_USE_DAYS} days. Check your provider's notice for the exact date.")
+                    f"ran it in the last {RECENT_USE_DAYS} days. This comes from a public price list (a third-party list, "
+                    "not the provider's own notice): check your provider's own page for the exact date. Nothing is changed for you.")
         alert = await raise_alert(
             session, job, "MODEL_RETIRING", key,
             {"model": name, "status": life.status,

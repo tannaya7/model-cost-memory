@@ -148,3 +148,17 @@ async def test_migration_0021_billing_mode_defaults_to_per_use_and_is_checked(se
     with pytest.raises(IntegrityError):
         await session.execute(text("UPDATE projects SET billing_mode = 'free' WHERE project_id = 'plain'"))
     await session.rollback()
+
+
+async def test_migration_0023_ledger_columns_are_null_by_default_and_the_shape_is_checked(session):
+    cols = {r[0] for r in (await session.execute(text(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'runs' AND column_name IN "
+        "('usage_shape','usage_raw','reasoning_tokens','tool_use_input_tokens')"))).all()}
+    assert cols == {"usage_shape", "usage_raw", "reasoning_tokens", "tool_use_input_tokens"}
+    defaults = (await session.execute(text(
+        "SELECT count(*) FROM information_schema.columns WHERE table_name = 'runs' AND column_name IN "
+        "('usage_shape','usage_raw','reasoning_tokens','tool_use_input_tokens') AND column_default IS NOT NULL"))).scalar_one()
+    assert defaults == 0  # NULL = not reported; a default would turn "unknown" into a value
+    checks = (await session.execute(text(
+        "SELECT count(*) FROM pg_constraint WHERE conname = 'runs_usage_shape_check'"))).scalar_one()
+    assert checks == 1

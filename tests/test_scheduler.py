@@ -33,7 +33,7 @@ def test_the_scheduler_has_all_its_maintenance_jobs():
     jobs = {j.id: j for j in scheduler.get_jobs()}
     assert set(jobs) == {"outbox-janitor", "decay", "consolidation", "regression", "alert-delivery", "retests",
                          "retest-unsure", "catalog-sync", "retention", "news", "token-burst", "budget-alerts",
-                         "retirement-alerts"}  # the start-up sync is called directly
+                         "retirement-alerts", "model-notices"}  # the start-up sync is called directly
     assert all(jobs[name].max_instances == 1
                for name in ("outbox-janitor", "decay", "consolidation", "regression", "alert-delivery", "catalog-sync"))
     assert jobs["decay"].trigger.interval.total_seconds() == 3600

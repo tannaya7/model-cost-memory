@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Job, Run
-from ..recommend.stats import wilson
+from ..recommend.stats import Sample, difference, wilson, z_for
 from .prompts import common_prefix_len
 
 DETECT_RUN = 5  # a new start must show up in this many calls in a row to count
@@ -193,15 +193,19 @@ def summarise(old: Version, new: Version) -> str:
             sentences.append(f"The list-price cost per call is about {round(abs(change) * 100)}% {'lower' if change < 0 else 'higher'}.")
     if old.correct_rate is None or new.correct_rate is None:
         sentences.append("There are not enough checked answers yet to compare correct answers.")
-    elif max(old.rate_low or 0, new.rate_low or 0) <= min(old.rate_high or 1, new.rate_high or 1):
-        n = min(old.checked, new.checked)
-        tail = f", but only {n} were checked" if n < 100 else f", from {old.checked} and {new.checked} checked answers"
-        sentences.append(f"Correct answers look about the same{tail}.")
     else:
-        sentences.append(
-            f"Correct answers differ: {old.correct_rate:.0%} for {old.label} and {new.correct_rate:.0%} for {new.label}, "
-            f"from {old.checked} and {new.checked} checked answers."
-        )
+        # Compared as a difference (Newcombe), never by whether the two ranges overlap: overlapping ranges can still
+        # hide a real gap, and a range that includes zero is "not enough to tell", not "the same".
+        z = z_for(0.95)
+        low, high = difference(Sample(new.correct_rate, new.checked, new.checked),
+                               Sample(old.correct_rate, old.checked, old.checked), z)
+        rates = (f"{old.correct_rate:.0%} for {old.label} and {new.correct_rate:.0%} for {new.label}, "
+                 f"from {old.checked} and {new.checked} checked answers")
+        if low > 0 or high < 0:
+            sentences.append(f"Correct answers differ: {rates}.")
+        else:
+            sentences.append(f"Correct answers: not enough to tell whether they differ ({rates}). "
+                             "A range that includes zero is not proof they are the same.")
     return " ".join(sentences)
 
 

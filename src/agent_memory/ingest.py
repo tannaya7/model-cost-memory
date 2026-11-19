@@ -19,12 +19,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .checks import CheckResult, Outcome, check_run
 from .costing import Price, compute_cost
+from .pricing import PARTLY_PRICED, PRICED, modifier_factor, resolve_price
+from .usage_ledger import sanitize_raw
 from .pipeline import flow
 from .options import normalize_effort
-from .models import CatalogEntry, Job, OutboxRow, Project, ProviderPrice, Run
+from .models import Job, OutboxRow, Project, Run
 from .privacy import sanitize_tool_calls
 from .schemas import JobCreate, RunCreate
-from .versions import normalize
 
 
 log = logging.getLogger("agent_memory.ingest")
@@ -75,38 +76,8 @@ async def update_job_description(session: AsyncSession, job: Job, description: s
 async def find_price(
     session: AsyncSession, model: str, model_version: str, provider: str | None = None
 ) -> Price | None:
-    """The catalog price for this call, or None when unpriced.
-
-    Tries the provider-resolved version first (usually the full dated name), then the model that was
-    asked for (the alias), after normalising both. A hand-entered (MANUAL) catalog price always wins;
-    otherwise, when the run names its provider, that provider's own price is used, because the same
-    model can cost several times more on one provider than on another.
-    """
-    candidates = [normalize(model_version), normalize(model)]
-    rows = (
-        await session.execute(
-            select(CatalogEntry).where(
-                CatalogEntry.model.in_(candidates), CatalogEntry.price_in_per_mtok.is_not(None),
-                CatalogEntry.price_out_per_mtok.is_not(None),
-            )
-        )
-    ).scalars().all()
-    best = min(rows, key=lambda r: (candidates.index(r.model), -r.first_seen_at.timestamp())) if rows else None
-    if provider and not (best and best.source == "MANUAL"):
-        sold = (
-            await session.execute(
-                select(ProviderPrice).where(
-                    ProviderPrice.model.in_(candidates), ProviderPrice.provider == provider.strip().lower(),
-                    ProviderPrice.price_in_per_mtok.is_not(None), ProviderPrice.price_out_per_mtok.is_not(None),
-                )
-            )
-        ).scalars().all()
-        if sold:
-            own = min(sold, key=lambda r: candidates.index(r.model))
-            return Price.from_input_output(own.price_in_per_mtok, own.price_out_per_mtok, model=model_version or model)
-    if best is None:
-        return None
-    return Price.from_input_output(best.price_in_per_mtok, best.price_out_per_mtok, model=model_version or model)
+    """The price in force now for this call, or None when unpriced (see pricing.resolve_price)."""
+    return (await resolve_price(session, model, model_version, provider)).price
 
 
 async def record_run(
@@ -130,14 +101,27 @@ async def record_run(
     keep_expected = body.expected if job.retest_consent and job.check_kind == "ANSWER_KEY" else None
 
     provider = body.provider.strip().lower() if body.provider else None
-    price = await find_price(session, body.model, body.model_version, provider)
-    if price is not None:
-        cost = compute_cost(price, body.tokens_in, body.tokens_out, body.cache_read_tokens, body.cache_write_tokens,
-                            body.cache_write_1h_tokens)
+    resolution = await resolve_price(session, body.model, body.model_version, provider)
+    usage_raw = sanitize_raw(body.usage_raw)
+    # A response with no usage block reports nothing: its zero counts are unknown, so pricing them would store
+    # $0 ("free"). Such a run keeps an unknown cost unless the caller sent one.
+    usage_unreported = body.usage_shape == "none" and not (
+        body.tokens_in or body.tokens_out or body.cache_read_tokens or body.cache_write_tokens)
+    caller_cost = Decimal(str(body.cost_usd)) if body.cost_usd is not None else None
+    factor, unmodelled = modifier_factor(body.usage_shape, body.model_version or body.model, usage_raw)
+    version_id = None
+    if resolution.price is not None and not usage_unreported:
+        cost = compute_cost(resolution.price, body.tokens_in, body.tokens_out, body.cache_read_tokens,
+                            body.cache_write_tokens, body.cache_write_1h_tokens, factor or Decimal(1))
+        version_id = resolution.version_id
+        price_status = PARTLY_PRICED if unmodelled else PRICED
     else:
-        # No catalog price and no cost sent: unknown, not free. Storing 0 would make the model win
-        # every cost comparison.
-        cost = Decimal(str(body.cost_usd)) if body.cost_usd is not None else None
+        # No usable catalog price, or nothing reported: unknown, not free. Storing 0 would make the model win
+        # every cost comparison. A cost the caller sent is used and labelled as theirs.
+        cost = caller_cost
+        price_status = "CALLER_COST" if caller_cost is not None else (
+            "NO_USAGE" if usage_unreported else resolution.status)
+        factor = None
 
     if unknown_reason is not None:
         result = CheckResult(Outcome.UNKNOWN, unknown_reason)
@@ -158,8 +142,13 @@ async def record_run(
                 tool_calls=sanitize_tool_calls(body.tool_calls, keep_arguments=project.store_tool_arguments),
                 outcome=result.outcome.value, outcome_reason=result.reason, state=state, run_kind=run_kind,
                 retest_id=retest_id, expected=keep_expected, provider=provider,
-                agent=body.agent, trace_id=body.trace_id, tools_tokens=body.tools_tokens,
+                agent=body.agent, trace_id=body.trace_id, span_id=body.span_id, parent_span_id=body.parent_span_id,
+                tools_tokens=body.tools_tokens,
                 tool_call_count=len(body.tool_calls) if body.tool_calls is not None else None,
+                usage_shape=body.usage_shape, usage_raw=usage_raw, reasoning_tokens=body.reasoning_tokens,
+                price_version_id=version_id, price_status=price_status, price_factor=factor,
+                cache_write_1h_tokens=body.cache_write_1h_tokens or None,
+                tool_use_input_tokens=body.tool_use_input_tokens,
             )
             .on_conflict_do_nothing(index_elements=["run_id"])
             .returning(Run.run_id)

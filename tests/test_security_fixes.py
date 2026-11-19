@@ -269,10 +269,22 @@ async def test_a_subscription_project_gets_no_budget_alert_but_keeps_trial_budge
     assert delivered == 2 and sorted(json.loads(b)["kind"] for b in sent) == ["SILENT_DROP", "TRIAL_BUDGET"]
 
 
-async def test_a_pay_per_use_project_still_gets_its_budget_alert(session):
+async def test_a_pay_per_use_project_gets_its_budget_alert_at_the_webhook_only_after_opting_in(session):
+    from agent_memory.models import Project
+
     await _alert_world(session, "paid-hooks", "per_use")
+    sent = []
 
     def ok(request):
+        sent.append(json.loads(request.content)["kind"])
         return httpx.Response(200)
 
-    assert (await deliver_pending(session, transport=httpx.MockTransport(ok)))[0] == 3
+    # Budget alerts are always in the app; they leave it only once the owner has chosen that. Everything else follows
+    # the webhook as before.
+    delivered, _ = await deliver_pending(session, transport=httpx.MockTransport(ok))
+    assert delivered == 2 and sorted(sent) == ["SILENT_DROP", "TRIAL_BUDGET"]
+    project = await session.get(Project, "paid-hooks")
+    project.budget_alert_webhook = True
+    await session.commit()
+    delivered, _ = await deliver_pending(session, transport=httpx.MockTransport(ok))
+    assert delivered == 1 and sent[-1] == "BUDGET"
