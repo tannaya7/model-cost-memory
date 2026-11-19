@@ -1,0 +1,380 @@
+[
+ {
+  "expected": {
+   "columns": {
+    "cache_read_tokens": 0,
+    "cache_write_tokens": 0,
+    "tokens_in": 800,
+    "tokens_out": 120
+   },
+   "reasoning": null,
+   "shape": "anthropic_messages",
+   "tool_use_input": null
+  },
+  "name": "anthropic basic",
+  "usage": {
+   "input_tokens": 800,
+   "output_tokens": 120
+  }
+ },
+ {
+  "expected": {
+   "columns": {
+    "cache_read_tokens": 300,
+    "cache_write_tokens": 50,
+    "tokens_in": 800,
+    "tokens_out": 120
+   },
+   "reasoning": null,
+   "shape": "anthropic_messages",
+   "tool_use_input": null
+  },
+  "name": "anthropic with cache read and write",
+  "usage": {
+   "cache_creation_input_tokens": 50,
+   "cache_read_input_tokens": 300,
+   "input_tokens": 800,
+   "output_tokens": 120
+  }
+ },
+ {
+  "expected": {
+   "columns": {
+    "cache_read_tokens": 0,
+    "cache_write_1h_tokens": 60,
+    "cache_write_tokens": 100,
+    "tokens_in": 10,
+    "tokens_out": 5
+   },
+   "reasoning": null,
+   "shape": "anthropic_messages",
+   "tool_use_input": null
+  },
+  "name": "anthropic one hour cache split",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 60,
+    "ephemeral_5m_input_tokens": 40
+   },
+   "cache_creation_input_tokens": 100,
+   "input_tokens": 10,
+   "output_tokens": 5
+  }
+ },
+ {
+  "expected": {
+   "columns": {
+    "cache_read_tokens": 0,
+    "cache_write_1h_tokens": 60,
+    "cache_write_tokens": 100,
+    "tokens_in": 10,
+    "tokens_out": 5
+   },
+   "reasoning": null,
+   "shape": "anthropic_messages",
+   "tool_use_input": null
+  },
+  "name": "anthropic split without a total",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 60,
+    "ephemeral_5m_input_tokens": 40
+   },
+   "input_tokens": 10,
+   "output_tokens": 5
+  }
+ },
+ {
+  "expected": {
+   "columns": {
+    "cache_read_tokens": 0,
+    "cache_write_tokens": 0,
+    "tokens_in": 1000,
+    "tokens_out": 90
+   },
+   "reasoning": null,
+   "shape": "openai_chat",
+   "tool_use_input": null
+  },
+  "name": "openai chat basic",
+  "usage": {
+   "completion_tokens": 90,
+   "prompt_tokens": 1000,
+   "total_tokens": 1090
+  }
+ },
+ {
+  "expected": {
+   "columns": {
+    "cache_read_tokens": 400,
+    "cache_write_tokens": 0,
+    "tokens_in": 600,
+    "tokens_out": 90
+   },
+   "reasoning": null,
+   "shape": "openai_chat",
+   "tool_use_input": null
+  },
+  "name": "openai chat with cached tokens",
+  "usage": {
+   "completion_tokens": 90,
+   "prompt_tokens": 1000,
+   "prompt_tokens_details": {
+    "cached_tokens": 400
+   }
+  }
+ },
+ {
+  "expected": {
+   "columns": {
+    "cache_read_tokens": 400,
+    "cache_write_tokens": 100,
+    "tokens_in": 500,
+    "tokens_out": 90
+   },
+   "reasoning": 30,
+   "shape": "openai_chat",
+   "tool_use_input": null
+  },
+  "name": "openai chat with cache writes and reasoning",
+  "usage": {
+   "completion_tokens": 90,
+   "completion_tokens_details": {
+    "reasoning_tokens": 30
+   },
+   "prompt_tokens": 1000,
+   "prompt_tokens_details": {
+    "cache_write_tokens": 100,
+    "cached_tokens": 400
+   }
+  }
+ },
+ {
+  "expected": {
+   "columns": {
+    "cache_read_tokens": 400,
+    "cache_write_tokens": 0,
+    "tokens_in": 0,
+    "tokens_out": 9
+   },
+   "reasoning": null,
+   "shape": "openai_chat",
+   "tool_use_input": null
+  },
+  "name": "openai chat cached more than prompt",
+  "usage": {
+   "completion_tokens": 9,
+   "prompt_tokens": 100,
+   "prompt_tokens_details": {
+    "cached_tokens": 400
+   }
+  }
+ },
+ {
+  "expected": {
+   "columns": {
+    "cache_read_tokens": 200,
+    "cache_write_tokens": 0,
+    "tokens_in": 300,
+    "tokens_out": 70
+   },
+   "reasoning": 20,
+   "shape": "openai_responses",
+   "tool_use_input": null
+  },
+  "name": "openai responses",
+  "usage": {
+   "input_tokens": 500,
+   "input_tokens_details": {
+    "cached_tokens": 200
+   },
+   "output_tokens": 70,
+   "output_tokens_details": {
+    "reasoning_tokens": 20
+   },
+   "total_tokens": 570
+  }
+ },
+ {
+  "expected": {
+   "columns": {
+    "cache_read_tokens": 100,
+    "cache_write_tokens": 0,
+    "tokens_in": 400,
+    "tokens_out": 70
+   },
+   "reasoning": null,
+   "shape": "openai_responses",
+   "tool_use_input": null
+  },
+  "name": "openai responses without cache write field",
+  "usage": {
+   "input_tokens": 500,
+   "input_tokens_details": {
+    "cached_tokens": 100
+   },
+   "output_tokens": 70
+  }
+ },
+ {
+  "expected": {
+   "columns": {
+    "cache_read_tokens": 200,
+    "cache_write_tokens": 0,
+    "tokens_in": 100,
+    "tokens_out": 40
+   },
+   "reasoning": null,
+   "shape": "deepseek_chat",
+   "tool_use_input": null
+  },
+  "name": "deepseek hit and miss",
+  "usage": {
+   "completion_tokens": 40,
+   "prompt_cache_hit_tokens": 200,
+   "prompt_cache_miss_tokens": 100,
+   "prompt_tokens": 300
+  }
+ },
+ {
+  "expected": {
+   "columns": {
+    "cache_read_tokens": 200,
+    "cache_write_tokens": 0,
+    "tokens_in": 100,
+    "tokens_out": 40
+   },
+   "reasoning": null,
+   "shape": "deepseek_chat",
+   "tool_use_input": null
+  },
+  "name": "deepseek hit only",
+  "usage": {
+   "completion_tokens": 40,
+   "prompt_cache_hit_tokens": 200,
+   "prompt_tokens": 300
+  }
+ },
+ {
+  "expected": {
+   "columns": {
+    "cache_read_tokens": 400,
+    "cache_write_tokens": 0,
+    "tokens_in": 500,
+    "tokens_out": 85
+   },
+   "reasoning": 25,
+   "shape": "gemini",
+   "tool_use_input": 12
+  },
+  "name": "gemini rest camelCase",
+  "usage": {
+   "cachedContentTokenCount": 400,
+   "candidatesTokenCount": 60,
+   "promptTokenCount": 900,
+   "thoughtsTokenCount": 25,
+   "toolUsePromptTokenCount": 12,
+   "totalTokenCount": 997
+  }
+ },
+ {
+  "expected": {
+   "columns": {
+    "cache_read_tokens": 400,
+    "cache_write_tokens": 0,
+    "tokens_in": 500,
+    "tokens_out": 60
+   },
+   "reasoning": null,
+   "shape": "gemini",
+   "tool_use_input": null
+  },
+  "name": "gemini sdk snake_case",
+  "usage": {
+   "cached_content_token_count": 400,
+   "candidates_token_count": 60,
+   "prompt_token_count": 900
+  }
+ },
+ {
+  "expected": {
+   "columns": {
+    "cache_read_tokens": 0,
+    "cache_write_tokens": 0,
+    "tokens_in": 0,
+    "tokens_out": 0
+   },
+   "reasoning": null,
+   "shape": "openai_chat",
+   "tool_use_input": null
+  },
+  "name": "zero is a real value",
+  "usage": {
+   "completion_tokens": 0,
+   "prompt_tokens": 0
+  }
+ },
+ {
+  "expected": {
+   "columns": {},
+   "reasoning": null,
+   "shape": "none",
+   "tool_use_input": null
+  },
+  "name": "negative and boolean counts are unknown",
+  "usage": {
+   "completion_tokens": true,
+   "prompt_tokens": -5
+  }
+ },
+ {
+  "expected": {
+   "columns": {
+    "cache_read_tokens": 0,
+    "cache_write_tokens": 0,
+    "tokens_in": 0,
+    "tokens_out": 3
+   },
+   "reasoning": null,
+   "shape": "openai_chat",
+   "tool_use_input": null
+  },
+  "name": "absurdly large count is unknown",
+  "usage": {
+   "completion_tokens": 3,
+   "prompt_tokens": 9999999999
+  }
+ },
+ {
+  "expected": {
+   "columns": {},
+   "reasoning": null,
+   "shape": "none",
+   "tool_use_input": null
+  },
+  "name": "unrecognised shape",
+  "usage": {
+   "something_else": 5
+  }
+ },
+ {
+  "expected": {
+   "columns": {},
+   "reasoning": null,
+   "shape": "none",
+   "tool_use_input": null
+  },
+  "name": "empty block",
+  "usage": {}
+ },
+ {
+  "expected": {
+   "columns": {},
+   "reasoning": null,
+   "shape": "none",
+   "tool_use_input": null
+  },
+  "name": "no usage block",
+  "usage": null
+ }
+]
