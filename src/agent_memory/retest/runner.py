@@ -168,11 +168,12 @@ async def enqueue(
 async def sample_sources(
     session: AsyncSession, job: Job, candidate_model: str, n: int, *, seed: int = 0
 ) -> list:
-    """Up to n past production runs to replay, one per prompt, chosen uniformly at random, skipping
-    prompts already replayed on this candidate."""
+    """Up to n past production runs to replay, one per prompt, chosen uniformly at random. A prompt is skipped when the candidate
+    has already answered it, whether in an earlier trial or in the app's own production calls: its result is already in the
+    evidence, so replaying it would spend the person's money to learn nothing new."""
     model, effort = split_option(candidate_model)
     already = select(Run.prompt_hash).where(
-        Run.job_id == job.job_id, Run.run_kind == "RETEST", func.lower(Run.model) == normalize(model),
+        Run.job_id == job.job_id, func.lower(Run.model) == normalize(model),
         Run.effort.is_(None) if effort is None else Run.effort == effort,
     )
     query = (

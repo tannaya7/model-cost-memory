@@ -99,10 +99,13 @@ async def auth_config() -> AuthConfig:
 
 
 @router.get("/auth/google/login", tags=["auth"])
-async def google_login(request: Request, next: str | None = None):
+async def google_login(request: Request, next: str | None = None, switch: bool = False):
+    """Send the person to Google. With `switch`, Google always shows its account chooser, so a person with two emails can pick the
+    other one. Nothing is signed out here: the new sign-in replaces this browser's session, and other devices stay as they are."""
     google = _google()
     request.session["next"] = _safe_next(next)
-    return await google.authorize_redirect(request, f"{get_settings().public_url}/auth/google/callback")
+    extra = {"prompt": "select_account"} if switch else {}
+    return await google.authorize_redirect(request, f"{get_settings().public_url}/auth/google/callback", **extra)
 
 
 @router.get("/auth/google/callback", tags=["auth"])

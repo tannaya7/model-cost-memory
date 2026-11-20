@@ -407,3 +407,24 @@ async def test_a_private_base_url_is_refused_unless_the_server_allows_it(session
     row = await keys.set_key(session, "demo", provider="local", api_key="sk-local-1234",
                              base_url="http://127.0.0.1:11434/v1", settings=dev)
     assert row.base_url == "http://127.0.0.1:11434/v1"
+
+
+async def test_a_trial_skips_prompts_the_candidate_already_answered_in_the_apps_own_calls(engine, session, world):
+    """The expensive model's past calls are the baseline and are never run again; prompts the cheap model already answered for real
+    are not replayed either, because their results are already counted. Only the gap is filled."""
+    _, project, job = world
+    for i in range(15):  # the app already sent these 15 prompts to the candidate "mini" in production
+        session.add(Run(run_id=uuid.uuid4(), job_id=job.job_id, project_id="demo", prompt=f"invoice {i}", prompt_hash=prompt_hash(f"invoice {i}", "demo"),
+                        model="mini", model_version="mini-2026-09", outcome="PASS", cost_usd=0.001, state="INDEXED", tokens_in=1000, tokens_out=100,
+                        expected={"total": 100.0}, created_at=datetime.now(UTC) - timedelta(hours=100 + i)))
+    await session.commit()
+    retest = await enqueue(session, project, job, "mini", 1.0, "MANUAL")
+    await session.commit()
+    provider = FakeProvider()
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    done = await run_retest(sessions, retest.retest_id, settings=SETTINGS, client_factory=factory(provider), sample_size=60)
+    assert done.runs_planned == 45 and provider.calls == 45  # 60 past prompts, minus the 15 the cheap model already answered
+    session.expunge_all()
+    replayed = set((await session.execute(select(Run.prompt).where(Run.retest_id == retest.retest_id))).scalars())
+    assert not any(f"invoice {i}" in replayed for i in range(15))
+    assert all(f"invoice {i}" in replayed for i in range(15, 60))
