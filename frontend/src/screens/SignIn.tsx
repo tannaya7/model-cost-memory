@@ -58,6 +58,8 @@ export default function SignIn() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(searchParams.get("error") === "google" ? "Google sign-in did not finish. Please try again." : searchParams.get("error") === "unverified" ? "Google says this email address is not verified, so it cannot be used to sign in. Verify it with Google, or use another account." : null);
   const next = safeNext(searchParams.get("next"));
+  /** Switching accounts: stay on this page even though someone is signed in, and make Google show its account chooser. */
+  const switching = searchParams.get("switch") === "1";
   const isMock = import.meta.env.DEV && import.meta.env.VITE_USE_MOCK === "true";
 
   // Signing in means "use my account": a project key or project left in this browser would otherwise be
@@ -84,7 +86,7 @@ export default function SignIn() {
       finish();
     } else {
       forgetSavedAccess();
-      window.location.assign(`/auth/google/login?next=${encodeURIComponent(next)}`);
+      window.location.assign(`/auth/google/login?next=${encodeURIComponent(next)}${switching ? "&switch=true" : ""}`);
     }
   };
 
@@ -101,7 +103,7 @@ export default function SignIn() {
 
   const me = useMe();
   const google = isMock || Boolean(config.data?.google);
-  if (me.data) return <Navigate to={next === "/" ? "/projects" : next} replace />;
+  if (me.data && !switching) return <Navigate to={next === "/" ? "/projects" : next} replace />;
   const dev = Boolean(config.data?.dev_login);
 
   return (
@@ -143,6 +145,12 @@ export default function SignIn() {
           </div>
           <h2 className="text-2xl font-semibold tracking-tight">Sign in</h2>
           <p className="mt-1 text-sm text-dim">See which models your AI features should use, and what that saves.</p>
+          {switching && me.data && (
+            <p role="status" className="mt-4 rounded-[10px] border border-rule bg-surface-2/60 p-3 text-sm text-dim">
+              You are signed in as <strong className="text-ink [overflow-wrap:anywhere]">{me.data.email}</strong>. Pick the account you want next. Each account keeps its own
+              projects and teams, and nothing is shared between them.
+            </p>
+          )}
 
           {error && <p role="alert" className="mt-5 rounded-[10px] border border-bad/30 bg-bad-soft p-3 text-sm text-bad">{error}</p>}
 

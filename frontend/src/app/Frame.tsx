@@ -31,6 +31,8 @@ import {
   IconSettings,
   IconShield,
   IconSidebar,
+  IconSpark,
+  IconTable,
 } from "../ui/icons";
 import { ThemeToggle } from "../ui/ThemeToggle";
 import { useModalFocus } from "../ui/useModalFocus";
@@ -54,6 +56,14 @@ const SMART = [
   { to: "/compare", label: "Smart compare", hint: "Would another model do?", icon: IconChart },
 ];
 
+/** Two more top-level places for an API user: what the agents and tool servers use, and how the spend was worked out. */
+const ANALYSIS = [
+  { to: "/agents", label: "MCP & Agents", hint: "Agents, tasks and tool servers", icon: IconSpark },
+  { to: "/costs", label: "Cost analysis", hint: "How the spend adds up, by feature", icon: IconTable },
+  { to: "/planner", label: "Cost planner", hint: "What a task might cost at traffic you type in", icon: IconDollar },
+  { to: "/coverage", label: "Data coverage", hint: "How complete the records we received are", icon: IconShield },
+];
+
 /** The four ordinary destinations, inside the current project. */
 function useNav() {
   const p = useP();
@@ -63,6 +73,11 @@ function useNav() {
 function useSmart() {
   const p = useP();
   return SMART.map((item) => ({ ...item, to: p(item.to) }));
+}
+
+function useAnalysis() {
+  const p = useP();
+  return ANALYSIS.map((item) => ({ ...item, to: p(item.to) }));
 }
 
 function useOutsideClose(open: boolean, close: () => void) {
@@ -86,11 +101,15 @@ function useOutsideClose(open: boolean, close: () => void) {
 function ProjectSwitcher() {
   const { id: active, mode } = useProject();
   const projects = useProjects();
+  const workspaces = useWorkspaces(mode === "owned");
   const [open, setOpen] = useState(false);
   const ref = useOutsideClose(open, () => setOpen(false));
   const navigate = useNavigate();
   const list = mode === "owned" ? projects.data ?? [] : [];
   const current = list.find((p) => p.project_id === active);
+  /** "Personal", or the company's name: so it is never unclear which side of the line a project is on. */
+  const spaceOf = (p: { organisation_id?: string | null }) =>
+    p.organisation_id ? workspaces.data?.find((w) => w.org_id === p.organisation_id)?.name ?? "Company" : "Personal";
   if (mode !== "owned") {
     return (
       <span className="rounded-full border border-rule px-2.5 py-1 text-xs font-semibold text-dim">
@@ -109,6 +128,7 @@ function ProjectSwitcher() {
         className="flex w-full min-w-0 items-center justify-between gap-1.5 rounded-[9px] px-2 py-1 text-sm text-dim transition-colors hover:bg-surface-2 hover:text-ink"
       >
         <span className="truncate font-medium">{current?.name ?? "Choose a project"}</span>
+        {current && <span data-testid="workspace-label" className={cx("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold", current.organisation_id ? "bg-accent-soft text-accent" : "bg-surface-3 text-muted")}>{spaceOf(current)}</span>}
         <IconChevron size={14} className={cx("shrink-0 transition-transform", open ? "-rotate-90" : "rotate-90")} />
       </button>
       <AnimatePresence>
@@ -133,8 +153,11 @@ function ProjectSwitcher() {
                   p.project_id === active ? "text-ink" : "text-dim",
                 )}
               >
-                <span className="truncate">{p.name}</span>
-                {p.project_id === active && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
+                <span className="min-w-0 truncate">{p.name}</span>
+                <span className="ml-2 flex shrink-0 items-center gap-2">
+                  <span className="max-w-[7rem] truncate text-[10px] text-muted">{spaceOf(p)}</span>
+                  {p.project_id === active && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
+                </span>
               </button>
             ))}
             <div className="my-1 h-px bg-rule" />
@@ -186,7 +209,7 @@ function AccountMenu({ onTour }: { onTour: () => void }) {
             )}
             <div className="my-1 h-px bg-rule" />
             {[
-              ...(user ? [{ to: "/projects", label: "All projects" }] : []),
+              ...(user ? [{ to: "/projects", label: "All projects" }, { to: "/signin?switch=1&next=%2Fprojects", label: "Switch account" }] : []),
               ...(canAdminister(role) ? [
                 { to: p("/settings"), label: mode === "demo" ? "About this demo" : "Project settings" },
                 { to: p("/settings#limits"), label: "Usage limits" },
@@ -256,6 +279,10 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
       { label: "AI tasks", hint: "Every kind of work your app asks an AI to do, and our recommendation for each", to: p("/jobs") },
       { label: "Smart budget", hint: "Where this month is heading, a monthly limit, and what changes if others use your key", to: p("/budget") },
       { label: "Smart compare", hint: "Would another model do this work for less? Based on your own calls", to: p("/compare") },
+      { label: "MCP & Agents", hint: "Which agents, agent tasks and tool servers use the most, from your recorded calls", to: p("/agents") },
+      { label: "Cost analysis", hint: "How the spend was worked out, where the tokens went, and cost by your own feature labels", to: p("/costs") },
+      { label: "Cost planner", hint: "What a task might cost at traffic levels you type in, from its own recorded calls", to: p("/planner") },
+      { label: "Data coverage", hint: "How complete and reliable the records we received are, and what cannot be measured", to: p("/coverage") },
       { label: "Models", hint: "Prices, retirements and the catalog", to: p("/models") },
       { label: "Activity", hint: "Quality drops, trials on new models, live AI calls and AI news", to: p("/activity") },
       { label: "Alerts", hint: "Quality drops, quiet slowdowns and models being retired", to: p("/activity?tab=alerts") },
@@ -395,6 +422,7 @@ function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle
   const p = useP();
   const nav = useNav();
   const smart = useSmart();
+  const analysis = useAnalysis();
   const { mode } = useProject();
   const { data: user } = useMe();
   const workspaces = useWorkspaces(!!user);
@@ -485,6 +513,27 @@ function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle
           ))}
         </nav>
 
+        <div className="my-3 h-px shrink-0 bg-rule" />
+        {!collapsed && <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Analysis</p>}
+        <nav aria-label="Analysis" className="flex flex-col gap-1">
+          {analysis.map(({ to, label, hint, icon: Icon }) => (
+            <NavLink key={to} to={to} title={collapsed ? label : hint} className={({ isActive }) => item(isActive)}>
+              {({ isActive }) => (
+                <>
+                  {isActive && <ActiveMark />}
+                  <Icon size={18} className="relative shrink-0" />
+                  {!collapsed && (
+                    <span className="relative flex min-w-0 flex-col leading-tight">
+                      <span>{label}</span>
+                      <span className="truncate text-[11px] font-normal text-muted">{hint}</span>
+                    </span>
+                  )}
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
         {companies.length > 0 && (
           <>
             <div className="my-3 h-px shrink-0 bg-rule" />
@@ -560,8 +609,9 @@ export function Frame() {
   const p = useP();
   const nav = useNav();
   const smart = useSmart();
-  /** Phone bottom bar: five places. Models stays reachable from search and the full sidebar. */
-  const phone = [nav[0], nav[1], ...smart, nav[3]];
+  const analysis = useAnalysis();
+  /** Phone bottom bar: every main place, in a row that scrolls sideways. Settings and usage limits are in the account menu. */
+  const phone = [nav[0], nav[1], ...smart, ...analysis, nav[2], nav[3]];
   const { pathname, search } = useLocation();
   const { count: alerts } = useAlertsCount();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -663,9 +713,9 @@ export function Frame() {
 
         {/* Phone: the main destinations as a bottom bar */}
         <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-bg/90 backdrop-blur-xl md:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-          <ul className="grid grid-cols-5">
+          <ul className="flex overflow-x-auto">
             {phone.map(({ to, label, icon: Icon, ...rest }) => (
-              <li key={to}>
+              <li key={to} className="min-w-[4.75rem] flex-1 shrink-0">
                 <NavLink
                   to={to}
                   end={"end" in rest ? rest.end : undefined}

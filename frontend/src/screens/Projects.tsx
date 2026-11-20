@@ -28,6 +28,7 @@ function TopBar() {
         <Link to="/projects" className="flex items-center gap-2.5"><IconLogo size={28} /><span className="font-semibold tracking-tight">Model &amp; Cost Memory</span></Link>
         <div className="flex items-center gap-3">
           {user && <span className="hidden text-sm text-dim sm:inline">{user.email}</span>}
+          {user && <Link to="/signin?switch=1&next=%2Fprojects" className="text-sm text-dim hover:text-ink">Switch account</Link>}
           <ThemeToggle />
           <Button
             size="sm"

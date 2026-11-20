@@ -65,7 +65,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Google Login */
+        /**
+         * Google Login
+         * @description Send the person to Google. With `switch`, Google always shows its account chooser, so a person with two emails can pick the
+         *     other one. Nothing is signed out here: the new sign-in replaces this browser's session, and other devices stay as they are.
+         */
         get: operations["google_login_auth_google_login_get"];
         put?: never;
         post?: never;
@@ -326,6 +330,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/insights/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Coverage
+         * @description How complete and reliable the records Model & Cost Memory RECEIVED are: attempts, usage, prices, checks, duplicates and flagged
+         *     calls, each with its denominator and the reason it is doubtful. It cannot see calls that never reached this product. Read-only.
+         */
+        get: operations["get_coverage_v1_insights_coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/insights/daily": {
         parameters: {
             query?: never;
@@ -361,6 +386,48 @@ export interface paths {
          *     units and cost basis. Text values a spreadsheet could run as a formula are prefixed with an apostrophe; `X-Export-Neutralized` says how many.
          */
         get: operations["export_csv_v1_insights_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/features": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Feature Breakdown
+         * @description Calls, tokens, list-price cost and checked answers for each feature label your app sent, with the calls that carried no
+         *     label shown as their own row. The labels are your app's own words: not verified, not a chargeback record. Analysis only.
+         */
+        get: operations["get_feature_breakdown_v1_insights_features_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/planner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Planner
+         * @description What a task might cost at traffic levels you type, from its own recorded calls: list-price scenarios with a range where the data
+         *     supports one. Not a bill or a forecast. Nothing is sent to a provider and nothing is changed.
+         */
+        get: operations["get_planner_v1_insights_planner_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1782,6 +1849,15 @@ export interface components {
              */
             summary: string;
         };
+        /** AssumptionOut */
+        AssumptionOut: {
+            /** Name */
+            name: string;
+            /** Source */
+            source: string;
+            /** Value */
+            value: string;
+        };
         /** AttributionRow */
         AttributionRow: {
             /** Coverage Share */
@@ -1823,6 +1899,15 @@ export interface components {
              */
             google: boolean;
         };
+        /** BasisRow */
+        BasisRow: {
+            /** Label */
+            label: string;
+            /** Runs */
+            runs: number;
+            /** Status */
+            status: string;
+        };
         /** BreakdownOut */
         BreakdownOut: {
             /** Cost Per Success Usd */
@@ -1861,6 +1946,17 @@ export interface components {
             note: string;
             /** Source */
             source: string;
+        };
+        /** Cause */
+        Cause: {
+            /** Code */
+            code: string;
+            /** Examples */
+            examples: components["schemas"]["Example"][];
+            /** Label */
+            label: string;
+            /** Runs */
+            runs: number;
         };
         /** ChangePeriodOut */
         ChangePeriodOut: {
@@ -2297,45 +2393,6 @@ export interface components {
             /** Status */
             status: string;
         };
-        /** CostPerSuccessOut */
-        CostPerSuccessOut: {
-            /** Checked Priced Runs */
-            checked_priced_runs: number;
-            /**
-             * Checked Unpriced Runs
-             * @description Checked calls left out because their cost is unknown
-             */
-            checked_unpriced_runs: number;
-            /** Formula */
-            formula: string;
-            /**
-             * Passed
-             * @description Passes among those same calls: the bottom of the division
-             */
-            passed: number;
-            /** Reason */
-            reason: string | null;
-            /**
-             * Spend Usd
-             * @description Cost of the priced, checked calls: the top of the division
-             */
-            spend_usd: number;
-            /**
-             * Success Definition
-             * @description What a correct answer means for this task, from how it is checked
-             */
-            success_definition: string;
-            /**
-             * Unchecked Runs
-             * @description Calls left out because they have no pass/fail result yet
-             */
-            unchecked_runs: number;
-            /**
-             * Value Usd
-             * @description Cost of one correct answer; null when it cannot be worked out (see reason)
-             */
-            value_usd: number | null;
-        };
         /**
          * CostReceiptOut
          * @description How a spend figure was worked out: currency, period, which calls were counted and which were left out,
@@ -2344,7 +2401,7 @@ export interface components {
         CostReceiptOut: {
             /** Basis */
             basis: components["schemas"]["CostBasisOut"][];
-            cost_per_success: components["schemas"]["CostPerSuccessOut"] | null;
+            cost_per_success: components["schemas"]["agent_memory__schemas__CostPerSuccessOut"] | null;
             /** Currency */
             currency: string;
             /**
@@ -2403,6 +2460,86 @@ export interface components {
             unpriced_note: string | null;
             /** Unpriced Runs */
             unpriced_runs: number;
+        };
+        /** CoverageOut */
+        CoverageOut: {
+            /**
+             * Attempts
+             * @description Physical API attempts recorded in the period (denominator for most shares below)
+             */
+            attempts: number;
+            /** Basis */
+            basis: components["schemas"]["BasisRow"][];
+            /** @description Cost sent by the app itself, not calculated here */
+            caller_cost: components["schemas"]["Share"];
+            /** Cannot Measure */
+            cannot_measure: string[];
+            /** Causes */
+            causes: components["schemas"]["Cause"][];
+            /** @description Passed or failed an explicit check */
+            checked: components["schemas"]["Share"];
+            /**
+             * Duplicates Ignored
+             * @description Re-sent copies of an already-recorded call that were ignored; null when a filter makes it unavailable
+             */
+            duplicates_ignored: number | null;
+            /** Duplicates Note */
+            duplicates_note: string;
+            /**
+             * Excluded Attempts
+             * @description Archived, failed-to-record or invalid attempts: counted here and left out of the quality counts
+             */
+            excluded_attempts: number;
+            /**
+             * Extra Attempts
+             * @description Attempts beyond the first in tasks that made several
+             */
+            extra_attempts: number;
+            /** Failed */
+            failed: number;
+            /** Filters */
+            filters: {
+                [key: string]: string | null;
+            };
+            /** @description Attempts with at least one data-quality flag */
+            flagged: components["schemas"]["Share"];
+            /** Logical Tasks */
+            logical_tasks: number;
+            model_known: components["schemas"]["Share"];
+            model_unknown: components["schemas"]["Share"];
+            no_usage_block: components["schemas"]["Share"];
+            /** Notes */
+            notes: string[];
+            /** Passed */
+            passed: number;
+            /** Period Days */
+            period_days: number;
+            /**
+             * Period End
+             * Format: date-time
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date-time
+             */
+            period_start: string;
+            /** @description Calculated from reported usage and a dated list price (including partly priced) */
+            priced: components["schemas"]["Share"];
+            /** Providers */
+            providers: components["schemas"]["ProviderRow"][];
+            /** Scope */
+            scope: string;
+            /** Tasks With Several Attempts */
+            tasks_with_several_attempts: number;
+            /** Timezone */
+            timezone: string;
+            /** @description No pass/fail result yet */
+            unchecked: components["schemas"]["Share"];
+            /** @description No cost: unknown, never zero */
+            unpriced: components["schemas"]["Share"];
+            usage_layout_unknown: components["schemas"]["Share"];
+            usage_reported: components["schemas"]["Share"];
         };
         /** DayPointOut */
         DayPointOut: {
@@ -2543,6 +2680,20 @@ export interface components {
             /** Target */
             target: string | null;
         };
+        /** Example */
+        Example: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Model */
+            model: string;
+            /** Provider */
+            provider: string | null;
+            /** Run Id */
+            run_id: string;
+        };
         /** FailingRunOut */
         FailingRunOut: {
             /**
@@ -2561,6 +2712,103 @@ export interface components {
              * Format: uuid
              */
             run_id: string;
+        };
+        /** FeatureBreakdownOut */
+        FeatureBreakdownOut: {
+            /** Currency */
+            currency: string;
+            /** Labelled Runs */
+            labelled_runs: number;
+            /**
+             * Labelled Share
+             * @description Part of the calls that carried a label; null with no calls
+             */
+            labelled_share: number | null;
+            /** Notes */
+            notes: string[];
+            /** Period Days */
+            period_days: number;
+            /**
+             * Period End
+             * Format: date-time
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date-time
+             */
+            period_start: string;
+            /** Rows */
+            rows: components["schemas"]["FeatureRowOut"][];
+            /** Timezone */
+            timezone: string;
+            /** Total Runs */
+            total_runs: number;
+            /**
+             * Truncated
+             * @description More distinct labels exist than were read; the smallest are not in any row
+             */
+            truncated: boolean;
+        };
+        /** FeatureRowOut */
+        FeatureRowOut: {
+            cost_per_success: components["schemas"]["agent_memory__schemas__CostPerSuccessOut"];
+            /**
+             * Excluded
+             * @description Calls left out of the checks (archived, failed to record, or marked invalid)
+             */
+            excluded: number;
+            /** Failed */
+            failed: number;
+            /**
+             * Feature
+             * @description The label your app sent; null for calls that carried none, and for the folded 'Other labels' row
+             */
+            feature: string | null;
+            /**
+             * Folded Labels
+             * @description How many labels an 'Other labels' row stands for
+             */
+            folded_labels?: number | null;
+            /**
+             * Label
+             * @description What to show: the label, 'Unlabelled' or 'Other labels'
+             */
+            label: string;
+            /**
+             * No Usage Runs
+             * @description Calls whose response carried no usage block: their tokens are unknown, not zero
+             */
+            no_usage_runs: number;
+            /** Passed */
+            passed: number;
+            /** Runs */
+            runs: number;
+            /**
+             * Share Of Spend
+             * @description This row's part of all priced spend in the period; null when there is none
+             */
+            share_of_spend: number | null;
+            /**
+             * Spend Usd
+             * @description List-price estimate over the priced calls only
+             */
+            spend_usd: number;
+            /**
+             * Tokens
+             * @description Input, output, cache reads and writes, summed over the calls whose response reported usage
+             */
+            tokens: number;
+            /**
+             * Unchecked
+             * @description Calls with no pass/fail result yet: never counted as passes
+             */
+            unchecked: number;
+            /**
+             * Unpriced Runs
+             * @description Calls with no known price: left out of spend_usd
+             */
+            unpriced_runs: number;
         };
         /**
          * FlowEventOut
@@ -2860,7 +3108,7 @@ export interface components {
         };
         /** JobReceiptOut */
         JobReceiptOut: {
-            cost_per_success: components["schemas"]["CostPerSuccessOut"];
+            cost_per_success: components["schemas"]["agent_memory__schemas__CostPerSuccessOut"];
             /** Excluded */
             excluded: number;
             /** Failed */
@@ -3311,6 +3559,81 @@ export interface components {
             /** Official Sources */
             official_sources: components["schemas"]["PriceSourceOut"][];
         };
+        /** ModelPlan */
+        ModelPlan: {
+            cost_per_success: components["schemas"]["agent_memory__insights__planner__CostPerSuccessOut"];
+            /** Excluded */
+            excluded: number;
+            /** Failed */
+            failed: number;
+            /**
+             * Filtered Out
+             * @description Used calls removed by the visible far-out filter
+             */
+            filtered_out: number;
+            /** First Call */
+            first_call: string | null;
+            /**
+             * Flagged Included
+             * @description Used calls that carry a doubtful-total flag but were kept
+             */
+            flagged_included: number;
+            /** Last Call */
+            last_call: string | null;
+            /**
+             * Left Out
+             * @description Calls not used in the estimate, by reason
+             */
+            left_out: {
+                [key: string]: number;
+            };
+            /** Max Call Usd */
+            max_call_usd: number | null;
+            /** Mean Call Unfiltered Usd */
+            mean_call_unfiltered_usd: number | null;
+            /** Mean Call Usd */
+            mean_call_usd: number | null;
+            /** Mean Input Side Usd */
+            mean_input_side_usd: number | null;
+            /** Mean Output Side Usd */
+            mean_output_side_usd: number | null;
+            /** Mean Tokens In */
+            mean_tokens_in: number | null;
+            /** Mean Tokens Out */
+            mean_tokens_out: number | null;
+            /** Median Call Usd */
+            median_call_usd: number | null;
+            /** Model */
+            model: string;
+            /** Observed Calls */
+            observed_calls: number;
+            /** P90 Call Usd */
+            p90_call_usd: number | null;
+            /** Passed */
+            passed: number;
+            /** Provider */
+            provider: string | null;
+            /** Scenarios */
+            scenarios: components["schemas"]["ScenarioOut"][];
+            /**
+             * Status
+             * @description ESTIMATE | ESTIMATE_NO_RANGE | NOT_ENOUGH_DATA
+             */
+            status: string;
+            /** Status Text */
+            status_text: string;
+            /** Unchecked */
+            unchecked: number;
+            /**
+             * Uneven
+             * @description Call costs are very uneven, so the range may understate the real spread
+             */
+            uneven: boolean;
+            /** Used Calls */
+            used_calls: number;
+            /** Versions Used */
+            versions_used: components["schemas"]["VersionUsedOut"][];
+        };
         /** ModelRef */
         ModelRef: {
             /**
@@ -3750,6 +4073,53 @@ export interface components {
             only_candidate_passed: number;
             /** Only Current Passed */
             only_current_passed: number;
+        };
+        /** PlannerOut */
+        PlannerOut: {
+            /** Assumptions */
+            assumptions: components["schemas"]["AssumptionOut"][];
+            /** Check Kind */
+            check_kind: string;
+            /** Currency */
+            currency: string;
+            /** Disclaimer */
+            disclaimer: string;
+            /** Job */
+            job: string;
+            /** Models */
+            models: components["schemas"]["ModelPlan"][];
+            /**
+             * Not Tested
+             * @description Models recorded elsewhere in this project but not on this task
+             */
+            not_tested: string[];
+            /** Notes */
+            notes: string[];
+            /**
+             * Observed Retry Rate
+             * @description Measured extra attempts per task from your task ids; null when you send none
+             */
+            observed_retry_rate: number | null;
+            /** Period Days */
+            period_days: number;
+            /**
+             * Period End
+             * Format: date-time
+             */
+            period_end: string;
+            /** Period Label */
+            period_label: string;
+            /**
+             * Period Start
+             * Format: date-time
+             */
+            period_start: string;
+            /** Success Definition */
+            success_definition: string;
+            /** Timezone */
+            timezone: string;
+            /** Truncated */
+            truncated: boolean;
         };
         /** PreviewCost */
         PreviewCost: {
@@ -4550,6 +4920,22 @@ export interface components {
             /** Provider */
             provider: string;
         };
+        /** ProviderRow */
+        ProviderRow: {
+            /**
+             * Field Notes
+             * @description What this provider's usage fields mean here (included in or additional to others)
+             */
+            field_notes: {
+                [key: string]: string;
+            };
+            /** Provider */
+            provider: string | null;
+            /** Runs */
+            runs: number;
+            /** Usage Shape */
+            usage_shape: string | null;
+        };
         /** RecommendationEvidence */
         RecommendationEvidence: {
             /** @description What decided pass or fail for this task */
@@ -5080,6 +5466,11 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             /**
+             * Feature
+             * @description Your own name for the feature or workflow this call serves, for example support_summary. Optional. It is your label: not verified, not an identity and not an invoice-grade chargeback record. Letters, digits, spaces and . _ - only
+             */
+            feature?: string | null;
+            /**
              * Job
              * @description Name of an existing job in this project
              */
@@ -5205,6 +5596,11 @@ export interface components {
             created_at: string;
             /** Effort */
             effort?: string | null;
+            /**
+             * Feature
+             * @description The label your app sent for the feature or workflow, if any. Not verified
+             */
+            feature?: string | null;
             /**
              * Importance Score
              * @description How much the run matters (failures and costly runs more): what decides archiving and trial sampling
@@ -5355,6 +5751,11 @@ export interface components {
             created_at: string;
             /** Effort */
             effort?: string | null;
+            /**
+             * Feature
+             * @description The label your app sent for the feature or workflow, if any. Not verified
+             */
+            feature?: string | null;
             /**
              * Importance Score
              * @description How much the run matters (failures and costly runs more): what decides archiving and trial sampling
@@ -5644,6 +6045,26 @@ export interface components {
              */
             unit: "usd" | "tokens";
         };
+        /** ScenarioOut */
+        ScenarioOut: {
+            /**
+             * Attempts
+             * @description tasks x (1 + retry rate)
+             */
+            attempts: number;
+            /** Estimate Usd */
+            estimate_usd: number | null;
+            /** High Usd */
+            high_usd: number | null;
+            /** Low Usd */
+            low_usd: number | null;
+            /** Per Task Usd */
+            per_task_usd: number | null;
+            /** Range Note */
+            range_note: string | null;
+            /** Tasks Per Period */
+            tasks_per_period: number;
+        };
         /** SchedulerHealth */
         SchedulerHealth: {
             /**
@@ -5658,6 +6079,16 @@ export interface components {
              * @enum {string}
              */
             status: "ok" | "overdue";
+        };
+        /** Share */
+        Share: {
+            /** Runs */
+            runs: number;
+            /**
+             * Share
+             * @description runs divided by its denominator; null when the denominator is zero
+             */
+            share: number | null;
         };
         /** SpendOut */
         SpendOut: {
@@ -6243,6 +6674,24 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** VersionUsedOut */
+        VersionUsedOut: {
+            /** Checked At */
+            checked_at: string | null;
+            /**
+             * Effective From
+             * Format: date-time
+             */
+            effective_from: string;
+            /** Effective To */
+            effective_to: string | null;
+            /** Runs */
+            runs: number;
+            /** Source Url */
+            source_url: string | null;
+            /** Version Id */
+            version_id: string;
+        };
         /** WorkspaceOut */
         WorkspaceOut: {
             /**
@@ -6288,6 +6737,64 @@ export interface components {
              * @enum {string}
              */
             role: "owner" | "admin" | "member" | "viewer";
+        };
+        /** CostPerSuccessOut */
+        agent_memory__insights__planner__CostPerSuccessOut: {
+            /** Checked Priced Runs */
+            checked_priced_runs: number;
+            /** Checked Unpriced Runs */
+            checked_unpriced_runs: number;
+            /** Formula */
+            formula: string;
+            /** Passed */
+            passed: number;
+            /** Reason */
+            reason: string | null;
+            /** Spend Usd */
+            spend_usd: number;
+            /** Unchecked Runs */
+            unchecked_runs: number;
+            /** Value Usd */
+            value_usd: number | null;
+        };
+        /** CostPerSuccessOut */
+        agent_memory__schemas__CostPerSuccessOut: {
+            /** Checked Priced Runs */
+            checked_priced_runs: number;
+            /**
+             * Checked Unpriced Runs
+             * @description Checked calls left out because their cost is unknown
+             */
+            checked_unpriced_runs: number;
+            /** Formula */
+            formula: string;
+            /**
+             * Passed
+             * @description Passes among those same calls: the bottom of the division
+             */
+            passed: number;
+            /** Reason */
+            reason: string | null;
+            /**
+             * Spend Usd
+             * @description Cost of the priced, checked calls: the top of the division
+             */
+            spend_usd: number;
+            /**
+             * Success Definition
+             * @description What a correct answer means for this task, from how it is checked
+             */
+            success_definition: string;
+            /**
+             * Unchecked Runs
+             * @description Calls left out because they have no pass/fail result yet
+             */
+            unchecked_runs: number;
+            /**
+             * Value Usd
+             * @description Cost of one correct answer; null when it cannot be worked out (see reason)
+             */
+            value_usd: number | null;
         };
     };
     responses: never;
@@ -6375,6 +6882,7 @@ export interface operations {
         parameters: {
             query?: {
                 next?: string | null;
+                switch?: boolean;
             };
             header?: never;
             path?: never;
@@ -6796,6 +7304,48 @@ export interface operations {
             };
         };
     };
+    get_coverage_v1_insights_coverage_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back to count */
+                days?: number;
+                /** @description Only this provider */
+                provider?: string | null;
+                /** @description Only this model */
+                model?: string | null;
+                /** @description Only this task */
+                job?: string | null;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_daily_v1_insights_daily_get: {
         parameters: {
             query?: {
@@ -6861,6 +7411,89 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_feature_breakdown_v1_insights_features_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back to count */
+                days?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeatureBreakdownOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_planner_v1_insights_planner_get: {
+        parameters: {
+            query: {
+                /** @description The task whose recorded calls the scenario is based on */
+                job: string;
+                /** @description How many days of history to use */
+                days?: number;
+                /** @description Tasks per period to price (up to 6 scenarios) */
+                calls?: number[];
+                /** @description Extra attempts per task, typed by you */
+                retry_rate?: number;
+                input_change_pct?: number;
+                output_change_pct?: number;
+                /** @description Leave out far-out calls (visible, reversible) */
+                exclude_far_out?: boolean;
+                period?: string;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlannerOut"];
                 };
             };
             /** @description Validation Error */

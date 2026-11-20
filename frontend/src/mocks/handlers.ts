@@ -1861,6 +1861,55 @@ export const handlers = [
     const days = new URL(request.url).searchParams.get("days") ?? "30";
     return new HttpResponse("section,name\r\n", { status: 200, headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="model-cost-memory-company-last-${days}-days.csv"`, "x-export-rows": "0", "x-export-neutralized": "0" } });
   }),
+  // GET /v1/insights/features: cost by the customer's own feature labels (sample)
+  http.get("/v1/insights/features", ({ request }) => {
+    const days = Number(new URL(request.url).searchParams.get("days") ?? "30");
+    const success = (value: number | null, passed: number, spend: number) => ({ value_usd: value, formula: "spend on checked, priced calls ÷ passes among them", spend_usd: spend, passed, checked_priced_runs: passed, checked_unpriced_runs: 0, unchecked_runs: 0, reason: value === null ? "No call has been checked and priced yet" : null, success_definition: "Each task's own definition of a correct answer (see each task)" });
+    return HttpResponse.json({
+      currency: "USD", timezone: "UTC", period_start: new Date(Date.now() - days * 86_400_000).toISOString(), period_end: new Date().toISOString(), period_days: days,
+      rows: [
+        { feature: "support_summary", label: "support_summary", folded_labels: null, runs: 120, passed: 96, failed: 12, unchecked: 12, excluded: 0, tokens: 190_000, no_usage_runs: 0, spend_usd: 4.8, unpriced_runs: 0, share_of_spend: 0.8, cost_per_success: success(0.05, 96, 4.8) },
+        { feature: null, label: "Unlabelled", folded_labels: null, runs: 30, passed: 0, failed: 0, unchecked: 30, excluded: 0, tokens: 40_000, no_usage_runs: 4, spend_usd: 1.2, unpriced_runs: 2, share_of_spend: 0.2, cost_per_success: success(null, 0, 0) },
+      ],
+      total_runs: 150, labelled_runs: 120, labelled_share: 0.8, truncated: false,
+      notes: ["Labels come from your own app. They are not verified identities and not invoice-grade chargeback records: anyone with a project key can send any label."],
+    });
+  }),
+  // GET /v1/insights/planner: scenario costs for one task from its own recorded calls (sample)
+  http.get("/v1/insights/planner", ({ request }) => {
+    const u = new URL(request.url);
+    const calls = u.searchParams.getAll("calls").map(Number);
+    const days = Number(u.searchParams.get("days") ?? "30");
+    const scenario = (t: number) => ({ tasks_per_period: t, attempts: t, estimate_usd: t * 0.002, low_usd: t * 0.0017, high_usd: t * 0.0023, per_task_usd: 0.002, range_note: null });
+    return HttpResponse.json({
+      job: u.searchParams.get("job"), check_kind: "ANSWER_KEY", success_definition: "The answer matches your answer key (total)", currency: "USD", period_label: u.searchParams.get("period") ?? "month",
+      period_start: new Date(Date.now() - days * 86_400_000).toISOString(), period_end: new Date().toISOString(), period_days: days, timezone: "UTC", truncated: false,
+      assumptions: [{ name: "Tasks per month", value: calls.join(", "), source: "You entered this" }, { name: "Calls and prices", value: "Recorded calls for this task", source: "Measured from your history" }],
+      observed_retry_rate: null,
+      models: [{ model: "gpt-5-mini", provider: "openai", observed_calls: 120, used_calls: 110, left_out: { "The response carried no usage block (tokens unknown)": 10 }, filtered_out: 0,
+        first_call: new Date(Date.now() - 20 * 86_400_000).toISOString(), last_call: new Date().toISOString(), mean_call_usd: 0.002, mean_call_unfiltered_usd: 0.002, median_call_usd: 0.0019, p90_call_usd: 0.003, max_call_usd: 0.004,
+        mean_input_side_usd: 0.0008, mean_output_side_usd: 0.0012, mean_tokens_in: 800, mean_tokens_out: 600, uneven: false, status: "ESTIMATE", status_text: "110 usable calls: an estimate with a range.", scenarios: calls.map(scenario),
+        passed: 90, failed: 10, unchecked: 20, excluded: 10, cost_per_success: { value_usd: 0.0022, spend_usd: 0.2, passed: 90, checked_priced_runs: 100, checked_unpriced_runs: 0, unchecked_runs: 20, reason: null, formula: "spend on checked, priced calls over passes among them" },
+        versions_used: [{ version_id: "v1", effective_from: "2026-01-01T00:00:00Z", effective_to: null, source_url: null, checked_at: null, runs: 110 }], flagged_included: 0 }],
+      not_tested: ["gpt-5"], notes: ["Calls that could not be priced are left out of the estimate and counted; they are never treated as free or as average."],
+      disclaimer: "This is a scenario worked out from your own recorded calls and the numbers you typed. It is not a bill, a promise or a guaranteed forecast.",
+    });
+  }),
+  // GET /v1/insights/coverage: how complete the received records are (sample)
+  http.get("/v1/insights/coverage", ({ request }) => {
+    const days = Number(new URL(request.url).searchParams.get("days") ?? "30");
+    const share = (runs: number, of = 150) => ({ runs, share: of ? runs / of : null });
+    return HttpResponse.json({
+      period_start: new Date(Date.now() - days * 86_400_000).toISOString(), period_end: new Date().toISOString(), period_days: days, timezone: "UTC", filters: {},
+      scope: "Coverage of the records Model & Cost Memory received. It does not measure calls that never reached it.",
+      logical_tasks: 140, attempts: 150, tasks_with_several_attempts: 8, extra_attempts: 10, excluded_attempts: 2, usage_reported: share(140), no_usage_block: share(10), usage_layout_unknown: share(0),
+      model_known: share(150), model_unknown: share(0), priced: share(135), caller_cost: share(0), unpriced: share(15), checked: share(120, 148), unchecked: share(28, 148), passed: 100, failed: 20, flagged: share(3),
+      duplicates_ignored: 4, duplicates_note: "Counted per project and day.", basis: [{ status: "PRICED", label: "Calculated from the usage the provider reported and a dated list price", runs: 135 }],
+      causes: [{ code: "NO_USAGE_BLOCK", label: "The response carried no usage block, so its tokens and cost are unknown", runs: 10, examples: [{ run_id: "r-1", model: "gpt-5-mini", provider: "openai", created_at: new Date().toISOString() }] }],
+      providers: [{ provider: "openai", usage_shape: "openai_chat", runs: 140, field_notes: { cached: "inside prompt_tokens" } }],
+      cannot_measure: ["Calls that never reached Model & Cost Memory."], notes: ["Days are counted in UTC."],
+    });
+  }),
   http.get("/v1/insights/savings", () => HttpResponse.json({
     mode: "per_use", unit: "usd", as_of: "2026-11-19", jobs_checked: 3, counts: { saving: 1, waiting: 1 },
     entries: [

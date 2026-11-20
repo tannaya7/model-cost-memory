@@ -27,6 +27,10 @@ const JobWorkspace = lazy(() => import("./screens/job/JobWorkspace"));
 const Models = lazy(() => import("./screens/Models"));
 const Compare = lazy(() => import("./screens/compare/Compare"));
 const SmartBudget = lazy(() => import("./screens/SmartBudget"));
+const McpAgents = lazy(() => import("./screens/McpAgents"));
+const CostAnalysis = lazy(() => import("./screens/CostAnalysis"));
+const CostPlanner = lazy(() => import("./screens/CostPlanner"));
+const DataCoverage = lazy(() => import("./screens/DataCoverage"));
 const Activity = lazy(() => import("./screens/Activity"));
 const Settings = lazy(() => import("./screens/Settings"));
 const RetestStart = lazy(() => import("./screens/Retest").then((m) => ({ default: m.RetestStart })));
@@ -83,6 +87,10 @@ const router = createBrowserRouter([
       { path: "models", element: <Models /> },
       { path: "compare", element: <Compare /> },
       { path: "budget", element: <SmartBudget /> },
+      { path: "agents", element: <McpAgents /> },
+      { path: "costs", element: <CostAnalysis /> },
+      { path: "planner", element: <CostPlanner /> },
+      { path: "coverage", element: <DataCoverage /> },
       { path: "activity", element: <Activity /> },
       { path: "settings", element: <Settings /> },
       { path: "retest", element: <RetestStart /> },
@@ -99,7 +107,7 @@ const router = createBrowserRouter([
     ],
   },
   // Addresses from before projects were in the address: open them in the project last used.
-  ...["/jobs", "/jobs/:jobName", "/models", "/compare", "/budget", "/activity", "/settings", "/retest", "/retest/:retestId", "/runs"].map((path) => ({
+  ...["/jobs", "/jobs/:jobName", "/models", "/compare", "/budget", "/agents", "/costs", "/planner", "/coverage", "/activity", "/settings", "/retest", "/retest/:retestId", "/runs"].map((path) => ({
     path,
     element: <LegacyRedirect />,
   })),

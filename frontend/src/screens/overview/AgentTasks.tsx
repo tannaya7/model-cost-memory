@@ -236,11 +236,32 @@ export function AgentTasksBody({ days, repeats, window }: { days: number; repeat
   );
 }
 
+const thresholdField = "rounded-[8px] border border-rule bg-surface px-2 py-1 text-xs text-ink";
+
+/** The reader's own rule for pointing out a possible repeated call: how many times within how many calls. Shared by the Overview card and the
+ *  MCP & Agents page, so both say the same thing and neither is a measured limit. */
+export function RepeatThreshold({ repeats, window, onRepeats, onWindow }: { repeats: number; window: number; onRepeats: (n: number) => void; onWindow: (n: number) => void }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-dim" data-testid="threshold">
+      <span>Point out a call repeated at least</span>
+      <label className="sr-only" htmlFor="repeat-count">Number of repeats</label>
+      <select id="repeat-count" className={thresholdField} value={repeats} onChange={(e) => { const r = Number(e.target.value); onRepeats(r); if (window < r) onWindow(WINDOWS.find((w) => w >= r) ?? 15); }}>
+        {REPEATS.map((r) => <option key={r} value={r}>{r} times</option>)}
+      </select>
+      <span>within</span>
+      <label className="sr-only" htmlFor="repeat-window">Window of calls</label>
+      <select id="repeat-window" className={thresholdField} value={window} onChange={(e) => onWindow(Number(e.target.value))}>
+        {WINDOWS.map((w) => <option key={w} value={w} disabled={w < repeats}>{w} calls</option>)}
+      </select>
+      <span className="text-muted">Your choice, not a measured limit.</span>
+    </div>
+  );
+}
+
 export function AgentTasks({ shell }: { shell: ShellProps }) {
   const [days, setDays] = useState("30");
   const [repeats, setRepeats] = useState(5);
   const [window, setWindow] = useState(7);
-  const field = "rounded-[8px] border border-rule bg-surface px-2 py-1 text-xs text-ink";
   return (
     <Shell
       shell={shell}
@@ -248,19 +269,7 @@ export function AgentTasks({ shell }: { shell: ShellProps }) {
       hint="A task is every call that shares one task id. Analysis only: nothing is stopped, cancelled or changed."
       controls={<Segmented label="Period" value={days} options={TASK_DAYS.map((d) => ({ value: String(d), label: `${d} days` }))} onChange={setDays} />}
     >
-      <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-dim" data-testid="threshold">
-        <span>Point out a call repeated at least</span>
-        <label className="sr-only" htmlFor="repeat-count">Number of repeats</label>
-        <select id="repeat-count" className={field} value={repeats} onChange={(e) => { const r = Number(e.target.value); setRepeats(r); if (window < r) setWindow(WINDOWS.find((w) => w >= r) ?? 15); }}>
-          {REPEATS.map((r) => <option key={r} value={r}>{r} times</option>)}
-        </select>
-        <span>within</span>
-        <label className="sr-only" htmlFor="repeat-window">Window of calls</label>
-        <select id="repeat-window" className={field} value={window} onChange={(e) => setWindow(Number(e.target.value))}>
-          {WINDOWS.map((w) => <option key={w} value={w} disabled={w < repeats}>{w} calls</option>)}
-        </select>
-        <span className="text-muted">Your choice, not a measured limit.</span>
-      </div>
+      <RepeatThreshold repeats={repeats} window={window} onRepeats={setRepeats} onWindow={setWindow} />
       <AgentTasksBody days={Number(days)} repeats={repeats} window={window} />
     </Shell>
   );
