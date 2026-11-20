@@ -204,7 +204,7 @@ def decide(
                                   floor=floor)
         return Decision(
             "INSUFFICIENT_EVIDENCE", current, None, None, models, progress=min(1.0, best / floor) if floor else 1.0,
-            next_step="Record more runs, or run a re-test to gather evidence sooner",
+            next_step="Record more runs, or run a trial to gather evidence sooner",
             sure_enough_needed=needed, sure_enough_have=have,
         )
 
@@ -217,7 +217,7 @@ def decide(
         m.why = {
             "GOOD_ENOUGH": f"At most {_points(margin)} worse than {reference.model}, with {confidence_words(confidence)}",
             "CLEARLY_WORSE": f"More than {_points(margin)} worse than {reference.model}",
-            "UNSURE": f"Not yet sure it is within {_points(margin)} of {reference.model}; a re-test would settle it",
+            "UNSURE": f"Not yet sure it is within {_points(margin)} of {reference.model}; a trial would settle it",
         }[m.status]
     for m in judged:
         if m.status == "GOOD_ENOUGH" and m.cost_per_success_usd is None:
@@ -271,18 +271,18 @@ def decide(
             if new_advice and _within(recommended, current, margin, z):
                 warnings.append(
                     f"{recommended.model} is likely within {_points(margin)} of {current.model}, the model in use, "
-                    f"but advising a switch needs {confidence_words(switch_confidence)}; a re-test of "
+                    f"but advising a switch needs {confidence_words(switch_confidence)}; a trial of "
                     f"{recommended.model} would settle it"
                 )
                 why = (f"Within {_points(margin)} of {current.model} with {confidence_words(confidence)}, not yet the "
-                       f"{confidence_words(switch_confidence)} a switch needs; a re-test would settle it")
+                       f"{confidence_words(switch_confidence)} a switch needs; a trial would settle it")
             else:
                 warnings.append(
                     f"Not yet sure {recommended.model} is within {_points(margin)} of {current.model}, the model in "
-                    f"use; a re-test of {recommended.model} would settle it"
+                    f"use; a trial of {recommended.model} would settle it"
                 )
                 why = (f"Not yet sure it is within {_points(margin)} of {current.model}, the model in use; "
-                       "a re-test would settle it")
+                       "a trial would settle it")
             settle.append(recommended.model)
             # Its status says so too: "good enough" next to the reference is not good enough to replace the
             # model in use, and a re-test of it must not stop early on that status before it settles this.
@@ -295,12 +295,12 @@ def decide(
             warnings.append(
                 f"{current.model} has too little evidence to judge yet" if current.status == "BELOW_FLOOR"
                 else f"Not yet sure {current.model} is within {_points(margin)} of {reference.model}; "
-                "a re-test on more of its prompts would settle it"
+                "a trial on more of its prompts would settle it"
             )
 
     if verdict == "HOLD" and behind and reference.model not in settle:
         warnings.append(
-            f"{current.model} measures {gap * 100:.1f} points below {reference.model}, not yet proven; a re-test of "
+            f"{current.model} measures {gap * 100:.1f} points below {reference.model}, not yet proven; a trial of "
             f"{reference.model} will show whether to switch"
         )
         settle.append(reference.model)
@@ -319,9 +319,9 @@ def decide(
         and m.model not in settle
     ]
     if retest:
-        next_step = f"Re-test {', '.join(retest)}: cheaper, but not enough evidence yet"
+        next_step = f"Start a trial on {', '.join(retest)}: cheaper, but not enough evidence yet"
     elif settle:
-        next_step = f"Re-test {', '.join(settle)} to settle whether to switch"
+        next_step = f"Start a trial on {', '.join(settle)} to settle whether to switch"
     else:
         next_step = None
     retest += [m for m in settle if m not in retest]

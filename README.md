@@ -23,7 +23,7 @@ recommended and why it changed.
   best, ranked by **cost per successful run**, with a savings forecast and the failing runs behind it.
   Advising a move away from the model in use asks for **about 99.5% (one-sided)**, so the advice does not flip on daily noise.
 - Scheduled jobs store each changed verdict with its lineage, detect regressions across version changes (and
-  silent drops under an unchanged name), alert a signed webhook, track model retirements, and **re-test**
+  silent drops under an unchanged name), alert a signed webhook, track model retirements, and **trial**
   cheaper candidates on the customer's own key, always within a budget and a monthly cap.
 - **Usage limits**: a plan's 5-hour or weekly limit, a one-model limit, an API budget or daily quota. From the
   recorded runs it forecasts whether a limit runs out before it resets and, if so, names per job the cheaper
@@ -33,7 +33,7 @@ recommended and why it changed.
   (or creates the first: name it, take its key once, wrap the model call), and opens a project's dashboard at
   `/p/<project>`. Inside a project, four places instead of a long menu: an **Overview** that leads with the monthly saving, spend over
   time and what needs attention; **Jobs**, where each job's verdict is stated in words and proven on a
-  cost-versus-quality map, with quality and spend over time, evidence, runs, history and re-tests; **Models**,
+  cost-versus-quality map, with quality and spend over time, evidence, runs, history and trials; **Models**,
   with prices and retirements; and **Activity**, with alerts, the live pipeline and AI news. Every chart has a
   table view, and Ctrl/⌘ K jumps anywhere.
 - **News about your models**: headlines from the model makers, the press and the community, refreshed hourly.
@@ -56,7 +56,7 @@ measured results: [`reports/`](reports/)
 | 7 | Recommendation engine (95% intervals, 3-point tolerance), spend by job | done |
 | 8 | Consolidation, supersession, history and lineage, result cache, savings forecast | done |
 | 9 | Simulated-time harness, regression and silent-drop detection, signed webhook alerts | done |
-| 10 | Re-test runner: budget and cap before every call, just-in-time provider key, automatic triggers | done |
+| 10 | Trial runner: budget and cap before every call, just-in-time provider key, automatic triggers | done |
 | 11 | Google sign-in, project ownership and setup, public read-only demo, breakdown insights | done |
 | 12 | Staleness experiment, live data-flow view (SSE), optional recommendation summary | done |
 | — | Public deployment on the server | waiting for the server and domain |
@@ -71,7 +71,7 @@ Simulated data, run through the production engine, decay, consolidation and regr
   re-checked every month 65% (81%). 76 of its 77 wrong answers were the safe kind, a good model that costs
   more; once in 320 checkpoints it had just moved to the cheap model as that model stopped being good
   enough, and it moved back within a week. Keeping the evidence fresh costs 9% of production spend (with a
-  third of the re-test runs, 3% of spend but 51% accuracy). In a world where nothing changes it does not
+  third of the trial runs, 3% of spend but 51% accuracy). In a world where nothing changes it does not
   wander: 1.9 changes of answer per timeline, never to a model that is not good enough.
 - **Regression detection** ([version](reports/regression_detection.json),
   [silent](reports/silent_drop_detection.json), [silent at 100 a day](reports/silent_drop_detection_100.json),
@@ -112,7 +112,7 @@ python scripts/sync_catalog.py                        # model prices and shutdow
 
 uvicorn agent_memory.api:app --reload                 # the API on http://127.0.0.1:8000
 python -m agent_memory.pipeline.sync_worker           # embeds recorded runs (second terminal)
-python -m agent_memory.scheduler                      # maintenance, regressions, re-tests (third terminal)
+python -m agent_memory.scheduler                      # maintenance, regressions, trials (third terminal)
 
 cd frontend && npm ci && npm run dev                  # the web app on http://localhost:5174
 ```
@@ -155,8 +155,8 @@ spend), and let anyone read it without signing in:
 python scripts/seed_demo.py --database-url "$DATABASE_URL"     # then set DEMO_PROJECT_ID=demo
 ```
 
-Re-tests run on the customer's own provider key, asked for in the web app the first time a re-test needs it
-and stored encrypted with `SECRET_KEY`. Every re-test has a budget, and every project a monthly cap (default
+Trials run on the customer's own provider key, asked for in the web app the first time a trial needs it
+and stored encrypted with `SECRET_KEY`. Every trial has a budget, and every project a monthly cap (default
 $10, counted at list price so it limits free keys too), checked before each call.
 
 Logs are JSON lines carrying `run_id`, `job_id` and `project_id`, so one run can be followed end to end

@@ -74,7 +74,7 @@ async def test_nothing_is_suggested_while_the_cheaper_model_is_unproven(session)
     f = await forecast(session, weekly(size=Decimal("38")), now=NOW, settings=SETTINGS)
     assert f.state == "AT_RISK"
     [s] = f.suggestions
-    assert s.suggested is None and s.note == "No cheaper option is proven for this job yet; a re-test of mini would tell"
+    assert s.suggested is None and s.note == "No cheaper option is proven for this AI task yet; a trial of mini would tell"
     assert f.lasts_after is None
 
 

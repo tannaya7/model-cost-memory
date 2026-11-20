@@ -121,7 +121,7 @@ export function LimitCard({ limit }: { limit: UsageLimit }) {
                   </p>
                   <p className="text-xs text-dim">{s.note}</p>
                 </div>
-                {!s.suggested && s.note.includes("re-test") && (
+                {!s.suggested && s.note.includes("a trial of") && (
                   <Link
                     to={p(`/jobs/${encodeURIComponent(s.job)}`)}
                     className="shrink-0 rounded-md border border-accent/40 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent-soft"

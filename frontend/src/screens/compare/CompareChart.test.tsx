@@ -85,7 +85,7 @@ describe("choosing a model with the keyboard", () => {
     await user.keyboard("{Enter}");
     expect(chip).toHaveAttribute("aria-pressed", "true");
     const d = screen.getByTestId("model-detail");
-    expect(d).toHaveTextContent("40 of them re-tests of your own past prompts");
+    expect(d).toHaveTextContent("40 of them trials on your own past prompts");
     expect(d).toHaveTextContent("90 of 300 checked calls have no known price, so they are left out of the cost figures.");
     expect(d).toHaveTextContent("$0.001 typical");
     expect(d).toHaveTextContent("A few calls cost much more than a typical one, so the average cost hides them.");

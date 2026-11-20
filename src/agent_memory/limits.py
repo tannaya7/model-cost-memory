@@ -182,7 +182,7 @@ async def _suggest(session: AsyncSession, limit: UsageLimit, now: datetime, sinc
             suggestions.append(Suggestion(job.name, current.model, decision.recommended.model, share, reduction, note))
         else:
             cheaper = [m for m in decision.retest_candidates if m != current.model]
-            note = (f"No cheaper option is proven for this job yet; a re-test of {', '.join(cheaper)} would tell"
+            note = (f"No cheaper option is proven for this AI task yet; a trial of {', '.join(cheaper)} would tell"
                     if cheaper else "No cheaper option does this job well enough")
             suggestions.append(Suggestion(job.name, current.model, None, share, 0.0, note))
     return suggestions, use_by_job

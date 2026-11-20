@@ -174,7 +174,7 @@ class RunOut(Model):
         default=None, description="When the prompt, output, tool calls and answer key were cleared under the "
                                   "project's retention; the figures are kept")
     importance_score: float = Field(default=1.0, description="How much the run matters (failures and costly runs "
-                                                             "more): what decides archiving and re-test sampling")
+                                                             "more): what decides archiving and trial sampling")
     weight: float | None = Field(default=None, description="How much it counts in the recommendation now: "
                                                           "e^(-age/S), S shorter once its version is replaced")
 
@@ -269,7 +269,7 @@ class RunCreate(Model):
     expected: dict | None = Field(
         default=None,
         description="The correct values for an ANSWER_KEY job, used to check this run. Stored only when the job "
-                    "has re-test consent, so a re-test can check the replayed run against the same answers",
+                    "has trial consent, so a trial can check the replayed run against the same answers",
     )
 
     @field_validator("prompt", "output")
@@ -420,7 +420,7 @@ class ModelEvidenceOut(ModelRef):
         default=None, description="Null for the model in use itself, when there is no model in use, or with no checked answers")
     priced_runs: int | None = Field(default=None, description="Checked runs with a known cost; null when not measured")
     unpriced_runs: int | None = Field(default=None, description="Checked runs whose cost is unknown: not in the cost figures")
-    retest_runs: int | None = Field(default=None, description="Checked runs that were re-tests (your own past prompts replayed)")
+    retest_runs: int | None = Field(default=None, description="Checked runs that were trials (your own past prompts replayed)")
     cost_p50_usd: float | None = Field(default=None, description="Typical call cost (median), last 60 days, most-used version")
     cost_p90_usd: float | None = Field(default=None, description="Expensive tail: 1 call in 10 costs at least this")
 
@@ -519,7 +519,7 @@ class RecommendationOut(Model):
     evidence: RecommendationEvidence
     progress: float = Field(description="Progress toward the evidence floor, 0..1; below 1 only when insufficient")
     retest_candidates: list[str] = Field(
-        description="Models a re-test would settle: cheaper ones that could qualify, or the best model when "
+        description="Models a trial would settle: cheaper ones that could qualify, or the best model when "
                     "the current one measures worse but that is not proven yet")
     forecast: ForecastOut | None = Field(description="Set for DOWNGRADE and SWITCH when both costs are known")
     summary: str | None = Field(

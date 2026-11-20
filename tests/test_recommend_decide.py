@@ -75,7 +75,7 @@ def test_cheaper_models_without_enough_evidence_are_re_test_candidates():
     d = decide([model("big", 0.99, 400, 0.03), model("mini", 1.0, 10, 0.001)], "big", **RULES)
     assert d.verdict == "HOLD"
     assert d.retest_candidates == ["mini"]
-    assert d.next_step.startswith("Re-test mini")
+    assert d.next_step.startswith("Start a trial on mini")
 
 
 def test_a_deprecated_recommendation_warns_and_names_the_next_cheapest():
@@ -101,14 +101,14 @@ def test_a_cheaper_model_must_be_shown_within_the_margin_of_the_current_one_befo
     d = decide([model("big", 0.96, 30, 0.03), model("mini", 1.0, 30, 0.001)], "big", **RULES)
     assert d.reference.model == "mini"
     assert (d.verdict, d.recommended.model) == ("HOLD", "big")
-    assert d.warnings == ["Not yet sure mini is within 3 points of big, the model in use; a re-test of mini "
+    assert d.warnings == ["Not yet sure mini is within 3 points of big, the model in use; a trial of mini "
                           "would settle it"]
     assert d.retest_candidates == ["mini"]
-    assert d.next_step == "Re-test mini to settle whether to switch"
+    assert d.next_step == "Start a trial on mini to settle whether to switch"
     # Not "good enough": that is next to itself as the reference, not next to the model in use.
     mini = by_name(d)["mini"]
     assert (mini.status, mini.eligible) == ("UNSURE", False)
-    assert mini.why == "Not yet sure it is within 3 points of big, the model in use; a re-test would settle it"
+    assert mini.why == "Not yet sure it is within 3 points of big, the model in use; a trial would settle it"
 
 
 def test_a_current_model_that_measures_well_below_the_best_asks_for_a_re_test_of_the_best():
@@ -116,7 +116,7 @@ def test_a_current_model_that_measures_well_below_the_best_asks_for_a_re_test_of
     d = decide([model("big", 0.97, 100, 0.03), model("mini", 0.90, 200, 0.001)], "mini", **RULES)
     assert by_name(d)["mini"].status == "UNSURE"
     assert (d.verdict, d.recommended.model) == ("HOLD", "mini")
-    assert d.warnings == ["mini measures 7.0 points below big, not yet proven; a re-test of big will show "
+    assert d.warnings == ["mini measures 7.0 points below big, not yet proven; a trial of big will show "
                           "whether to switch"]
     assert d.retest_candidates == ["big"]
 
@@ -128,12 +128,12 @@ def test_advising_a_switch_needs_99_percent_and_keeping_the_advice_needs_95():
     new = decide(evidence, "big", **RULES, switch_confidence=0.99)
     assert (new.verdict, new.recommended.model) == ("HOLD", "big")
     assert new.warnings == ["mini is likely within 3 points of big, the model in use, but advising a switch needs "
-                            "very high confidence (about 99.5%, one-sided); a re-test of mini would settle it"]
+                            "very high confidence (about 99.5%, one-sided); a trial of mini would settle it"]
     assert new.retest_candidates == ["mini"]
     assert (by_name(new)["mini"].status, by_name(new)["mini"].eligible) == ("UNSURE", False)
     assert by_name(new)["mini"].why == ("Within 3 points of big with high confidence (about 97.5%, one-sided), not yet the "
                                         "very high confidence (about 99.5%, one-sided) a switch needs; "
-                                        "a re-test would settle it")
+                                        "a trial would settle it")
 
     kept = decide(evidence, "big", **RULES, switch_confidence=0.99, advised="mini")
     assert (kept.verdict, kept.recommended.model) == ("DOWNGRADE", "mini")

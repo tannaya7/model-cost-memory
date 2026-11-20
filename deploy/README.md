@@ -54,7 +54,7 @@ leaving the live database untouched. Try it once on a dump fetched back from the
 A signed-in owner deletes a project from the web app (Projects, open the project, Delete project). For a project made
 with `create_project.py`, which has no owner, run
 `docker compose run --rm api python scripts/delete_project.py <project-id> --yes`. Either way every job,
-run, re-test, recommendation, alert and stored key of that project goes in one transaction. Dumps already
+run, trial, recommendation, alert and stored key of that project goes in one transaction. Dumps already
 taken still hold it until they age out (14 days here, `REMOTE_KEEP_DAYS` at the remote).
 
 Run content (prompt, answer, tool calls, answer key) is cleared after each project's retention, 90 days by

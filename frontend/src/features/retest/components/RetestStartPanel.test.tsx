@@ -95,13 +95,13 @@ describe("starting a trial", () => {
   });
 
   it("when the preview says it cannot start, it explains why and offers no confirm button", async () => {
-    api(false, { can_start: false, confirmation: null, blocked: { code: "consent_off", message: "Re-tests are off for this task: turn on its re-test consent first" } });
+    api(false, { can_start: false, confirmation: null, blocked: { code: "consent_off", message: "Trials are off for this AI task: turn on trials for it first" } });
     const user = userEvent.setup();
     renderWithProviders(<RetestStartPanel />);
     const open = await screen.findByRole("button", { name: "Review and start a trial" });
     await waitFor(() => expect(open).toBeEnabled());
     await user.click(open);
-    expect(await screen.findByText(/turn on its re-test consent first/)).toBeInTheDocument();
+    expect(await screen.findByText(/turn on trials for it first/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Confirm and start/ })).toBeNull();
   });
 });

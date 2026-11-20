@@ -3609,7 +3609,7 @@
                 "type": "null"
               }
             ],
-            "description": "Checked runs that were re-tests (your own past prompts replayed)",
+            "description": "Checked runs that were trials (your own past prompts replayed)",
             "title": "Retest Runs"
           },
           "shutdown_date": {
@@ -6737,7 +6737,7 @@
             "title": "Reference"
           },
           "retest_candidates": {
-            "description": "Models a re-test would settle: cheaper ones that could qualify, or the best model when the current one measures worse but that is not proven yet",
+            "description": "Models a trial would settle: cheaper ones that could qualify, or the best model when the current one measures worse but that is not proven yet",
             "items": {
               "type": "string"
             },
@@ -7799,7 +7799,7 @@
                 "type": "null"
               }
             ],
-            "description": "The correct values for an ANSWER_KEY job, used to check this run. Stored only when the job has re-test consent, so a re-test can check the replayed run against the same answers",
+            "description": "The correct values for an ANSWER_KEY job, used to check this run. Stored only when the job has trial consent, so a trial can check the replayed run against the same answers",
             "title": "Expected"
           },
           "job": {
@@ -8104,7 +8104,7 @@
           },
           "importance_score": {
             "default": 1.0,
-            "description": "How much the run matters (failures and costly runs more): what decides archiving and re-test sampling",
+            "description": "How much the run matters (failures and costly runs more): what decides archiving and trial sampling",
             "title": "Importance Score",
             "type": "number"
           },
@@ -8476,7 +8476,7 @@
           },
           "importance_score": {
             "default": 1.0,
-            "description": "How much the run matters (failures and costly runs more): what decides archiving and re-test sampling",
+            "description": "How much the run matters (failures and costly runs more): what decides archiving and trial sampling",
             "title": "Importance Score",
             "type": "number"
           },

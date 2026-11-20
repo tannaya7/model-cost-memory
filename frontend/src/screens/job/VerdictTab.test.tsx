@@ -44,7 +44,7 @@ describe("VerdictTab", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/we need at least 25/);
   });
 
-  it("offers the re-tests that would settle an open question", () => {
+  it("offers the trials that would settle an open question", () => {
     renderWithProviders(<WithProject id="acme"><VerdictTab rec={downgrade} /></WithProject>);
     expect(screen.getByRole("link", { name: /Start a trial on acme-nano/ })).toHaveAttribute("href", "/p/acme/retest?job=invoice-extract&model=acme-nano");
   });

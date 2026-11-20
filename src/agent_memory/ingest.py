@@ -165,7 +165,7 @@ async def record_run(
                "from_state": None, "to_state": state, "cost_usd": float(cost) if cost is not None else None},
     )
     session.add(OutboxRow(run_id=body.run_id, op="UPSERT", payload={"run_id": str(body.run_id), "prompt_hash": digest}))
-    source = "Re-test runner" if run_kind == "RETEST" else "RunRecorder"
+    source = "Trial runner" if run_kind == "RETEST" else "RunRecorder"
     flow.emit(session, project.project_id, "sdk", f"{source} captured a call to '{body.model}' for '{job.name}'",
               run_id=body.run_id, data={"job": job.name, "model": body.model, "run_kind": run_kind})
     flow.emit(session, project.project_id, "api", "POST /v1/runs accepted: stored and queued for indexing",

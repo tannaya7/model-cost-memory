@@ -1272,7 +1272,7 @@ async def get_retest(
     found = await _job(session, project, job)
     row = await session.get(Retest, retest_id)
     if row is None or row.job_id != found.job_id:
-        raise HTTPException(404, "Re-test not found")
+        raise HTTPException(404, "Trial not found")
     return await _retest_out(session, row, found.name, project)
 
 
@@ -1329,7 +1329,7 @@ async def put_provider_key(
         await start_on_first_key(session, project)
     except Exception:  # the key is saved either way; the scheduler's triggers still run
         await session.rollback()
-        log.exception("first-key re-tests were not started", extra={"project_id": project.project_id})
+        log.exception("first-key trials were not started", extra={"project_id": project.project_id})
     return _key_out(key)
 
 

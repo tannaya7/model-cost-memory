@@ -20,7 +20,7 @@ export function RetestStartPanel() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialJobParam = searchParams.get("job") || "";
-  // The model the engine named for a re-test ("Re-test X to settle it"), passed from the job page.
+  // The model the engine named for a trial ("Start a trial on X to settle it"), passed from the job page.
   const suggestedModel = searchParams.get("model") || "";
 
   const jobsQuery = useJobs();

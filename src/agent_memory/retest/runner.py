@@ -119,24 +119,24 @@ async def check_can_start(
     RetestRefused with a reason. Used by the preview and by enqueue, so they can never disagree."""
     now = now or datetime.now(UTC)
     if not job.retest_consent:
-        raise RetestRefused("consent_off", f"Re-tests are off for '{job.name}': turn on its re-test consent first")
+        raise RetestRefused("consent_off", f"Trials are off for '{job.name}': turn on trials for this AI task first")
     if not project.retest_allowed:
-        raise RetestRefused("project_off", "Re-tests are switched off for this project")
+        raise RetestRefused("project_off", "Trials are switched off for this project")
     if job.check_kind not in CHECKABLE:
         raise RetestRefused(
-            "not_checkable", "Only jobs checked automatically (answer key or schema) can be re-tested")
+            "not_checkable", "Only AI tasks that are checked automatically (answer key or schema) can have a trial")
     if Decimal(str(budget_usd)) <= 0:
-        raise RetestRefused("budget_required", "A re-test needs a budget above zero")
+        raise RetestRefused("budget_required", "A trial needs a budget above zero")
     key = await session.get(ProviderKey, project.project_id)
     if key is None:
-        raise RetestRefused("provider_key_required", "Add the provider key re-tests should use")
+        raise RetestRefused("provider_key_required", "Add the provider key trials should use")
     model = split_option(candidate_model)[0]  # "sonnet-5@low" is priced as sonnet-5
     if await find_price(session, model, model, key.provider) is None:
         raise RetestRefused(
             "no_price", f"No price is known for {candidate_model}, so the budget and the monthly cap could not "
             "hold: every call would count as free. Add its price to the catalog first")
     if Decimal(project.retest_monthly_cap_usd) - await spent_this_month(session, project.project_id, now) <= 0:
-        raise RetestRefused("cap_reached", "This month's re-test cap is used up")
+        raise RetestRefused("cap_reached", "This month's trial cap is used up")
     running = (
         await session.execute(
             select(Retest.retest_id).where(Retest.job_id == job.job_id, Retest.status.in_(ACTIVE),
@@ -144,7 +144,7 @@ async def check_can_start(
         )
     ).first()
     if running:
-        raise RetestRefused("already_running", f"A re-test of {candidate_model} is already running for this job")
+        raise RetestRefused("already_running", f"A trial of {candidate_model} is already running for this AI task")
     return key
 
 
@@ -159,7 +159,7 @@ async def enqueue(
                     trigger=trigger, budget_usd=Decimal(str(budget_usd)), status="QUEUED", created_at=now)
     session.add(retest)
     await session.flush()
-    log.info("re-test queued", extra={"retest_id": str(retest.retest_id), "job_id": str(job.job_id),
+    log.info("trial queued", extra={"retest_id": str(retest.retest_id), "job_id": str(job.job_id),
                                       "project_id": project.project_id, "candidate": candidate_model,
                                       "trigger": trigger, "budget_usd": float(budget_usd)})
     return retest
@@ -236,7 +236,7 @@ async def run_retest(
     try:  # checked again now: the host may have been re-pointed at a private address since it was saved
         await check_outbound(key.base_url, allow_private=settings.allow_private_urls)
     except UnsafeUrl as exc:
-        return await _finish(sessions, retest_id, "FAILED", f"The re-test endpoint was refused: {exc}; nothing was replayed")
+        return await _finish(sessions, retest_id, "FAILED", f"The provider address was refused: {exc}; nothing was replayed")
     client = client_factory(key, settings)
     progress = _Progress()
     lock = asyncio.Condition()  # guards the reservations; notified whenever one is released
@@ -250,11 +250,11 @@ async def run_retest(
             try:
                 await replay(src)
             except Exception:  # anything unexpected ends the re-test; waiting calls must not wait forever
-                log.exception("re-test call broke", extra={"retest_id": str(retest_id)})
+                log.exception("trial call broke", extra={"retest_id": str(retest_id)})
                 async with lock:
                     if not progress.stop_status:
                         progress.stop_status = "FAILED"
-                        progress.stop_message = "An unexpected error stopped the re-test; partial results kept"
+                        progress.stop_message = "An unexpected error stopped the trial; partial results kept"
                     lock.notify_all()
 
     async def replay(src) -> None:
@@ -276,7 +276,7 @@ async def run_retest(
                     return
                 if month + cost > cap:
                     progress.stop_status, progress.stop_message = "STOPPED_CAP", (
-                        f"Stopped at this month's re-test cap of ${cap:.2f}")
+                        f"Stopped at this month's trial cap of ${cap:.2f}")
                     lock.notify_all()
                     return
                 if spent + progress.reserved + cost <= budget and month + progress.reserved + cost <= cap:
@@ -297,7 +297,7 @@ async def run_retest(
                     progress.stop_message = ("The provider kept refusing with 'too many requests'; partial results kept"
                                              if isinstance(exc, RateLimited)
                                              else "The provider returned an error; partial results kept")
-            log.warning("re-test call failed", extra={"retest_id": str(retest_id), "error": type(exc).__name__})
+            log.warning("trial call failed", extra={"retest_id": str(retest_id), "error": type(exc).__name__})
             return
 
         parsed = read_response(response)
@@ -314,7 +314,7 @@ async def run_retest(
         async with lock:
             async with sessions() as s:
                 owner = await s.get(Project, project.project_id)
-                cut = (f"cut off at the re-test's output limit of {limit} tokens, so not judged"
+                cut = (f"cut off at the trial's output limit of {limit} tokens, so not judged"
                        if was_cut_off(response) else None)
                 await record_run(s, owner, body, run_kind="RETEST", retest_id=retest_id, unknown_reason=cut)
                 await s.commit()
@@ -355,7 +355,7 @@ async def _finish(sessions, retest_id, status: str, message: str | None) -> Rete
         row.status, row.finished_at = status, datetime.now(UTC)
         row.message = message or (f"Replayed {row.runs_done} runs: {row.passed} passed, {row.failed} failed")
         await session.commit()
-        log.info("re-test finished", extra={"retest_id": str(retest_id), "status": status, "runs": row.runs_done,
+        log.info("trial finished", extra={"retest_id": str(retest_id), "status": status, "runs": row.runs_done,
                                             "spent_usd": float(row.spent_usd), "project_id": row.project_id})
         return row
 

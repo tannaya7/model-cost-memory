@@ -3203,7 +3203,7 @@ export interface components {
             priced_runs?: number | null;
             /**
              * Retest Runs
-             * @description Checked runs that were re-tests (your own past prompts replayed)
+             * @description Checked runs that were trials (your own past prompts replayed)
              */
             retest_runs?: number | null;
             /** Shutdown Date */
@@ -4621,7 +4621,7 @@ export interface components {
             reference: string | null;
             /**
              * Retest Candidates
-             * @description Models a re-test would settle: cheaper ones that could qualify, or the best model when the current one measures worse but that is not proven yet
+             * @description Models a trial would settle: cheaper ones that could qualify, or the best model when the current one measures worse but that is not proven yet
              */
             retest_candidates: string[];
             rules: components["schemas"]["RecommendationRules"];
@@ -5047,7 +5047,7 @@ export interface components {
             effort?: string | null;
             /**
              * Expected
-             * @description The correct values for an ANSWER_KEY job, used to check this run. Stored only when the job has re-test consent, so a re-test can check the replayed run against the same answers
+             * @description The correct values for an ANSWER_KEY job, used to check this run. Stored only when the job has trial consent, so a trial can check the replayed run against the same answers
              */
             expected?: {
                 [key: string]: unknown;
@@ -5180,7 +5180,7 @@ export interface components {
             effort?: string | null;
             /**
              * Importance Score
-             * @description How much the run matters (failures and costly runs more): what decides archiving and re-test sampling
+             * @description How much the run matters (failures and costly runs more): what decides archiving and trial sampling
              * @default 1
              */
             importance_score: number;
@@ -5330,7 +5330,7 @@ export interface components {
             effort?: string | null;
             /**
              * Importance Score
-             * @description How much the run matters (failures and costly runs more): what decides archiving and re-test sampling
+             * @description How much the run matters (failures and costly runs more): what decides archiving and trial sampling
              * @default 1
              */
             importance_score: number;

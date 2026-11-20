@@ -73,7 +73,7 @@ function Detail({ r, job, notComparable }: { r: Row; job: string; notComparable:
       <p className="font-mono text-sm font-semibold text-ink">{r.model}{r.isCurrent ? " (model in use)" : ""}</p>
       <dl className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
         <div><dt className="inline text-muted">Correct answers: </dt><dd className="inline font-semibold text-ink tabular">{rateText(r)}</dd></div>
-        <div><dt className="inline text-muted">Checked answers: </dt><dd className="inline font-semibold text-ink tabular">{r.checked.toLocaleString("en")}{r.retests ? `, ${r.retests.toLocaleString("en")} of them re-tests of your own past prompts` : ""}</dd></div>
+        <div><dt className="inline text-muted">Checked answers: </dt><dd className="inline font-semibold text-ink tabular">{r.checked.toLocaleString("en")}{r.retests ? `, ${r.retests.toLocaleString("en")} of them trials on your own past prompts` : ""}</dd></div>
         <div><dt className="inline text-muted">Cost per 1,000 correct answers: </dt><dd className="inline font-semibold text-ink tabular">{costText(r, false)}</dd></div>
         <div><dt className="inline text-muted">One call: </dt><dd className="inline font-semibold text-ink tabular">{callText(r)}</dd></div>
         {r.unpriced ? <div className="sm:col-span-2"><dt className="inline text-muted">Missing cost: </dt><dd className="inline font-semibold text-warn tabular">{r.unpriced.toLocaleString("en")} of {r.checked.toLocaleString("en")} checked calls have no known price, so they are left out of the cost figures.</dd></div> : null}

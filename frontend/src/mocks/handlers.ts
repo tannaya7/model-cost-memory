@@ -1641,13 +1641,13 @@ export const handlers = [
 
     if (targetJob && targetJob.retest_consent === false) {
       return HttpResponse.json(
-        { detail: { code: "consent_off", message: `Re-tests are off for '${jobName}': turn on its re-test consent first` } },
+        { detail: { code: "consent_off", message: `Trials are off for '${jobName}': turn on trials for this AI task first` } },
         { status: 409 },
       );
     }
     if (mockProviderKey === null) {
       return HttpResponse.json(
-        { detail: { code: "provider_key_required", message: "Add the provider key re-tests should use" } },
+        { detail: { code: "provider_key_required", message: "Add the provider key trials should use" } },
         { status: 409 },
       );
     }
@@ -1709,7 +1709,7 @@ export const handlers = [
     const record = retests.get(retestId);
 
     if (!record) {
-      return HttpResponse.json({ detail: "Re-test not found" }, { status: 404 });
+      return HttpResponse.json({ detail: "Trial not found" }, { status: 404 });
     }
 
     // Advance progress on each GET
@@ -2011,7 +2011,7 @@ export const handlers = [
       const cap = Number(body.retest_monthly_cap_usd);
       if (isNaN(cap) || cap < 0 || cap > 500) {
         return HttpResponse.json(
-          { detail: "Monthly re-test cap must be between 0 and 500" },
+          { detail: "Monthly trial cap must be between 0 and 500" },
           { status: 422 },
         );
       }
