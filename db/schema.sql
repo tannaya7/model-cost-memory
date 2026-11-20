@@ -209,6 +209,8 @@ CREATE TABLE runs (
     provider          TEXT,                         -- who served the call, e.g. 'groq'; picks the price (0010)
     content_removed_at TIMESTAMPTZ,                 -- when retention cleared prompt, output, tool calls, answer key, embedding (0015)
     agent             TEXT,                         -- which agent or role made the call (0017)
+    feature           TEXT,                         -- the customer's own feature label: optional, not verified (0038)
+    data_flags        TEXT[],                       -- quality flags found when the call was recorded; NULL = none found (0039)
     trace_id          TEXT,                         -- shared by every call serving one user task (0017)
     span_id           TEXT,                         -- this call's own id, chosen by the app (0029)
     parent_span_id    TEXT,                         -- the span_id of the call that started this one (0029)
@@ -234,6 +236,7 @@ CREATE INDEX idx_runs_job_model ON runs(job_id, model, model_version);
 CREATE INDEX idx_runs_job_created ON runs(job_id, created_at DESC);   -- "recent runs for this job"
 CREATE INDEX idx_runs_prompt_hash ON runs(prompt_hash);
 CREATE INDEX idx_runs_project_trace ON runs(project_id, trace_id) WHERE trace_id IS NOT NULL;   -- (0017)
+CREATE INDEX idx_runs_project_feature ON runs(project_id, feature) WHERE feature IS NOT NULL;   -- (0038)
 CREATE INDEX idx_runs_span ON runs(project_id, trace_id, span_id) WHERE span_id IS NOT NULL;      -- (0029)
 CREATE INDEX idx_runs_embedding ON runs USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX idx_runs_embedding_cache ON runs(project_id, prompt_hash, embedding_model) WHERE embedding IS NOT NULL;
@@ -521,4 +524,11 @@ CREATE TABLE official_prices (
     note            TEXT,
     read_at         TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (provider, model)
+);
+
+CREATE TABLE ingest_duplicates (                     -- how often an already-recorded call was sent again, per project and UTC day (0039)
+    project_id TEXT NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+    day        DATE NOT NULL,
+    duplicates INTEGER NOT NULL DEFAULT 0 CHECK (duplicates >= 0),
+    PRIMARY KEY (project_id, day)
 );

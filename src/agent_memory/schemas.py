@@ -140,6 +140,7 @@ class RunOut(Model):
     prompt_version: str | None
     effort: str | None = None
     agent: str | None = Field(default=None, description="Which agent or role made the call, if the SDK said")
+    feature: str | None = Field(default=None, description="The label your app sent for the feature or workflow, if any. Not verified")
     trace_id: str | None = Field(default=None, description="Shared by every call serving the same user task")
     span_id: str | None = Field(default=None, description="This call's own id within its task, if the app sent one")
     parent_span_id: str | None = Field(default=None, description="The span_id of the call that started this one, if the app sent one")
@@ -217,6 +218,10 @@ class RunCreate(Model):
                     "efforts is compared as separate options",
     )
     agent: str | None = Field(default=None, max_length=100, description="Which agent or role made the call")
+    feature: str | None = Field(
+        default=None, max_length=100, pattern=r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,99}$",
+        description="Your own name for the feature or workflow this call serves, for example support_summary. Optional. It is your label: "
+                    "not verified, not an identity and not an invoice-grade chargeback record. Letters, digits, spaces and . _ - only")
     trace_id: str | None = Field(default=None, max_length=200,
                                  description="One id shared by every call that serves the same user task")
     span_id: str | None = Field(default=None, max_length=200, description="This call's own id within its task (optional)")

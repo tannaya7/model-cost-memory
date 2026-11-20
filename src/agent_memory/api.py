@@ -33,6 +33,9 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from . import __version__, ingest
 from .db import dispose_engine, get_session
+from .insights.coverage import CoverageOut, coverage
+from .insights.planner import PlannerOut, plan
+from .insights.features import FeatureBreakdownOut, feature_breakdown
 from .exports import COST_BASIS, PROJECT_COLUMNS, PROJECT_TEXT, csv_file, write_csv
 from .insights.agents import agent_insights
 from .insights.savings import savings as savings_insight
@@ -277,7 +280,7 @@ async def _weights(session: AsyncSession, runs: list[Run], now: datetime | None 
 def _run_fields(r: Run, job_name: str, weight: float | None = None) -> dict:
     return dict(
         run_id=r.run_id, job_id=r.job_id, job=job_name, model=r.model, model_version=r.model_version,
-        prompt_version=r.prompt_version, effort=r.effort, agent=r.agent, trace_id=r.trace_id, span_id=r.span_id,
+        prompt_version=r.prompt_version, effort=r.effort, agent=r.agent, feature=r.feature, trace_id=r.trace_id, span_id=r.span_id,
         parent_span_id=r.parent_span_id,
         tools_tokens=r.tools_tokens, tool_call_count=r.tool_call_count, tokens_in=r.tokens_in, tokens_out=r.tokens_out,
         cache_read_tokens=r.cache_read_tokens, cache_write_tokens=r.cache_write_tokens,
@@ -748,6 +751,55 @@ async def get_spend(
 ) -> list[SpendOut]:
     """Production spend per job over the last `days` days, most expensive first."""
     return [SpendOut(**vars(s)) for s in await spend_by_job(session, project.project_id, days=days)]
+
+
+@app.get("/v1/insights/features", response_model=FeatureBreakdownOut, tags=["insights"])
+async def get_feature_breakdown(
+    days: int = Query(default=30, ge=1, le=365, description="How many days back to count"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> FeatureBreakdownOut:
+    """Calls, tokens, list-price cost and checked answers for each feature label your app sent, with the calls that carried no
+    label shown as their own row. The labels are your app's own words: not verified, not a chargeback record. Analysis only."""
+    return await feature_breakdown(session, project.project_id, days=days)
+
+
+@app.get("/v1/insights/planner", response_model=PlannerOut, tags=["insights"])
+async def get_planner(
+    job: str = Query(max_length=200, description="The task whose recorded calls the scenario is based on"),
+    days: int = Query(default=30, ge=1, le=365, description="How many days of history to use"),
+    calls: list[int] = Query(default=[1000, 10000, 100000], max_length=6, description="Tasks per period to price (up to 6 scenarios)"),
+    retry_rate: float = Query(default=0.0, ge=0, le=10, description="Extra attempts per task, typed by you"),
+    input_change_pct: float = Query(default=0.0, ge=-90, le=1000),
+    output_change_pct: float = Query(default=0.0, ge=-90, le=1000),
+    exclude_far_out: bool = Query(default=False, description="Leave out far-out calls (visible, reversible)"),
+    period: str = Query(default="month", pattern="^(day|week|month)$"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> PlannerOut:
+    """What a task might cost at traffic levels you type, from its own recorded calls: list-price scenarios with a range where the data
+    supports one. Not a bill or a forecast. Nothing is sent to a provider and nothing is changed."""
+    if any(c < 1 or c > 1_000_000_000 for c in calls):
+        raise HTTPException(422, "Tasks per period must be between 1 and 1,000,000,000")
+    try:
+        return await plan(session, project.project_id, job=job, days=days, calls=calls, retry_rate=retry_rate, input_change_pct=input_change_pct,
+                          output_change_pct=output_change_pct, exclude_far_out=exclude_far_out, period=period)
+    except LookupError as exc:
+        raise HTTPException(404, f"Unknown task '{job}'") from exc
+
+
+@app.get("/v1/insights/coverage", response_model=CoverageOut, tags=["insights"])
+async def get_coverage(
+    days: int = Query(default=30, ge=1, le=365, description="How many days back to count"),
+    provider: str | None = Query(default=None, max_length=100, description="Only this provider"),
+    model: str | None = Query(default=None, max_length=200, description="Only this model"),
+    job: str | None = Query(default=None, max_length=200, description="Only this task"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> CoverageOut:
+    """How complete and reliable the records Model & Cost Memory RECEIVED are: attempts, usage, prices, checks, duplicates and flagged
+    calls, each with its denominator and the reason it is doubtful. It cannot see calls that never reached this product. Read-only."""
+    return await coverage(session, project.project_id, days=days, provider=provider, model=model, job=job)
 
 
 @app.get("/v1/insights/cost-receipt", response_model=CostReceiptOut, tags=["insights"])

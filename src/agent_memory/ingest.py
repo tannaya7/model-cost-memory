@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -19,12 +20,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .checks import CheckResult, Outcome, check_run
 from .config import get_settings
+from .data_quality import flags_for
 from .costing import Price, compute_cost
 from .pricing import PARTLY_PRICED, PRICED, modifier_factor, resolve_price
 from .usage_ledger import sanitize_raw
 from .pipeline import flow
 from .options import normalize_effort
-from .models import Job, OutboxRow, Project, Run
+from .models import IngestDuplicate, Job, OutboxRow, Project, Run
 from .privacy import sanitize_tool_calls
 from .schemas import JobCreate, RunCreate
 from .security import keyed_prompt_hash
@@ -154,19 +156,25 @@ async def record_run(
                 tool_calls=sanitize_tool_calls(body.tool_calls, keep_arguments=project.store_tool_arguments),
                 outcome=result.outcome.value, outcome_reason=result.reason, state=state, run_kind=run_kind,
                 retest_id=retest_id, expected=keep_expected, provider=provider,
-                agent=body.agent, trace_id=body.trace_id, span_id=body.span_id, parent_span_id=body.parent_span_id,
+                agent=body.agent, feature=body.feature, trace_id=body.trace_id, span_id=body.span_id, parent_span_id=body.parent_span_id,
                 tools_tokens=body.tools_tokens,
                 tool_call_count=len(body.tool_calls) if body.tool_calls is not None else None,
                 usage_shape=body.usage_shape, usage_raw=usage_raw, reasoning_tokens=body.reasoning_tokens,
                 price_version_id=version_id, price_status=price_status, price_factor=factor,
                 cache_write_1h_tokens=body.cache_write_1h_tokens or None,
                 tool_use_input_tokens=body.tool_use_input_tokens,
+                data_flags=flags_for(usage_raw=usage_raw, tokens_out=body.tokens_out, reasoning_tokens=body.reasoning_tokens,
+                                     cache_write_tokens=body.cache_write_tokens, cache_write_1h_tokens=body.cache_write_1h_tokens) or None,
             )
             .on_conflict_do_nothing(index_elements=["run_id"])
             .returning(Run.run_id)
         )
     ).scalar_one_or_none()
     if inserted is None:
+        # The same call arrived again (an SDK retry, a replayed delivery). It is ignored, as before, and now counted per project and UTC day.
+        await session.execute(
+            insert(IngestDuplicate).values(project_id=project.project_id, day=datetime.now(UTC).date(), duplicates=1)
+            .on_conflict_do_update(index_elements=["project_id", "day"], set_={"duplicates": IngestDuplicate.duplicates + 1}))
         log.info("duplicate run ignored", extra={"run_id": str(body.run_id), "job_id": str(job.job_id),
                                                  "project_id": project.project_id})
         return False

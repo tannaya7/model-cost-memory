@@ -522,6 +522,29 @@
         "title": "AlertOut",
         "type": "object"
       },
+      "AssumptionOut": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "source"
+        ],
+        "title": "AssumptionOut",
+        "type": "object"
+      },
       "AttributionRow": {
         "properties": {
           "coverage_share": {
@@ -607,6 +630,29 @@
           "demo_project_id"
         ],
         "title": "AuthConfig",
+        "type": "object"
+      },
+      "BasisRow": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "label",
+          "runs"
+        ],
+        "title": "BasisRow",
         "type": "object"
       },
       "BreakdownOut": {
@@ -708,6 +754,37 @@
           "note"
         ],
         "title": "CatalogInfoOut",
+        "type": "object"
+      },
+      "Cause": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "examples": {
+            "items": {
+              "$ref": "#/components/schemas/Example"
+            },
+            "title": "Examples",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "label",
+          "runs",
+          "examples"
+        ],
+        "title": "Cause",
         "type": "object"
       },
       "ChangePeriodOut": {
@@ -1700,79 +1777,6 @@
         "title": "CostBasisOut",
         "type": "object"
       },
-      "CostPerSuccessOut": {
-        "properties": {
-          "checked_priced_runs": {
-            "title": "Checked Priced Runs",
-            "type": "integer"
-          },
-          "checked_unpriced_runs": {
-            "description": "Checked calls left out because their cost is unknown",
-            "title": "Checked Unpriced Runs",
-            "type": "integer"
-          },
-          "formula": {
-            "title": "Formula",
-            "type": "string"
-          },
-          "passed": {
-            "description": "Passes among those same calls: the bottom of the division",
-            "title": "Passed",
-            "type": "integer"
-          },
-          "reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reason"
-          },
-          "spend_usd": {
-            "description": "Cost of the priced, checked calls: the top of the division",
-            "title": "Spend Usd",
-            "type": "number"
-          },
-          "success_definition": {
-            "description": "What a correct answer means for this task, from how it is checked",
-            "title": "Success Definition",
-            "type": "string"
-          },
-          "unchecked_runs": {
-            "description": "Calls left out because they have no pass/fail result yet",
-            "title": "Unchecked Runs",
-            "type": "integer"
-          },
-          "value_usd": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Cost of one correct answer; null when it cannot be worked out (see reason)",
-            "title": "Value Usd"
-          }
-        },
-        "required": [
-          "value_usd",
-          "formula",
-          "spend_usd",
-          "passed",
-          "checked_priced_runs",
-          "checked_unpriced_runs",
-          "unchecked_runs",
-          "reason",
-          "success_definition"
-        ],
-        "title": "CostPerSuccessOut",
-        "type": "object"
-      },
       "CostReceiptOut": {
         "description": "How a spend figure was worked out: currency, period, which calls were counted and which were left out,\nthe dated list prices used, and a cost per correct answer with its formula. List prices, not an invoice.",
         "properties": {
@@ -1786,7 +1790,7 @@
           "cost_per_success": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/CostPerSuccessOut"
+                "$ref": "#/components/schemas/agent_memory__schemas__CostPerSuccessOut"
               },
               {
                 "type": "null"
@@ -1937,6 +1941,202 @@
           "notes"
         ],
         "title": "CostReceiptOut",
+        "type": "object"
+      },
+      "CoverageOut": {
+        "properties": {
+          "attempts": {
+            "description": "Physical API attempts recorded in the period (denominator for most shares below)",
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "basis": {
+            "items": {
+              "$ref": "#/components/schemas/BasisRow"
+            },
+            "title": "Basis",
+            "type": "array"
+          },
+          "caller_cost": {
+            "$ref": "#/components/schemas/Share",
+            "description": "Cost sent by the app itself, not calculated here"
+          },
+          "cannot_measure": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cannot Measure",
+            "type": "array"
+          },
+          "causes": {
+            "items": {
+              "$ref": "#/components/schemas/Cause"
+            },
+            "title": "Causes",
+            "type": "array"
+          },
+          "checked": {
+            "$ref": "#/components/schemas/Share",
+            "description": "Passed or failed an explicit check"
+          },
+          "duplicates_ignored": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Re-sent copies of an already-recorded call that were ignored; null when a filter makes it unavailable",
+            "title": "Duplicates Ignored"
+          },
+          "duplicates_note": {
+            "title": "Duplicates Note",
+            "type": "string"
+          },
+          "excluded_attempts": {
+            "description": "Archived, failed-to-record or invalid attempts: counted here and left out of the quality counts",
+            "title": "Excluded Attempts",
+            "type": "integer"
+          },
+          "extra_attempts": {
+            "description": "Attempts beyond the first in tasks that made several",
+            "title": "Extra Attempts",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "filters": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Filters",
+            "type": "object"
+          },
+          "flagged": {
+            "$ref": "#/components/schemas/Share",
+            "description": "Attempts with at least one data-quality flag"
+          },
+          "logical_tasks": {
+            "title": "Logical Tasks",
+            "type": "integer"
+          },
+          "model_known": {
+            "$ref": "#/components/schemas/Share"
+          },
+          "model_unknown": {
+            "$ref": "#/components/schemas/Share"
+          },
+          "no_usage_block": {
+            "$ref": "#/components/schemas/Share"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "period_days": {
+            "title": "Period Days",
+            "type": "integer"
+          },
+          "period_end": {
+            "format": "date-time",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date-time",
+            "title": "Period Start",
+            "type": "string"
+          },
+          "priced": {
+            "$ref": "#/components/schemas/Share",
+            "description": "Calculated from reported usage and a dated list price (including partly priced)"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderRow"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "tasks_with_several_attempts": {
+            "title": "Tasks With Several Attempts",
+            "type": "integer"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "unchecked": {
+            "$ref": "#/components/schemas/Share",
+            "description": "No pass/fail result yet"
+          },
+          "unpriced": {
+            "$ref": "#/components/schemas/Share",
+            "description": "No cost: unknown, never zero"
+          },
+          "usage_layout_unknown": {
+            "$ref": "#/components/schemas/Share"
+          },
+          "usage_reported": {
+            "$ref": "#/components/schemas/Share"
+          }
+        },
+        "required": [
+          "period_start",
+          "period_end",
+          "period_days",
+          "timezone",
+          "filters",
+          "scope",
+          "logical_tasks",
+          "attempts",
+          "tasks_with_several_attempts",
+          "extra_attempts",
+          "excluded_attempts",
+          "usage_reported",
+          "no_usage_block",
+          "usage_layout_unknown",
+          "model_known",
+          "model_unknown",
+          "priced",
+          "caller_cost",
+          "unpriced",
+          "checked",
+          "unchecked",
+          "passed",
+          "failed",
+          "flagged",
+          "duplicates_ignored",
+          "duplicates_note",
+          "basis",
+          "causes",
+          "providers",
+          "cannot_measure",
+          "notes"
+        ],
+        "title": "CoverageOut",
         "type": "object"
       },
       "DayPointOut": {
@@ -2166,6 +2366,42 @@
         "title": "EventOut",
         "type": "object"
       },
+      "Example": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "model",
+          "provider",
+          "created_at"
+        ],
+        "title": "Example",
+        "type": "object"
+      },
       "FailingRunOut": {
         "properties": {
           "created_at": {
@@ -2206,6 +2442,193 @@
           "created_at"
         ],
         "title": "FailingRunOut",
+        "type": "object"
+      },
+      "FeatureBreakdownOut": {
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "labelled_runs": {
+            "title": "Labelled Runs",
+            "type": "integer"
+          },
+          "labelled_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Part of the calls that carried a label; null with no calls",
+            "title": "Labelled Share"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "period_days": {
+            "title": "Period Days",
+            "type": "integer"
+          },
+          "period_end": {
+            "format": "date-time",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date-time",
+            "title": "Period Start",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "total_runs": {
+            "title": "Total Runs",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "More distinct labels exist than were read; the smallest are not in any row",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "currency",
+          "timezone",
+          "period_start",
+          "period_end",
+          "period_days",
+          "rows",
+          "total_runs",
+          "labelled_runs",
+          "labelled_share",
+          "truncated",
+          "notes"
+        ],
+        "title": "FeatureBreakdownOut",
+        "type": "object"
+      },
+      "FeatureRowOut": {
+        "properties": {
+          "cost_per_success": {
+            "$ref": "#/components/schemas/agent_memory__schemas__CostPerSuccessOut"
+          },
+          "excluded": {
+            "description": "Calls left out of the checks (archived, failed to record, or marked invalid)",
+            "title": "Excluded",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "feature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The label your app sent; null for calls that carried none, and for the folded 'Other labels' row",
+            "title": "Feature"
+          },
+          "folded_labels": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How many labels an 'Other labels' row stands for",
+            "title": "Folded Labels"
+          },
+          "label": {
+            "description": "What to show: the label, 'Unlabelled' or 'Other labels'",
+            "title": "Label",
+            "type": "string"
+          },
+          "no_usage_runs": {
+            "description": "Calls whose response carried no usage block: their tokens are unknown, not zero",
+            "title": "No Usage Runs",
+            "type": "integer"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          },
+          "share_of_spend": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "This row's part of all priced spend in the period; null when there is none",
+            "title": "Share Of Spend"
+          },
+          "spend_usd": {
+            "description": "List-price estimate over the priced calls only",
+            "title": "Spend Usd",
+            "type": "number"
+          },
+          "tokens": {
+            "description": "Input, output, cache reads and writes, summed over the calls whose response reported usage",
+            "title": "Tokens",
+            "type": "integer"
+          },
+          "unchecked": {
+            "description": "Calls with no pass/fail result yet: never counted as passes",
+            "title": "Unchecked",
+            "type": "integer"
+          },
+          "unpriced_runs": {
+            "description": "Calls with no known price: left out of spend_usd",
+            "title": "Unpriced Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "feature",
+          "label",
+          "runs",
+          "passed",
+          "failed",
+          "unchecked",
+          "excluded",
+          "tokens",
+          "no_usage_runs",
+          "spend_usd",
+          "unpriced_runs",
+          "share_of_spend",
+          "cost_per_success"
+        ],
+        "title": "FeatureRowOut",
         "type": "object"
       },
       "FlowEventOut": {
@@ -2822,7 +3245,7 @@
       "JobReceiptOut": {
         "properties": {
           "cost_per_success": {
-            "$ref": "#/components/schemas/CostPerSuccessOut"
+            "$ref": "#/components/schemas/agent_memory__schemas__CostPerSuccessOut"
           },
           "excluded": {
             "title": "Excluded",
@@ -3842,6 +4265,253 @@
         "title": "ModelPage",
         "type": "object"
       },
+      "ModelPlan": {
+        "properties": {
+          "cost_per_success": {
+            "$ref": "#/components/schemas/agent_memory__insights__planner__CostPerSuccessOut"
+          },
+          "excluded": {
+            "title": "Excluded",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "filtered_out": {
+            "description": "Used calls removed by the visible far-out filter",
+            "title": "Filtered Out",
+            "type": "integer"
+          },
+          "first_call": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Call"
+          },
+          "flagged_included": {
+            "description": "Used calls that carry a doubtful-total flag but were kept",
+            "title": "Flagged Included",
+            "type": "integer"
+          },
+          "last_call": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Call"
+          },
+          "left_out": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Calls not used in the estimate, by reason",
+            "title": "Left Out",
+            "type": "object"
+          },
+          "max_call_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Call Usd"
+          },
+          "mean_call_unfiltered_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Call Unfiltered Usd"
+          },
+          "mean_call_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Call Usd"
+          },
+          "mean_input_side_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Input Side Usd"
+          },
+          "mean_output_side_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Output Side Usd"
+          },
+          "mean_tokens_in": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Tokens In"
+          },
+          "mean_tokens_out": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Tokens Out"
+          },
+          "median_call_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Call Usd"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "observed_calls": {
+            "title": "Observed Calls",
+            "type": "integer"
+          },
+          "p90_call_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P90 Call Usd"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "scenarios": {
+            "items": {
+              "$ref": "#/components/schemas/ScenarioOut"
+            },
+            "title": "Scenarios",
+            "type": "array"
+          },
+          "status": {
+            "description": "ESTIMATE | ESTIMATE_NO_RANGE | NOT_ENOUGH_DATA",
+            "title": "Status",
+            "type": "string"
+          },
+          "status_text": {
+            "title": "Status Text",
+            "type": "string"
+          },
+          "unchecked": {
+            "title": "Unchecked",
+            "type": "integer"
+          },
+          "uneven": {
+            "description": "Call costs are very uneven, so the range may understate the real spread",
+            "title": "Uneven",
+            "type": "boolean"
+          },
+          "used_calls": {
+            "title": "Used Calls",
+            "type": "integer"
+          },
+          "versions_used": {
+            "items": {
+              "$ref": "#/components/schemas/VersionUsedOut"
+            },
+            "title": "Versions Used",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model",
+          "provider",
+          "observed_calls",
+          "used_calls",
+          "left_out",
+          "filtered_out",
+          "first_call",
+          "last_call",
+          "mean_call_usd",
+          "mean_call_unfiltered_usd",
+          "median_call_usd",
+          "p90_call_usd",
+          "max_call_usd",
+          "mean_input_side_usd",
+          "mean_output_side_usd",
+          "mean_tokens_in",
+          "mean_tokens_out",
+          "uneven",
+          "status",
+          "status_text",
+          "scenarios",
+          "passed",
+          "failed",
+          "unchecked",
+          "excluded",
+          "cost_per_success",
+          "versions_used",
+          "flagged_included"
+        ],
+        "title": "ModelPlan",
+        "type": "object"
+      },
       "ModelRef": {
         "properties": {
           "model": {
@@ -4804,6 +5474,117 @@
           "high_points"
         ],
         "title": "PairedOut",
+        "type": "object"
+      },
+      "PlannerOut": {
+        "properties": {
+          "assumptions": {
+            "items": {
+              "$ref": "#/components/schemas/AssumptionOut"
+            },
+            "title": "Assumptions",
+            "type": "array"
+          },
+          "check_kind": {
+            "title": "Check Kind",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "disclaimer": {
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelPlan"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "not_tested": {
+            "description": "Models recorded elsewhere in this project but not on this task",
+            "items": {
+              "type": "string"
+            },
+            "title": "Not Tested",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "observed_retry_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Measured extra attempts per task from your task ids; null when you send none",
+            "title": "Observed Retry Rate"
+          },
+          "period_days": {
+            "title": "Period Days",
+            "type": "integer"
+          },
+          "period_end": {
+            "format": "date-time",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_label": {
+            "title": "Period Label",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date-time",
+            "title": "Period Start",
+            "type": "string"
+          },
+          "success_definition": {
+            "title": "Success Definition",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "job",
+          "check_kind",
+          "success_definition",
+          "currency",
+          "period_label",
+          "period_start",
+          "period_end",
+          "period_days",
+          "timezone",
+          "truncated",
+          "assumptions",
+          "observed_retry_rate",
+          "models",
+          "not_tested",
+          "notes",
+          "disclaimer"
+        ],
+        "title": "PlannerOut",
         "type": "object"
       },
       "PreviewCost": {
@@ -6526,6 +7307,52 @@
         "title": "ProviderKeyOut",
         "type": "object"
       },
+      "ProviderRow": {
+        "properties": {
+          "field_notes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "What this provider's usage fields mean here (included in or additional to others)",
+            "title": "Field Notes",
+            "type": "object"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          },
+          "usage_shape": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage Shape"
+          }
+        },
+        "required": [
+          "provider",
+          "usage_shape",
+          "runs",
+          "field_notes"
+        ],
+        "title": "ProviderRow",
+        "type": "object"
+      },
       "RecommendationEvidence": {
         "properties": {
           "check": {
@@ -7809,6 +8636,20 @@
             "description": "The correct values for an ANSWER_KEY job, used to check this run. Stored only when the job has trial consent, so a trial can check the replayed run against the same answers",
             "title": "Expected"
           },
+          "feature": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._ -]{0,99}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Your own name for the feature or workflow this call serves, for example support_summary. Optional. It is your label: not verified, not an identity and not an invoice-grade chargeback record. Letters, digits, spaces and . _ - only",
+            "title": "Feature"
+          },
           "job": {
             "description": "Name of an existing job in this project",
             "title": "Job",
@@ -8108,6 +8949,18 @@
               }
             ],
             "title": "Effort"
+          },
+          "feature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The label your app sent for the feature or workflow, if any. Not verified",
+            "title": "Feature"
           },
           "importance_score": {
             "default": 1.0,
@@ -8480,6 +9333,18 @@
               }
             ],
             "title": "Effort"
+          },
+          "feature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The label your app sent for the feature or workflow, if any. Not verified",
+            "title": "Feature"
           },
           "importance_score": {
             "default": 1.0,
@@ -9260,6 +10125,85 @@
         "title": "SavingsTotal",
         "type": "object"
       },
+      "ScenarioOut": {
+        "properties": {
+          "attempts": {
+            "description": "tasks x (1 + retry rate)",
+            "title": "Attempts",
+            "type": "number"
+          },
+          "estimate_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimate Usd"
+          },
+          "high_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High Usd"
+          },
+          "low_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low Usd"
+          },
+          "per_task_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Task Usd"
+          },
+          "range_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Range Note"
+          },
+          "tasks_per_period": {
+            "title": "Tasks Per Period",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tasks_per_period",
+          "attempts",
+          "estimate_usd",
+          "low_usd",
+          "high_usd",
+          "per_task_usd",
+          "range_note"
+        ],
+        "title": "ScenarioOut",
+        "type": "object"
+      },
       "SchedulerHealth": {
         "properties": {
           "overdue": {
@@ -9291,6 +10235,32 @@
           "overdue"
         ],
         "title": "SchedulerHealth",
+        "type": "object"
+      },
+      "Share": {
+        "properties": {
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          },
+          "share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "runs divided by its denominator; null when the denominator is zero",
+            "title": "Share"
+          }
+        },
+        "required": [
+          "runs",
+          "share"
+        ],
+        "title": "Share",
         "type": "object"
       },
       "SpendOut": {
@@ -10584,6 +11554,68 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "VersionUsedOut": {
+        "properties": {
+          "checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "effective_from": {
+            "format": "date-time",
+            "title": "Effective From",
+            "type": "string"
+          },
+          "effective_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective To"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version_id",
+          "effective_from",
+          "effective_to",
+          "source_url",
+          "checked_at",
+          "runs"
+        ],
+        "title": "VersionUsedOut",
+        "type": "object"
+      },
       "WorkspaceOut": {
         "properties": {
           "kind": {
@@ -10701,6 +11733,141 @@
         ],
         "title": "YouInCompany",
         "type": "object"
+      },
+      "agent_memory__insights__planner__CostPerSuccessOut": {
+        "properties": {
+          "checked_priced_runs": {
+            "title": "Checked Priced Runs",
+            "type": "integer"
+          },
+          "checked_unpriced_runs": {
+            "title": "Checked Unpriced Runs",
+            "type": "integer"
+          },
+          "formula": {
+            "title": "Formula",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "spend_usd": {
+            "title": "Spend Usd",
+            "type": "number"
+          },
+          "unchecked_runs": {
+            "title": "Unchecked Runs",
+            "type": "integer"
+          },
+          "value_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Usd"
+          }
+        },
+        "required": [
+          "value_usd",
+          "spend_usd",
+          "passed",
+          "checked_priced_runs",
+          "checked_unpriced_runs",
+          "unchecked_runs",
+          "reason",
+          "formula"
+        ],
+        "title": "CostPerSuccessOut",
+        "type": "object"
+      },
+      "agent_memory__schemas__CostPerSuccessOut": {
+        "properties": {
+          "checked_priced_runs": {
+            "title": "Checked Priced Runs",
+            "type": "integer"
+          },
+          "checked_unpriced_runs": {
+            "description": "Checked calls left out because their cost is unknown",
+            "title": "Checked Unpriced Runs",
+            "type": "integer"
+          },
+          "formula": {
+            "title": "Formula",
+            "type": "string"
+          },
+          "passed": {
+            "description": "Passes among those same calls: the bottom of the division",
+            "title": "Passed",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "spend_usd": {
+            "description": "Cost of the priced, checked calls: the top of the division",
+            "title": "Spend Usd",
+            "type": "number"
+          },
+          "success_definition": {
+            "description": "What a correct answer means for this task, from how it is checked",
+            "title": "Success Definition",
+            "type": "string"
+          },
+          "unchecked_runs": {
+            "description": "Calls left out because they have no pass/fail result yet",
+            "title": "Unchecked Runs",
+            "type": "integer"
+          },
+          "value_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cost of one correct answer; null when it cannot be worked out (see reason)",
+            "title": "Value Usd"
+          }
+        },
+        "required": [
+          "value_usd",
+          "formula",
+          "spend_usd",
+          "passed",
+          "checked_priced_runs",
+          "checked_unpriced_runs",
+          "unchecked_runs",
+          "reason",
+          "success_definition"
+        ],
+        "title": "CostPerSuccessOut",
+        "type": "object"
       }
     }
   },
@@ -10794,6 +11961,7 @@
     },
     "/auth/google/login": {
       "get": {
+        "description": "Send the person to Google. With `switch`, Google always shows its account chooser, so a person with two emails can pick the\nother one. Nothing is signed out here: the new sign-in replaces this browser's session, and other devices stay as they are.",
         "operationId": "google_login_auth_google_login_get",
         "parameters": [
           {
@@ -10810,6 +11978,16 @@
                 }
               ],
               "title": "Next"
+            }
+          },
+          {
+            "in": "query",
+            "name": "switch",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Switch",
+              "type": "boolean"
             }
           }
         ],
@@ -11849,6 +13027,159 @@
         ]
       }
     },
+    "/v1/insights/coverage": {
+      "get": {
+        "description": "How complete and reliable the records Model & Cost Memory RECEIVED are: attempts, usage, prices, checks, duplicates and flagged\ncalls, each with its denominator and the reason it is doubtful. It cannot see calls that never reached this product. Read-only.",
+        "operationId": "get_coverage_v1_insights_coverage_get",
+        "parameters": [
+          {
+            "description": "How many days back to count",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "description": "How many days back to count",
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Only this provider",
+            "in": "query",
+            "name": "provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this provider",
+              "title": "Provider"
+            }
+          },
+          {
+            "description": "Only this model",
+            "in": "query",
+            "name": "model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this model",
+              "title": "Model"
+            }
+          },
+          {
+            "description": "Only this task",
+            "in": "query",
+            "name": "job",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this task",
+              "title": "Job"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Coverage",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
     "/v1/insights/daily": {
       "get": {
         "description": "Production runs, outcomes and spend per UTC day, job and model, oldest first: quality and spend\nover time. Days without runs are absent.",
@@ -12095,6 +13426,291 @@
           }
         },
         "summary": "Export Csv",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
+    "/v1/insights/features": {
+      "get": {
+        "description": "Calls, tokens, list-price cost and checked answers for each feature label your app sent, with the calls that carried no\nlabel shown as their own row. The labels are your app's own words: not verified, not a chargeback record. Analysis only.",
+        "operationId": "get_feature_breakdown_v1_insights_features_get",
+        "parameters": [
+          {
+            "description": "How many days back to count",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "description": "How many days back to count",
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeatureBreakdownOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Feature Breakdown",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
+    "/v1/insights/planner": {
+      "get": {
+        "description": "What a task might cost at traffic levels you type, from its own recorded calls: list-price scenarios with a range where the data\nsupports one. Not a bill or a forecast. Nothing is sent to a provider and nothing is changed.",
+        "operationId": "get_planner_v1_insights_planner_get",
+        "parameters": [
+          {
+            "description": "The task whose recorded calls the scenario is based on",
+            "in": "query",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "description": "The task whose recorded calls the scenario is based on",
+              "maxLength": 200,
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "description": "How many days of history to use",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "description": "How many days of history to use",
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Tasks per period to price (up to 6 scenarios)",
+            "in": "query",
+            "name": "calls",
+            "required": false,
+            "schema": {
+              "default": [
+                1000,
+                10000,
+                100000
+              ],
+              "description": "Tasks per period to price (up to 6 scenarios)",
+              "items": {
+                "type": "integer"
+              },
+              "maxItems": 6,
+              "title": "Calls",
+              "type": "array"
+            }
+          },
+          {
+            "description": "Extra attempts per task, typed by you",
+            "in": "query",
+            "name": "retry_rate",
+            "required": false,
+            "schema": {
+              "default": 0.0,
+              "description": "Extra attempts per task, typed by you",
+              "maximum": 10,
+              "minimum": 0,
+              "title": "Retry Rate",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "input_change_pct",
+            "required": false,
+            "schema": {
+              "default": 0.0,
+              "maximum": 1000,
+              "minimum": -90,
+              "title": "Input Change Pct",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "output_change_pct",
+            "required": false,
+            "schema": {
+              "default": 0.0,
+              "maximum": 1000,
+              "minimum": -90,
+              "title": "Output Change Pct",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Leave out far-out calls (visible, reversible)",
+            "in": "query",
+            "name": "exclude_far_out",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Leave out far-out calls (visible, reversible)",
+              "title": "Exclude Far Out",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "period",
+            "required": false,
+            "schema": {
+              "default": "month",
+              "pattern": "^(day|week|month)$",
+              "title": "Period",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlannerOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Planner",
         "tags": [
           "insights"
         ]

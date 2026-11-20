@@ -28,6 +28,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -177,6 +178,7 @@ class Run(Base):
             postgresql_where=text("embedding IS NOT NULL"),
         ),
         Index("idx_runs_project_trace", "project_id", "trace_id", postgresql_where=text("trace_id IS NOT NULL")),
+        Index("idx_runs_project_feature", "project_id", "feature", postgresql_where=text("feature IS NOT NULL")),
         Index("idx_runs_span", "project_id", "trace_id", "span_id", postgresql_where=text("span_id IS NOT NULL")),
         Index("idx_runs_content_kept", "created_at", postgresql_where=text("content_removed_at IS NULL")),
     )
@@ -216,6 +218,10 @@ class Run(Base):
     expected: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # kept only for jobs with re-test consent
     provider: Mapped[str | None] = mapped_column(Text)  # who served the call; picks the price
     agent: Mapped[str | None] = mapped_column(Text)  # which agent or role made the call (0017)
+    # The customer's own feature or workflow label, sent by their app (0038). Optional, not verified, never inferred from text.
+    feature: Mapped[str | None] = mapped_column(Text)
+    # Quality flags found when the call was recorded (data_quality.py, 0039). NULL = none found (and, for older calls, not checked).
+    data_flags: Mapped[list[str] | None] = mapped_column(PG_ARRAY(Text))
     trace_id: Mapped[str | None] = mapped_column(Text)  # shared by every call serving one user task (0017)
     span_id: Mapped[str | None] = mapped_column(Text)  # this call's own id, chosen by the app (0029)
     parent_span_id: Mapped[str | None] = mapped_column(Text)  # the span_id of the call that started this one (0029)
@@ -691,3 +697,14 @@ class OrgEvent(Base):
     target_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="SET NULL"))
     detail: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+
+
+class IngestDuplicate(Base):
+    """How many times an already-recorded call was sent again, per project and UTC day (0039). The extra copy is ignored; this only counts it."""
+
+    __tablename__ = "ingest_duplicates"
+
+    project_id: Mapped[str] = mapped_column(Text, ForeignKey("projects.project_id", ondelete="CASCADE"), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    duplicates: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    __table_args__ = (CheckConstraint("duplicates >= 0", name="ingest_duplicates_duplicates_check"),)
