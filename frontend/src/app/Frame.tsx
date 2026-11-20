@@ -11,6 +11,7 @@ import { useLogout, useMe } from "../features/auth/hooks/useAuth";
 import { jobTitle } from "../features/jobs/jobTitle";
 import { useJobs } from "../features/jobs/hooks/useJobs";
 import { useProjects } from "../features/projects/hooks/useProjects";
+import { useWorkspaces } from "../features/workspaces/hooks/useWorkspaces";
 import { canAdminister, useMyRole } from "./useMyRole";
 import { projectPath } from "../shared/projectPath";
 import {
@@ -20,6 +21,7 @@ import {
   IconBolt,
   IconChart,
   IconChevron,
+  IconDollar,
   IconFlask,
   IconJobs,
   IconLogo,
@@ -27,6 +29,7 @@ import {
   IconOverview,
   IconSearch,
   IconSettings,
+  IconShield,
   IconSidebar,
 } from "../ui/icons";
 import { ThemeToggle } from "../ui/ThemeToggle";
@@ -36,20 +39,30 @@ import { cx, Skeleton } from "../ui/primitives";
 import { ToastProvider } from "../ui/Toast";
 
 /** Which part of the tour points at which item (the tour looks for data-tour="..."). */
-const TOUR_TARGET: Record<string, string> = { Overview: "overview", "AI tasks": "tasks", Compare: "compare", Activity: "activity", Settings: "settings" };
+const TOUR_TARGET: Record<string, string> = { Overview: "overview", "AI tasks": "tasks", "Smart compare": "compare", "Smart budget": "budget", Activity: "activity", Settings: "settings" };
 
 const NAV = [
   { to: "/", label: "Overview", icon: IconOverview, end: true },
   { to: "/jobs", label: "AI tasks", icon: IconJobs },
   { to: "/models", label: "Models", icon: IconModels },
-  { to: "/compare", label: "Compare", icon: IconChart },
   { to: "/activity", label: "Activity", icon: IconActivity },
 ];
 
-/** The four destinations, inside the current project. */
+/** The two features the product is built around, kept out of the ordinary list so they stand out. */
+const SMART = [
+  { to: "/budget", label: "Smart budget", hint: "Where the month is heading", icon: IconDollar },
+  { to: "/compare", label: "Smart compare", hint: "Would another model do?", icon: IconChart },
+];
+
+/** The four ordinary destinations, inside the current project. */
 function useNav() {
   const p = useP();
   return NAV.map((item) => ({ ...item, to: p(item.to) }));
+}
+
+function useSmart() {
+  const p = useP();
+  return SMART.map((item) => ({ ...item, to: p(item.to) }));
 }
 
 function useOutsideClose(open: boolean, close: () => void) {
@@ -241,6 +254,8 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
     const pages: Command[] = [
       { label: "Overview", hint: "Savings, spend and what needs attention", to: p("/") },
       { label: "AI tasks", hint: "Every kind of work your app asks an AI to do, and our recommendation for each", to: p("/jobs") },
+      { label: "Smart budget", hint: "Where this month is heading, a monthly limit, and what changes if others use your key", to: p("/budget") },
+      { label: "Smart compare", hint: "Would another model do this work for less? Based on your own calls", to: p("/compare") },
       { label: "Models", hint: "Prices, retirements and the catalog", to: p("/models") },
       { label: "Activity", hint: "Quality drops, trials on new models, live AI calls and AI news", to: p("/activity") },
       { label: "Alerts", hint: "Quality drops, quiet slowdowns and models being retired", to: p("/activity?tab=alerts") },
@@ -379,8 +394,11 @@ function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle
   const { mode: billing } = useBillingMode();
   const p = useP();
   const nav = useNav();
+  const smart = useSmart();
   const { mode } = useProject();
   const { data: user } = useMe();
+  const workspaces = useWorkspaces(!!user);
+  const companies = (workspaces.data ?? []).filter((w) => w.kind === "company" && w.org_id);
   const { hash } = useLocation();
   const item = (active: boolean) =>
     cx(
@@ -447,6 +465,52 @@ function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle
         </nav>
 
         <div className="my-3 h-px shrink-0 bg-rule" />
+        {!collapsed && <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-accent">Smart tools</p>}
+        <nav aria-label="Smart tools" className="flex flex-col gap-1">
+          {smart.map(({ to, label, hint, icon: Icon }) => (
+            <NavLink key={to} to={to} data-tour={TOUR_TARGET[label]} title={collapsed ? label : hint} className={({ isActive }) => cx(item(isActive), "border border-accent/25 bg-accent-soft/40", isActive && "border-accent/60")}>
+              {({ isActive }) => (
+                <>
+                  {isActive && <ActiveMark />}
+                  <Icon size={18} className="relative shrink-0 text-accent" />
+                  {!collapsed && (
+                    <span className="relative flex min-w-0 flex-col leading-tight">
+                      <span>{label}</span>
+                      <span className="truncate text-[11px] font-normal text-muted">{hint}</span>
+                    </span>
+                  )}
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        {companies.length > 0 && (
+          <>
+            <div className="my-3 h-px shrink-0 bg-rule" />
+            {!collapsed && <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Your company</p>}
+            <nav aria-label="Company" className="flex flex-col gap-1">
+              {companies.slice(0, 3).map((c) => (
+                <NavLink key={c.org_id} to={`/company/${c.org_id}`} title={collapsed ? `Company portal: ${c.name}` : undefined} className={({ isActive }) => cx(item(isActive), "border border-rule bg-surface-2/60")}>
+                  {({ isActive }) => (
+                    <>
+                      {isActive && <ActiveMark />}
+                      <IconShield size={18} className="relative shrink-0 text-accent" />
+                      {!collapsed && (
+                        <span className="relative flex min-w-0 flex-col leading-tight">
+                          <span>Company portal</span>
+                          <span className="truncate text-[11px] font-normal text-muted">{c.name}</span>
+                        </span>
+                      )}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </nav>
+          </>
+        )}
+
+        <div className="my-3 h-px shrink-0 bg-rule" />
         {!collapsed && <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">This project</p>}
         <nav aria-label="Project" className="flex flex-col gap-1">
           {project.map(({ to, label, icon: Icon, match }) => (
@@ -495,6 +559,9 @@ function ActiveMark() {
 export function Frame() {
   const p = useP();
   const nav = useNav();
+  const smart = useSmart();
+  /** Phone bottom bar: five places. Models stays reachable from search and the full sidebar. */
+  const phone = [nav[0], nav[1], ...smart, nav[3]];
   const { pathname, search } = useLocation();
   const { count: alerts } = useAlertsCount();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -594,14 +661,14 @@ export function Frame() {
           </main>
         </div>
 
-        {/* Phone: the four destinations as a bottom bar */}
+        {/* Phone: the main destinations as a bottom bar */}
         <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-bg/90 backdrop-blur-xl md:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
           <ul className="grid grid-cols-5">
-            {nav.map(({ to, label, icon: Icon, end }) => (
+            {phone.map(({ to, label, icon: Icon, ...rest }) => (
               <li key={to}>
                 <NavLink
                   to={to}
-                  end={end}
+                  end={"end" in rest ? rest.end : undefined}
                   data-tour={TOUR_TARGET[label]}
                   className={({ isActive }) => cx("flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium", isActive ? "text-accent" : "text-muted")}
                 >

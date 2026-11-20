@@ -15,11 +15,43 @@ function setup() {
 }
 
 describe("Frame", () => {
-  it("has five destinations instead of a long menu", () => {
+  it("keeps the ordinary destinations short and sets the two smart features apart", () => {
     setup();
     const main = screen.getAllByRole("navigation", { name: "Main" })[0];
-    const links = [...main.querySelectorAll("a")].map((a) => a.textContent?.trim());
-    expect(links).toEqual(["Overview", "AI tasks", "Models", "Compare", "Activity"]);
+    expect([...main.querySelectorAll("a")].map((a) => a.textContent?.trim())).toEqual(["Overview", "AI tasks", "Models", "Activity"]);
+    const smart = screen.getByRole("navigation", { name: "Smart tools" });
+    expect([...smart.querySelectorAll("a")].map((a) => a.querySelector("span > span")?.textContent)).toEqual(["Smart budget", "Smart compare"]);
+    expect(within(smart).getByRole("link", { name: /Smart budget/ })).toHaveAttribute("href", expect.stringMatching(/\/budget$/));
+    expect(within(smart).getByRole("link", { name: /Smart compare/ })).toHaveAttribute("href", expect.stringMatching(/\/compare$/));
+  });
+
+  it("puts both smart features in the phone's bottom bar too", () => {
+    setup();
+    const phone = screen.getAllByRole("navigation", { name: "Main" })[1];
+    expect([...phone.querySelectorAll("a")].map((a) => a.textContent?.trim())).toEqual(["Overview", "AI tasks", "Smart budget", "Smart compare", "Activity"]);
+  });
+
+  it("gives a company its own entry, and shows none to someone with no company", async () => {
+    stubApi({
+      "/v1/workspaces": [
+        { kind: "personal", org_id: null, name: "You", role: "owner", member_count: 1, project_count: 1 },
+        { kind: "company", org_id: "11111111-1111-1111-1111-111111111111", name: "Acme", role: "member", member_count: 4, project_count: 2 },
+      ],
+      "/v1/me": { user_id: "u", email: "a@example.com", name: null, picture_url: null, ui_flags: {} },
+      "/v1/jobs": [],
+    });
+    renderWithProviders(<Frame />);
+    const company = await screen.findByRole("navigation", { name: "Company" });
+    const link = within(company).getByRole("link", { name: /Company portal/ });
+    expect(link).toHaveAttribute("href", "/company/11111111-1111-1111-1111-111111111111");
+    expect(link).toHaveTextContent("Acme");
+  });
+
+  it("has no company entry for someone who is not in a company", async () => {
+    stubApi({ "/v1/workspaces": [{ kind: "personal", org_id: null, name: "You", role: "owner", member_count: 1, project_count: 1 }], "/v1/me": { user_id: "u", email: "a@example.com", name: null, picture_url: null, ui_flags: {} }, "/v1/jobs": [] });
+    renderWithProviders(<Frame />);
+    await waitFor(() => expect(screen.getByRole("navigation", { name: "Smart tools" })).toBeInTheDocument());
+    expect(screen.queryByRole("navigation", { name: "Company" })).toBeNull();
   });
 
   it("jumps anywhere from the keyboard with Ctrl K", async () => {

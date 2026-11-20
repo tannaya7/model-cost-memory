@@ -40,6 +40,14 @@ export function fetchRetestStatus(
   );
 }
 
+/** Stop a queued or running trial. A queued one never starts; a running one finishes the calls already sent and keeps them. */
+export function stopRetest(jobName: string, retestId: string): Promise<RetestStatus> {
+  return apiFetch<RetestStatus>(
+    `/v1/jobs/${encodeURIComponent(jobName)}/retest/${encodeURIComponent(retestId)}/stop`,
+    { method: "POST" },
+  );
+}
+
 export function fetchJobRetests(jobName: string): Promise<RetestStatus[]> {
   return apiFetch<RetestStatus[]>(`/v1/jobs/${encodeURIComponent(jobName)}/retests`);
 }

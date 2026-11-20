@@ -1,5 +1,10 @@
+import { useState } from "react";
 import { useP } from "../../../app/project";
+import { canAdminister, useMyRole } from "../../../app/useMyRole";
 import { Link } from "react-router-dom";
+import { InlineConfirm } from "../../../ui/InlineConfirm";
+import { Button } from "../../../ui/primitives";
+import { useStopRetest } from "../hooks/useRetest";
 import { Card } from "../../../shared/components/Card";
 import { Badge } from "../../../shared/components/Badge";
 import type { RetestExecutionStatus, RetestStatus } from "../../../shared/api/types";
@@ -24,17 +29,50 @@ function getStatusBadge(status: RetestExecutionStatus) {
       return <Badge tone="warn">Stopped (trial budget reached)</Badge>;
     case "STOPPED_CAP":
       return <Badge tone="warn">Stopped (monthly trial budget reached)</Badge>;
+    case "STOPPED_USER":
+      return <Badge tone="neutral">Stopped by you</Badge>;
     case "FAILED":
       return <Badge tone="bad">Failed</Badge>;
   }
 }
 
+/** Stop a trial that has not finished. It asks first, in the page, and says what is kept and what is still paid for. */
+function StopTrial({ retest }: { retest: RetestStatus }) {
+  const stop = useStopRetest(retest.job, retest.retest_id);
+  const [asking, setAsking] = useState(false);
+  if (retest.stopping || stop.isSuccess) {
+    return <p role="status" className="text-xs text-dim">{retest.status === "QUEUED" ? "Stopped before it started." : "Stopping: no new prompts are sent. The ones already sent will finish."}</p>;
+  }
+  if (!asking) {
+    return <Button size="sm" variant="ghost" onClick={() => setAsking(true)}>Stop this trial</Button>;
+  }
+  const waiting = retest.status === "QUEUED";
+  return (
+    <InlineConfirm
+      label="Stop this trial"
+      confirmLabel="Stop the trial"
+      cancelLabel={waiting ? "Keep it waiting" : "Keep it running"}
+      busy={stop.isPending}
+      busyLabel="Stopping…"
+      error={stop.isError ? (stop.error instanceof Error ? stop.error.message : "Could not stop it") : null}
+      onConfirm={() => stop.mutate()}
+      onCancel={() => setAsking(false)}
+    >
+      {waiting
+        ? "This trial has not started, so nothing has been sent and nothing will be charged."
+        : `No new prompts will be sent. The ones already sent will finish, and you pay your provider for them. The ${retest.runs_done} already replayed are kept and counted.`}
+    </InlineConfirm>
+  );
+}
+
 export function RetestProgress({ retest }: { retest: RetestStatus }) {
   const p = useP();
+  const role = useMyRole();
   const isFinished =
     retest.status === "DONE" ||
     retest.status === "STOPPED_BUDGET" ||
     retest.status === "STOPPED_CAP" ||
+    retest.status === "STOPPED_USER" ||
     retest.status === "FAILED";
 
   const runsPercent =
@@ -76,6 +114,8 @@ export function RetestProgress({ retest }: { retest: RetestStatus }) {
             </Link>
           </div>
         </div>
+
+        {!isFinished && canAdminister(role) && <div className="mt-4"><StopTrial retest={retest} /></div>}
 
         {/* Status Message / Notice */}
         {retest.message && (

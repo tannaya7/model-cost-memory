@@ -38,7 +38,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
   {
     id: "compare",
-    title: "Compare",
+    title: "Smart compare",
     body: "Here you can see which AI model costs the least and still gives answers that are good enough.",
     later: "Once enough of your answers are checked, we show how each model did on your own work.",
     target: "compare",

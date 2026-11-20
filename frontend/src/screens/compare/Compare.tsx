@@ -195,7 +195,7 @@ export default function Compare() {
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <header>
-        <h1 className="text-3xl font-semibold tracking-tight">Compare models</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Smart compare</h1>
         <p className="mt-1 max-w-2xl text-sm text-dim">Compare cost and correct answers for each model on one AI task.</p>
       </header>
 

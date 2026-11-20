@@ -745,6 +745,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/jobs/{job}/retest/{retest_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop Retest
+         * @description Stop a trial. One that has not started is closed at once and sends nothing. One that is running starts no new call; the calls
+         *     already in flight finish (they are already paid for) and every result so far is kept. Asking twice is harmless.
+         */
+        post: operations["stop_retest_v1_jobs__job__retest__retest_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/jobs/{job}/retests": {
         parameters: {
             query?: never;
@@ -4873,7 +4894,13 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "QUEUED" | "RUNNING" | "DONE" | "STOPPED_BUDGET" | "STOPPED_CAP" | "FAILED";
+            status: "QUEUED" | "RUNNING" | "DONE" | "STOPPED_BUDGET" | "STOPPED_CAP" | "STOPPED_USER" | "FAILED";
+            /**
+             * Stopping
+             * @description A person pressed Stop and the calls already in flight are finishing
+             * @default false
+             */
+            stopping: boolean;
             /**
              * Trigger
              * @enum {string}
@@ -7474,6 +7501,42 @@ export interface operations {
         };
     };
     get_retest_v1_jobs__job__retest__retest_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+                retest_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_retest_v1_jobs__job__retest__retest_id__stop_post: {
         parameters: {
             query?: never;
             header?: {

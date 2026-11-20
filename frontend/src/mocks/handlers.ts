@@ -1692,10 +1692,32 @@ export const handlers = [
       started_at: new Date().toISOString(),
       finished_at: null,
       message: null,
+      stopping: false,
     };
 
     retests.set(retestId, newRetest);
     return HttpResponse.json(newRetest, { status: 202 });
+  }),
+
+  // POST /v1/jobs/:job/retest/:retest_id/stop: a queued trial closes at once, a running one keeps what it has
+  http.post("/v1/jobs/:job/retest/:retest_id/stop", async ({ request, params }) => {
+    await delay(250);
+    if (!isAuthorized(request)) {
+      return HttpResponse.json({ detail: "Invalid API key" }, { status: 401 });
+    }
+    const record = retests.get(String(params.retest_id));
+    if (!record) {
+      return HttpResponse.json({ detail: "Trial not found" }, { status: 404 });
+    }
+    if (record.status === "QUEUED" || record.status === "RUNNING") {
+      record.status = "STOPPED_USER";
+      record.message = "Stopped by you. The calls already sent were kept.";
+      record.finished_at = new Date().toISOString();
+      record.stopping = false;
+    } else if (record.status !== "STOPPED_USER") {
+      return HttpResponse.json({ detail: { code: "already_finished", message: "This trial has already finished, so there is nothing to stop." } }, { status: 409 });
+    }
+    return HttpResponse.json(record);
   }),
 
   // GET /v1/jobs/:job/retest/:retest_id

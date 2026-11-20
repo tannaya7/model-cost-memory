@@ -8,6 +8,7 @@ import {
   previewRetest,
   saveProviderKey,
   startRetest,
+  stopRetest,
 } from "../api/retestApi";
 
 export const retestLimitsKey = ["retest", "limits"] as const;
@@ -56,6 +57,18 @@ export function useRetestStatus(jobName: string, retestId: string) {
         return 2000;
       }
       return false;
+    },
+  });
+}
+
+export function useStopRetest(jobName: string, retestId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => stopRetest(jobName, retestId),
+    onSuccess: (retest) => {
+      queryClient.setQueryData(retestStatusKey(jobName, retestId), retest);
+      void queryClient.invalidateQueries({ queryKey: ["retest", "list", jobName] });
+      void queryClient.invalidateQueries({ queryKey: retestLimitsKey });
     },
   });
 }
