@@ -136,6 +136,14 @@ export function readOutput(response) {
 
 const clip = (value, n) => (typeof value === "string" && value ? value.slice(0, n) : undefined);
 
+/** The optional feature label, made safe for the server's rules: letters, digits, spaces and . _ - only, at most 100 characters,
+ *  starting with a letter or digit. Anything else becomes an underscore; nothing usable left means no label, never a refused call. */
+export function cleanFeature(value) {
+  if (value === undefined || value === null) return undefined;
+  const text = String(value).trim().replace(/[^A-Za-z0-9._ -]/g, "_").slice(0, 100).replace(/^[ ._-]+|[ ._-]+$/g, "");
+  return text || undefined;
+}
+
 export function buildPayload(job, call) {
   const response = call.response;
   const usage = get(response, "usage") ?? get(response, "usageMetadata") ?? get(response, "usage_metadata");
@@ -152,6 +160,7 @@ export function buildPayload(job, call) {
     prompt_version: call.promptVersion,
     effort: call.effort,
     agent: clip(call.agent, 100),
+    feature: cleanFeature(call.feature),
     trace_id: clip(call.traceId, 200),
     span_id: clip(call.spanId, 200),
     parent_span_id: clip(call.parentSpanId, 200),

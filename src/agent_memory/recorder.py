@@ -342,6 +342,16 @@ def _read_tool_calls(content: Any, choices: Any, candidates: Any, output: Any) -
     return calls
 
 
+def clean_feature(value: Any) -> str | None:
+    """The optional feature label a call is sent with, made safe for the server's rules (letters, digits, spaces and . _ - only, at most
+    100 characters, starting with a letter or digit). Anything else becomes an underscore. None when nothing usable is left, so a
+    strange label never makes the whole call be refused."""
+    if value is None:
+        return None
+    text = "".join(c if (c.isascii() and (c.isalnum() or c in "._ -")) else "_" for c in str(value).strip())[:100].strip(" ._-")
+    return text or None
+
+
 def estimate_tools_tokens(tools: Any) -> int | None:
     """Estimated tokens of the tool definitions: len(json.dumps(tools, sort_keys=True)) // 4.
     None when they cannot be serialised."""
@@ -393,6 +403,7 @@ class RunRecorder:
         model: str | None = None,
         model_version: str | None = None,
         agent: str | None = None,
+        feature: str | None = None,
         trace_id: str | None = None,
         span_id: str | None = None,
         parent_span_id: str | None = None,
@@ -406,6 +417,10 @@ class RunRecorder:
         resolved one). Anything the response does not carry can be passed as a keyword: tokens_in,
         tokens_out, cache_read_tokens, cache_write_tokens, cost_usd, output, tool_calls, latency_ms, provider,
         effort (the reasoning effort the call asked for, e.g. "low", so it is compared as its own option).
+
+        `feature` is optional: your own name for the feature or workflow this call serves (for example "support_summary"), so the cost
+        can be shown per feature. It is your label, not a verified identity, and nothing is ever inferred from the prompt to fill it.
+        Letters, digits, spaces and . _ - only, at most 100 characters; anything else becomes an underscore.
 
         For multi-agent and tool-heavy apps, all optional: `agent` (which agent or role made the call,
         at most 100 characters), `trace_id` (one id shared by every call that serves the same user
@@ -422,6 +437,9 @@ class RunRecorder:
                 data["tool_calls"] = sanitize_tool_calls(data["tool_calls"], keep_arguments=self.send_tool_arguments)
             if agent:
                 data["agent"] = str(agent)[:100]
+            cleaned = clean_feature(feature)
+            if cleaned:
+                data["feature"] = cleaned
             if trace_id:
                 data["trace_id"] = str(trace_id)[:200]
             if span_id:

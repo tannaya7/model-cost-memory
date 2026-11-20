@@ -406,3 +406,40 @@ def test_gemini_function_calls_are_read_from_rest_and_sdk_shapes_without_argumen
         SimpleNamespace(function_call=SimpleNamespace(name="get_time", args={"tz": SECRET}, id=None))]))])
     assert _calls(sdk) == [{"name": "get_time", "id": None}]
     assert _calls(rest, include_arguments=True)[0]["arguments"] == {"city": SECRET}
+
+
+# ---- the optional feature label ---------------------------------------------------------------------------------------------
+
+def test_the_feature_label_is_optional_and_sent_only_when_given():
+    server = Server()
+    sender = sender_for(server)
+    with RunRecorder(job="j", sender=sender) as rec:
+        rec.capture(anthropic_like(), prompt="p")
+    with RunRecorder(job="j", sender=sender) as rec:
+        rec.capture(anthropic_like(), prompt="p", feature="support_summary")
+    assert sender.flush(2)
+    plain, labelled = server.bodies()
+    assert "feature" not in plain and labelled["feature"] == "support_summary"
+    sender.close()
+
+
+def test_a_strange_label_is_made_safe_instead_of_getting_the_whole_call_refused():
+    from agent_memory.recorder import clean_feature
+
+    assert clean_feature("Support summary-v2.1") == "Support summary-v2.1"
+    assert clean_feature("  invoice/reader<script>  ") == "invoice_reader_script"
+    assert clean_feature("___") is None and clean_feature("") is None and clean_feature("   ") is None and clean_feature(None) is None
+    assert clean_feature("-leading") == "leading"  # the server wants a letter or digit first
+    assert clean_feature("é") is None  # only plain ASCII letters and digits pass
+    assert len(clean_feature("a" * 300)) == 100
+    assert clean_feature(12345) == "12345"
+
+
+def test_nothing_is_inferred_from_the_prompt_to_fill_the_label():
+    server = Server()
+    sender = sender_for(server)
+    with RunRecorder(job="j", sender=sender) as rec:
+        rec.capture(anthropic_like(), prompt="Please summarise this support ticket for the billing team")
+    sender.flush(2)
+    assert "feature" not in server.bodies()[0]
+    sender.close()

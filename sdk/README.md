@@ -13,6 +13,14 @@ What a customer is shown today does not depend on these: the Connect guide gives
 JavaScript) or a plain web request (any language). Those need nothing installed. These packages are the next step once the owner
 picks a public name and licence.
 
+## The optional feature label
+
+**Optional: name the feature.** Pass `feature="support_summary"` (Python) or `feature: "support_summary"` (JavaScript) with a call and the
+Cost analysis page shows what each of your features cost. It is entirely optional, and you choose whether to add it: Model & Cost Memory
+never changes your code. The label is your own word. It is not verified, it is not an identity, and it is not an invoice-grade chargeback
+record. Letters, digits, spaces and `. _ -` only, at most 100 characters; anything else is turned into an underscore. Calls without a label
+are shown as "Unlabelled". Nothing is ever guessed from your prompts to fill it in.
+
 ## Checks
 
 ```

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { buildPayload, createRecorder, legacyColumns, readOutput, readUsage } from "../src/index.js";
+import { buildPayload, cleanFeature, createRecorder, legacyColumns, readOutput, readUsage } from "../src/index.js";
 
 const cases = JSON.parse(readFileSync(fileURLToPath(new URL("../../fixtures/usage_cases.json", import.meta.url)), "utf8"));
 
@@ -121,4 +121,17 @@ test("reads MCM_API_URL and MCM_API_KEY from the environment", async () => {
   await createRecorder({ fetch: send }).record("t", { prompt: "p", response: openai });
   assert.equal(calls[0].url, "https://env.example.com/v1/runs");
   assert.equal(calls[0].init.headers["X-API-Key"], "mcm_live_fromenv");
+});
+
+test("the feature label is optional, sent only when given, and made safe instead of getting the call refused", () => {
+  const base = { prompt: "p", output: "a", model: "m", modelVersion: "m-1" };
+  assert.equal("feature" in JSON.parse(JSON.stringify(buildPayload("t", base))), false);
+  assert.equal(buildPayload("t", { ...base, feature: "support_summary" }).feature, "support_summary");
+  assert.equal(cleanFeature("  invoice/reader<script>  "), "invoice_reader_script");
+  assert.equal(cleanFeature("-leading"), "leading");
+  assert.equal(cleanFeature("___"), undefined);
+  assert.equal(cleanFeature(""), undefined);
+  assert.equal(cleanFeature(null), undefined);
+  assert.equal(cleanFeature("é"), undefined);
+  assert.equal(cleanFeature("a".repeat(300)).length, 100);
 });
