@@ -1209,7 +1209,35 @@ async def _retest_out(session: AsyncSession, row: Retest, job_name: str, project
         pass_rate=row.passed / decided if decided else None, monthly_cap_usd=cap,
         cap_remaining_usd=max(cap - spent, 0.0), message=row.message, created_at=row.created_at,
         started_at=row.started_at, finished_at=row.finished_at,
+        stopping=row.stop_requested_at is not None and row.status in ("QUEUED", "RUNNING"),
     )
+
+
+@app.post("/v1/jobs/{job}/retest/{retest_id}/stop", response_model=RetestOut, tags=["retests"])
+async def stop_retest(
+    job: str, retest_id: uuid.UUID, project: Project = Depends(current_project),
+    user: User | None = Depends(optional_user), session: AsyncSession = Depends(get_session),
+) -> RetestOut:
+    """Stop a trial. One that has not started is closed at once and sends nothing. One that is running starts no new call; the calls
+    already in flight finish (they are already paid for) and every result so far is kept. Asking twice is harmless."""
+    found = await _job(session, project, job)
+    row = await session.get(Retest, retest_id, with_for_update=True)
+    if row is None or row.job_id != found.job_id:
+        raise HTTPException(404, "Trial not found")
+    now = datetime.now(UTC)
+    if row.status == "QUEUED":
+        row.status, row.stop_requested_at, row.finished_at = "STOPPED_USER", now, now
+        row.message = "Stopped by you before it started. Nothing was sent to the provider."
+    elif row.status == "RUNNING":
+        if row.stop_requested_at is None:
+            row.stop_requested_at = now
+    elif row.status != "STOPPED_USER":
+        raise HTTPException(409, {"code": "already_finished", "message": "This trial has already finished, so there is nothing to stop."})
+    if user is not None:
+        from .auth.orgs import audit_project
+        await audit_project(session, project, user, "trial_stopped")
+    await session.commit()
+    return await _retest_out(session, row, found.name, project)
 
 
 @app.post("/v1/jobs/{job}/retest", response_model=RetestOut, status_code=202, tags=["retests"])

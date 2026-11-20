@@ -187,7 +187,7 @@ async def test_a_short_replay_is_shown_as_inconclusive_and_a_long_one_with_its_r
 async def test_runs_that_used_tools_are_never_replayed(client, engine, session, world):
     key, _, job = world
     for i in range(60, 70):
-        session.add(Run(run_id=uuid.uuid4(), job_id=job.job_id, project_id="demo", prompt=f"TOOLUSER {i}", prompt_hash=prompt_hash(f"TOOLUSER {i}"),
+        session.add(Run(run_id=uuid.uuid4(), job_id=job.job_id, project_id="demo", prompt=f"TOOLUSER {i}", prompt_hash=prompt_hash(f"TOOLUSER {i}", "demo"),
                         model="big", model_version="big-2026-09", outcome="PASS", cost_usd=0.03, state="INDEXED", tokens_in=1000,
                         tokens_out=100, expected={"total": 100.0}, tool_call_count=2, tool_calls=[{"name": "t", "id": "c"}],
                         created_at=datetime.now(UTC) - timedelta(hours=i)))
@@ -230,7 +230,7 @@ async def test_automatic_paid_replays_are_off_unless_an_admin_turns_them_on(clie
     session.add(job)
     await session.flush()
     for i in range(60):
-        session.add(Run(run_id=uuid.uuid4(), job_id=job.job_id, project_id="fresh", prompt=f"p{i}", prompt_hash=prompt_hash(f"p{i}"),
+        session.add(Run(run_id=uuid.uuid4(), job_id=job.job_id, project_id="fresh", prompt=f"p{i}", prompt_hash=prompt_hash(f"p{i}", "fresh"),
                         model="big", model_version="big-2026-09", outcome="PASS", cost_usd=0.03, state="INDEXED", tokens_in=1000,
                         tokens_out=100, expected={"total": 100.0}, created_at=datetime.now(UTC) - timedelta(hours=i)))
     await session.commit()
@@ -279,7 +279,7 @@ async def test_only_this_projects_data_is_ever_in_a_preview(client, session, wor
     oj = Job(project_id="other", name="invoice", check_kind="ANSWER_KEY", check_config={"fields": ["total"]}, retest_consent=True)
     session.add(oj)
     await session.flush()
-    session.add(Run(run_id=uuid.uuid4(), job_id=oj.job_id, project_id="other", prompt="THEIR SECRET", prompt_hash=prompt_hash("THEIR SECRET"),
+    session.add(Run(run_id=uuid.uuid4(), job_id=oj.job_id, project_id="other", prompt="THEIR SECRET", prompt_hash=prompt_hash("THEIR SECRET", "other"),
                     model="big", model_version="big-1", outcome="PASS", cost_usd=0.03, state="INDEXED", tokens_in=1000, tokens_out=100,
                     expected={"total": 1.0}))
     await session.commit()

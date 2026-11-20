@@ -206,6 +206,8 @@ async def run_retest(
     settings = settings or get_settings()
     async with sessions() as session:
         retest = await session.get(Retest, retest_id)
+        if retest.status == "STOPPED_USER":  # a person stopped it while it waited in the queue: it never starts
+            return retest
         job = await session.get(Job, retest.job_id)
         project = await session.get(Project, retest.project_id)
         key = await session.get(ProviderKey, retest.project_id)
@@ -266,7 +268,12 @@ async def run_retest(
                     return
                 async with sessions() as s:
                     row = await s.get(Retest, retest_id)
+                    stop_requested = row.stop_requested_at is not None
                     spent, month = Decimal(row.spent_usd), await spent_this_month(s, row.project_id)
+                if stop_requested:  # a person pressed Stop: send nothing new; calls already in flight finish and are kept
+                    progress.stop_status, progress.stop_message = "STOPPED_USER", "Stopped by you. The calls already sent were kept."
+                    lock.notify_all()
+                    return
                 # Over even with nothing in flight: stop. Over only because calls in flight hold their
                 # worst case: wait for one to finish (it usually costs less) and look again.
                 if spent + cost > budget:

@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .checks import CheckResult, Outcome, check_run
+from .config import get_settings
 from .costing import Price, compute_cost
 from .pricing import PARTLY_PRICED, PRICED, modifier_factor, resolve_price
 from .usage_ledger import sanitize_raw
@@ -26,6 +27,7 @@ from .options import normalize_effort
 from .models import Job, OutboxRow, Project, Run
 from .privacy import sanitize_tool_calls
 from .schemas import JobCreate, RunCreate
+from .security import keyed_prompt_hash
 
 
 log = logging.getLogger("agent_memory.ingest")
@@ -47,9 +49,17 @@ class AlreadyResolved(ValueError):
     """The run already has a PASS or FAIL outcome."""
 
 
-def prompt_hash(prompt: str) -> str:
-    """Stable key for de-duplicating and caching by prompt text."""
+def plain_prompt_hash(prompt: str) -> str:
+    """The unkeyed SHA-256 of the prompt text. Never stored: it is only the first step of prompt_hash, and what rows made before
+    keying kept. A plain hash can be guessed back from short or common prompts, which is why it is not stored any more."""
     return hashlib.sha256(prompt.encode("utf8")).hexdigest()
+
+
+def prompt_hash(prompt: str, project_id: str, secret_key: str | None = None) -> str:
+    """Stable key for de-duplicating and caching by prompt text, inside one project. Keyed by the server's secret and the project,
+    so a prompt that was deleted after retention cannot be guessed from what is left, and the same prompt in two projects
+    gives two different values."""
+    return keyed_prompt_hash(project_id, plain_prompt_hash(prompt), get_settings().secret_key if secret_key is None else secret_key)
 
 
 async def create_job(session: AsyncSession, project: Project, body: JobCreate) -> Job:
@@ -108,7 +118,9 @@ async def record_run(
     usage_unreported = body.usage_shape == "none" and not (
         body.tokens_in or body.tokens_out or body.cache_read_tokens or body.cache_write_tokens)
     caller_cost = Decimal(str(body.cost_usd)) if body.cost_usd is not None else None
-    factor, unmodelled = modifier_factor(body.usage_shape, body.model_version or body.model, usage_raw)
+    factor, unmodelled = modifier_factor(
+        body.usage_shape, body.model_version or body.model, usage_raw,
+        prompt_tokens=body.tokens_in + body.cache_read_tokens + body.cache_write_tokens)
     version_id = None
     if resolution.price is not None and not usage_unreported:
         cost = compute_cost(resolution.price, body.tokens_in, body.tokens_out, body.cache_read_tokens,
@@ -129,7 +141,7 @@ async def record_run(
         result = check_run(job.check_kind, job.check_config, body.output, body.expected)
     state = "CAPTURED" if result.outcome is Outcome.UNKNOWN else "CHECKED"
 
-    digest = prompt_hash(body.prompt)
+    digest = prompt_hash(body.prompt, project.project_id)
     inserted = (
         await session.execute(
             insert(Run)

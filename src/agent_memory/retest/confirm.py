@@ -115,7 +115,7 @@ def conclusion(passed: int, failed: int, planned: int, status: str) -> dict:
         evidence = "inconclusive"
         note = (f"Only {checked} answers were checked; at least {MIN_CONCLUSIVE} are needed before this means anything. "
                 "Treat the pass rate as a first look, not a result.")
-    if status in ("STOPPED_BUDGET", "STOPPED_CAP", "FAILED") and checked:
+    if status in ("STOPPED_BUDGET", "STOPPED_CAP", "STOPPED_USER", "FAILED") and checked:
         note += " The replay stopped early, so it covers fewer prompts than planned."
     return {"evidence": evidence, "evidence_note": note, "pass_rate_low": low, "pass_rate_high": high,
             "checked": checked}

@@ -340,3 +340,50 @@ async def test_the_database_refuses_a_backwards_period_and_a_made_up_price_statu
         "SELECT count(*) FROM pg_constraint WHERE conname IN ('runs_price_status_check','price_versions_scope_check',"
         "'price_versions_source_kind_check')"))).scalar_one()
     assert found >= 3
+
+
+# --- Claude Haiku 5.5: a prompt over 100,000 tokens pays 5x on every rate (Anthropic pricing page, read 20 November 2026) ---------
+
+LONG = "claude-haiku-5-5"
+
+
+def test_a_haiku_5_5_prompt_over_100k_tokens_pays_five_times_on_everything():
+    assert modifier_factor("anthropic_messages", LONG, {}, prompt_tokens=100_001) == (Decimal(5), [])
+    assert modifier_factor("anthropic_messages", "claude-haiku-5-5-20260401", None, prompt_tokens=250_000) == (Decimal(5), [])
+
+
+def test_exactly_100k_is_still_the_standard_rate_and_so_is_a_short_prompt():
+    assert modifier_factor("anthropic_messages", LONG, {}, prompt_tokens=100_000) == (None, [])
+    assert modifier_factor("anthropic_messages", LONG, {}, prompt_tokens=1_000) == (None, [])
+    assert modifier_factor("anthropic_messages", LONG, {}) == (None, [])  # no token count given: nothing is guessed
+
+
+def test_other_models_bill_their_whole_window_at_the_standard_rate():
+    for model in ("claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-4-5", "claude-haiku-5-50", "gpt-5"):
+        assert modifier_factor("anthropic_messages", model, {}, prompt_tokens=900_000) == (None, []), model
+
+
+def test_it_only_applies_to_an_anthropic_shaped_response():
+    assert modifier_factor("openai_chat", LONG, {}, prompt_tokens=500_000) == (None, [])
+    assert modifier_factor(None, LONG, None, prompt_tokens=500_000) == (None, [])
+
+
+def test_it_stacks_with_batch_and_with_the_us_region_as_the_pricing_page_states():
+    assert modifier_factor("anthropic_messages", LONG, {"service_tier": "batch"}, prompt_tokens=200_000) == (Decimal("2.5"), [])  # 0.25 / 1.25 against 0.05 / 0.25
+    assert modifier_factor("anthropic_messages", LONG, {"inference_geo": "us"}, prompt_tokens=200_000) == (Decimal("5.5"), [])
+    factor, unmodelled = modifier_factor("anthropic_messages", LONG, {"service_tier": "batch", "inference_geo": "us"}, prompt_tokens=200_000)
+    assert factor == Decimal(5) and unmodelled  # batch together with the US region is still not verified: said, not guessed
+
+
+async def test_cache_reads_and_writes_count_toward_the_100k_and_the_cost_is_reproducible(client, session, keyed):
+    await add_version(session, LONG, price=("0.1", "0.5"))
+    short = await post_run(client, keyed, model=LONG, model_version=LONG, usage_shape="anthropic_messages", tokens_in=60_000, tokens_out=1_000_000)
+    long = await post_run(client, keyed, model=LONG, model_version=LONG, usage_shape="anthropic_messages", tokens_in=60_000,
+                          cache_read_tokens=50_000, tokens_out=1_000_000)  # 60,000 + 50,000 = 110,000: over
+    a = (await session.execute(select(Run).where(Run.run_id == uuid.UUID(short)))).scalar_one()
+    b = (await session.execute(select(Run).where(Run.run_id == uuid.UUID(long)))).scalar_one()
+    assert a.price_factor is None and b.price_factor == Decimal("5.0000")
+    # 60,000 in at $0.10 and 1M out at $0.50 = $0.506; the long one costs five times its own standard price, cache read included
+    assert a.cost_usd == Decimal("0.506000")
+    assert b.cost_usd == (Decimal("0.506000") + Decimal("50000") / Decimal(1_000_000) * Decimal("0.1") * Decimal("0.1")) * 5
+    assert await reprice_run(session, b) == b.cost_usd  # recomputed from its own price version and stored factor: the same amount

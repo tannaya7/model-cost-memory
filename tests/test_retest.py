@@ -68,7 +68,7 @@ async def world(session):
     for i in range(60):
         session.add(Run(
             run_id=uuid.uuid4(), job_id=job.job_id, project_id="demo", prompt=f"invoice {i}",
-            prompt_hash=prompt_hash(f"invoice {i}"),
+            prompt_hash=prompt_hash(f"invoice {i}", "demo"),
             model="big", model_version="big-2026-09", outcome="PASS", cost_usd=0.03, state="INDEXED",
             tokens_in=1000, tokens_out=100, expected={"total": 100.0},
             importance_score=3.0 if i < 10 else 1.0, created_at=datetime.now(UTC) - timedelta(hours=i),
@@ -323,7 +323,7 @@ async def test_a_job_that_already_compares_models_gets_no_first_key_re_test(sess
     _, project, job = world
     for i in range(40):
         session.add(Run(run_id=uuid.uuid4(), job_id=job.job_id, project_id="demo", prompt=f"retest {i}",
-                        prompt_hash=prompt_hash(f"retest {i}"), model="mini", model_version="mini", outcome="PASS",
+                        prompt_hash=prompt_hash(f"retest {i}", "demo"), model="mini", model_version="mini", outcome="PASS",
                         cost_usd=0.001, state="INDEXED", run_kind="RETEST"))
     session.add(ProviderPrice(model="acme-small", provider="acme", price_in_per_mtok=Decimal("10"),
                               price_out_per_mtok=Decimal("20")))

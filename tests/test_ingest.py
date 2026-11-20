@@ -66,7 +66,7 @@ async def test_a_run_is_accepted_and_stored_with_its_outbox_row(client, project,
     stored = (await session.execute(select(Run))).scalar_one()
     assert str(stored.run_id) == body["run_id"]
     assert stored.outcome == "UNKNOWN" and stored.state == "CAPTURED"  # outcomes arrive in Week 4
-    assert stored.prompt_hash == prompt_hash("Extract the total.")
+    assert stored.prompt_hash == prompt_hash("Extract the total.", "demo")
     outbox = (await session.execute(select(OutboxRow))).scalar_one()
     assert outbox.run_id == stored.run_id and outbox.status == "PENDING" and outbox.op == "UPSERT"
 

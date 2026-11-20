@@ -21,7 +21,7 @@ def runs(job, model, n, *, cost, hours_ago_max=20, passed=1.0, kind="PRODUCTION"
     """n checked runs spread over the last `hours_ago_max` hours, the newest last."""
     return [dict(
         run_id=uuid.uuid4(), job_id=job.job_id, project_id=job.project_id, prompt=f"{model} {effort} {i}",
-        prompt_hash=prompt_hash(f"{model} {effort} {i}"), model=model, model_version=model, effort=effort,
+        prompt_hash=prompt_hash(f"{model} {effort} {i}", job.project_id), model=model, model_version=model, effort=effort,
         tokens_in=tokens, tokens_out=100, cost_usd=Decimal(str(cost)), run_kind=kind, state="INDEXED",
         outcome="PASS" if i < round(n * passed) else "FAIL",
         created_at=NOW - timedelta(hours=hours_ago_max) + timedelta(seconds=(i + 1) * hours_ago_max * 3600 / (n + 1)),

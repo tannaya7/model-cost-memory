@@ -144,7 +144,8 @@ CREATE TABLE retests (                              -- replaying sampled past ru
     candidate_model TEXT NOT NULL,
     trigger         TEXT NOT NULL CHECK (trigger IN ('MANUAL','NEW_MODEL','UNSURE','FIRST_KEY')),
     status          TEXT NOT NULL DEFAULT 'QUEUED' CHECK (status IN
-                      ('QUEUED','RUNNING','DONE','STOPPED_BUDGET','STOPPED_CAP','FAILED')),
+                      ('QUEUED','RUNNING','DONE','STOPPED_BUDGET','STOPPED_CAP','STOPPED_USER','FAILED')),
+    stop_requested_at TIMESTAMPTZ,                  -- a person pressed Stop (0036)
     budget_usd      NUMERIC(10,4) NOT NULL CHECK (budget_usd > 0),
     spent_usd       NUMERIC(12,6) NOT NULL DEFAULT 0,
     runs_planned    INT NOT NULL DEFAULT 0,
@@ -173,7 +174,8 @@ CREATE TABLE runs (
     job_id            UUID NOT NULL REFERENCES jobs(job_id),
     project_id        TEXT NOT NULL REFERENCES projects(project_id),
     prompt            TEXT,                         -- NULL once retention cleared it (0015)
-    prompt_hash       TEXT NOT NULL,                -- dedupe + cache key
+    prompt_hash       TEXT NOT NULL,                -- dedupe + cache key: HMAC of the prompt's SHA-256 under a per-project key (0037)
+    hash_version      SMALLINT NOT NULL DEFAULT 2,  -- 1 = plain SHA-256 (before 0037), 2 = keyed
     model             TEXT NOT NULL,
     model_version     TEXT NOT NULL,                -- provider-resolved; what decay is keyed to
     prompt_version    TEXT,                         -- optional template version (Should)

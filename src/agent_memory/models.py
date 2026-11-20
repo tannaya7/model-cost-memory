@@ -23,6 +23,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     REAL,
+    SmallInteger,
     Text,
     UniqueConstraint,
     text,
@@ -186,6 +187,8 @@ class Run(Base):
     project_id: Mapped[str] = mapped_column(Text, ForeignKey("projects.project_id"))
     prompt: Mapped[str | None] = mapped_column(Text)  # NULL once cleared by retention (content_removed_at)
     prompt_hash: Mapped[str] = mapped_column(Text)
+    # 1 = the plain SHA-256 of the prompt (rows from before 0037, until it ran), 2 = keyed per project (see security.keyed_prompt_hash).
+    hash_version: Mapped[int] = mapped_column(SmallInteger, server_default=text("2"))
     model: Mapped[str] = mapped_column(Text)
     model_version: Mapped[str] = mapped_column(Text)
     prompt_version: Mapped[str | None] = mapped_column(Text)
@@ -239,7 +242,7 @@ class Retest(Base):
     __table_args__ = (
         CheckConstraint("trigger IN ('MANUAL','NEW_MODEL','UNSURE','FIRST_KEY')", name="retests_trigger_check"),
         CheckConstraint(
-            "status IN ('QUEUED','RUNNING','DONE','STOPPED_BUDGET','STOPPED_CAP','FAILED')",
+            "status IN ('QUEUED','RUNNING','DONE','STOPPED_BUDGET','STOPPED_CAP','STOPPED_USER','FAILED')",
             name="retests_status_check",
         ),
         CheckConstraint("budget_usd > 0", name="retests_budget_usd_check"),
@@ -260,6 +263,7 @@ class Retest(Base):
     passed: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     failed: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     message: Mapped[str | None] = mapped_column(Text)
+    stop_requested_at: Mapped[datetime | None] = mapped_column(Timestamp)  # a person pressed Stop (0036)
     # What the person confirmed and what was recorded (0032). Never prompt text.
     confirmation_hash: Mapped[str | None] = mapped_column(Text, unique=True)
     confirmed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="SET NULL"))

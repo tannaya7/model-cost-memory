@@ -35,6 +35,24 @@ def derive(secret_key: str, purpose: str) -> bytes:
     return hmac.new(secret_key.encode(), purpose.encode(), hashlib.sha256).digest()
 
 
+# Used only when the server has no SECRET_KEY (a laptop): hashes then stay stable between restarts but are guessable, because this
+# string is public. A real server has a SECRET_KEY, and the product refuses to start in production without one.
+NO_SECRET_PROMPT_KEY = "development only: SECRET_KEY is not set"
+
+
+def prompt_hash_key(project_id: str, secret_key: str) -> bytes:
+    """The key that makes one project's prompt hashes its own: another project, or anyone without the server's secret, cannot
+    recompute or compare them."""
+    return derive(secret_key or NO_SECRET_PROMPT_KEY, f"prompt-hash/v2/{project_id}")
+
+
+def keyed_prompt_hash(project_id: str, plain_sha256_hex: str, secret_key: str) -> str:
+    """HMAC-SHA256 of a prompt's plain SHA-256, under this project's key. It is built from the plain hash on purpose: a row stored
+    before keying (which kept only the plain hash, its text possibly long deleted) converts to exactly the value a new call with
+    the same prompt gets, so every match survives the change."""
+    return hmac.new(prompt_hash_key(project_id, secret_key), plain_sha256_hex.encode(), hashlib.sha256).hexdigest()
+
+
 def session_secret(secret_key: str) -> str:
     """The key that signs sign-in cookies."""
     return base64.urlsafe_b64encode(derive(secret_key, "mcm session cookie v1")).decode()

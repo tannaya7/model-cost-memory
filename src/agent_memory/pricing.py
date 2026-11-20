@@ -45,6 +45,13 @@ UNPRICED_EXPIRED = "UNPRICED_EXPIRED"
 
 BATCH_FACTOR = Decimal("0.5")
 US_REGION_FACTOR = Decimal("1.1")
+# Claude Haiku 5.5 only: a prompt over 100,000 tokens pays higher rates on EVERY price (input, output, both cache writes, cache reads),
+# 5 times the standard ones (Anthropic's pricing and prompt-caching pages, read 20 November 2026). The length counts input, cache reads and
+# cache writes together. It stacks with batch (0.5) and the US region (1.1), which are applied to the higher prices. Other 4.6+ models bill
+# their whole 1M window at the standard rates. Verified for Anthropic's own API; the same model name on another cloud may be priced differently.
+LONG_PROMPT_TOKENS = 100_000
+LONG_PROMPT_FACTOR = Decimal(5)
+_LONG_PROMPT_MODELS = re.compile(r"(?<![a-z0-9])haiku-5-5(?![0-9])")
 # "For Claude 4.6 and later models, using inference_geo "us" applies a 1.1x pricing multiplier."
 _US_REGION_MODELS = re.compile(
     r"(?<![a-z0-9])(fable-5|mythos-5|opus-5|sonnet-5|haiku-5|opus-4-[6-9]|sonnet-4-[6-9]|haiku-4-[6-9])")
@@ -116,15 +123,20 @@ async def resolve_price(
     return Resolution(None, None, UNPRICED_UNKNOWN_MODEL)
 
 
-def modifier_factor(usage_shape: str | None, model: str, usage_raw: dict[str, Any] | None) -> tuple[Decimal | None, list[str]]:
+def modifier_factor(usage_shape: str | None, model: str, usage_raw: dict[str, Any] | None,
+                    prompt_tokens: int | None = None) -> tuple[Decimal | None, list[str]]:
     """(factor, unmodelled): the verified multiplier to apply (None = 1), and what the response reported that
-    this code cannot price. Only an Anthropic-shaped usage block is read for modifiers."""
-    if usage_shape != "anthropic_messages" or not usage_raw:
+    this code cannot price. Only an Anthropic-shaped usage block is read for modifiers. `prompt_tokens` is the call's
+    input plus cache reads plus cache writes, which decides the long-prompt rate on Claude Haiku 5.5."""
+    if usage_shape != "anthropic_messages":
         return None, []
+    usage_raw = usage_raw or {}
     tier, geo, speed = usage_raw.get("service_tier"), usage_raw.get("inference_geo"), usage_raw.get("speed")
     name = normalize(model).replace(".", "-")
     factor = Decimal(1)
     unmodelled: list[str] = []
+    if prompt_tokens is not None and prompt_tokens > LONG_PROMPT_TOKENS and _LONG_PROMPT_MODELS.search(name):
+        factor *= LONG_PROMPT_FACTOR
     batch = tier == "batch"
     us = geo == "us"
     if batch and us:

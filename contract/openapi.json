@@ -7354,10 +7354,17 @@
               "DONE",
               "STOPPED_BUDGET",
               "STOPPED_CAP",
+              "STOPPED_USER",
               "FAILED"
             ],
             "title": "Status",
             "type": "string"
+          },
+          "stopping": {
+            "default": false,
+            "description": "A person pressed Stop and the calls already in flight are finishing",
+            "title": "Stopping",
+            "type": "boolean"
           },
           "trigger": {
             "enum": [
@@ -13854,6 +13861,107 @@
           }
         },
         "summary": "Get Retest",
+        "tags": [
+          "retests"
+        ]
+      }
+    },
+    "/v1/jobs/{job}/retest/{retest_id}/stop": {
+      "post": {
+        "description": "Stop a trial. One that has not started is closed at once and sends nothing. One that is running starts no new call; the calls\nalready in flight finish (they are already paid for) and every result so far is kept. Asking twice is harmless.",
+        "operationId": "stop_retest_v1_jobs__job__retest__retest_id__stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "retest_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Retest Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop Retest",
         "tags": [
           "retests"
         ]

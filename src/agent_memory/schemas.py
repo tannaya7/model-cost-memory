@@ -615,7 +615,7 @@ class AlertOut(Model):
     resolved_at: datetime | None
 
 
-RetestStatus = Literal["QUEUED", "RUNNING", "DONE", "STOPPED_BUDGET", "STOPPED_CAP", "FAILED"]
+RetestStatus = Literal["QUEUED", "RUNNING", "DONE", "STOPPED_BUDGET", "STOPPED_CAP", "STOPPED_USER", "FAILED"]
 
 
 class RetestPreviewRequest(Model):
@@ -705,6 +705,7 @@ class RetestOut(Model):
     evidence_note: str | None = None
     pass_rate_low: float | None = Field(default=None, description="Lower end of the 95% range for the pass rate")
     pass_rate_high: float | None = None
+    stopping: bool = Field(default=False, description="A person pressed Stop and the calls already in flight are finishing")
 
 
 class ProviderKeyIn(Model):
