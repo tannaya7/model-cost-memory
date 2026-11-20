@@ -241,3 +241,43 @@ async def test_a_project_in_another_pay_mode_moves_between_buckets_when_changed(
     await session.commit()
     after = (await _get(client, org)).json()
     assert after["totals"]["billable_usd"] == 0.0 and after["projects"][0]["cost_usd"] is None and after["by_mode"]["subscription"]["calls"] == 10
+
+
+async def test_a_model_used_by_only_a_few_calls_is_folded_like_a_small_task(client, dev_login, session):
+    """A rarely used model name can point at one person's experiments, so it is not named (the same rule as small tasks)."""
+    await dev_login(client, "owner@example.com")
+    org = await _company(client)
+    pid = await _project(client, session, org, "Metered")
+    await _runs(session, pid, "big", 20, model="common")
+    await _runs(session, pid, "big", 3, model="my-secret-experiment", cost=0.05)
+    await _runs(session, pid, "big", 1, model="another-rare-one", cost=0.07)
+    body = (await _get(client, org)).json()
+    names = [m["model"] for m in body["models"]]
+    assert names == ["common", "Other small groups"]
+    other = body["models"][-1]
+    assert other["calls"] == 4 and other["folded_groups"] == 2
+    assert other["cost_usd"] == pytest.approx(3 * 0.05 + 0.07)
+    assert "my-secret-experiment" not in json.dumps(body) and "another-rare-one" not in json.dumps(body)
+    assert sum(m["calls"] for m in body["models"]) == body["totals"]["calls"]  # folding loses nothing
+
+
+async def test_models_beyond_the_top_fifteen_are_folded_too_and_the_table_still_adds_up(client, dev_login, session):
+    await dev_login(client, "owner@example.com")
+    org = await _company(client)
+    pid = await _project(client, session, org, "Metered")
+    for i in range(17):
+        await _runs(session, pid, "big", 6, model=f"model-{i:02d}")
+    body = (await _get(client, org)).json()
+    assert len(body["models"]) == 16 and body["models"][-1]["model"] == "Other small groups"
+    assert body["models"][-1]["folded_groups"] == 2
+    assert sum(m["calls"] for m in body["models"]) == 17 * 6 == body["totals"]["calls"]
+
+
+async def test_a_model_with_exactly_the_minimum_calls_is_named(client, dev_login, session):
+    await dev_login(client, "owner@example.com")
+    org = await _company(client)
+    pid = await _project(client, session, org, "Metered")
+    await _runs(session, pid, "big", 5, model="five-calls")
+    await _runs(session, pid, "big", 4, model="four-calls")
+    names = [m["model"] for m in (await _get(client, org)).json()["models"]]
+    assert names == ["five-calls", "Other small groups"]

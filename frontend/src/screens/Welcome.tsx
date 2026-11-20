@@ -38,8 +38,8 @@ export default function Welcome() {
       <Panel glow className="p-6 md:p-8">
         <h1 className="text-3xl font-semibold tracking-tight">{first ? `Welcome, ${first}` : "Welcome"}</h1>
         <p className="mt-3 text-dim">
-          Your account is ready. You signed in with Google as <strong className="text-ink [overflow-wrap:anywhere]">{me.data?.email}</strong>.
-          No password is needed, and we never see your Google password.
+          Your account is ready. You are signed in as <strong className="text-ink [overflow-wrap:anywhere]">{me.data?.email}</strong>.
+          We keep no password for you.
         </p>
         <ul className="mt-4 flex flex-col gap-1.5 text-sm text-dim">
           <li>Next you can make your first project, one app that uses AI.</li>

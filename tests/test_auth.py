@@ -24,7 +24,7 @@ def dev_login(monkeypatch):
 async def test_dev_login_is_off_unless_enabled(client):
     assert (await client.post("/auth/dev/login", json={"email": "a@example.com"})).status_code == 404
     config = (await client.get("/auth/config")).json()
-    assert config == {"google": False, "dev_login": False, "demo_project_id": None}
+    assert config == {"google": False, "dev_login": False, "demo_project_id": None, "auto_replays": False}
 
 
 async def test_google_sign_in_is_not_offered_without_credentials(client):

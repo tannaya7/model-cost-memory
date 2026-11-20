@@ -357,7 +357,7 @@ export function RetestsTab({ job, rec }: { job: string; rec: Recommendation | nu
       {retests.isPending ? (
         <Skeleton className="h-40" />
       ) : list.length === 0 ? (
-        <EmptyState icon={<IconFlask size={18} />} title="No trial yet" hint="Trials start by themselves when a new model appears, or you can start one." />
+        <EmptyState icon={<IconFlask size={18} />} title="No trial yet" hint="You start a trial yourself: you review what it sends and what it may cost, then confirm." />
       ) : (
         list.map((r) => (
           <Panel key={r.retest_id} className="p-5">

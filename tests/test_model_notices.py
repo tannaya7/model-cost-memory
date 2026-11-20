@@ -255,7 +255,7 @@ def utc_day(y, m, d):
 async def test_models_the_project_does_not_use_get_no_notice(session):
     await ready(session)
     await project_with_runs(session, runs=[used("claude-3-haiku-20240307", days_ago=1), used("gpt-4-turbo", provider="openai", days_ago=45),
-                                           used("claude-sonnet-4-5-20250929", kind="RETEST"), used("gpt-5", provider="openai", kind="SHADOW")])
+                                           used("claude-sonnet-4-5-20250929", kind="RETEST"), used("gpt-5", provider="openai", kind="RETEST")])
     # the first was retired but the project's last call was 1 day ago: it is in use; the other three are inactive or not production
     models = {a.detail["model"] for a in await check_notices(session, now=NOW)}
     assert models == {"claude-3-haiku-20240307"}

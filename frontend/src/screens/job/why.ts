@@ -95,7 +95,7 @@ export function buildWhy(rec: Recommendation, billing: "per_use" | "subscription
       text: `If you moved, you would ${billing === "subscription" ? smaller : billing === "both" ? `${money} on calls paid per use (and, on a subscription, ${smaller})` : money} and get ${w.headline} (${w.range}), ${volumeWords(f, rec.current?.model)}.`,
     });
   } else if (rec.verdict === "HOLD") {
-    out.push({ title: "What would change", text: "Nothing, for now. If a cheaper or better model is proven later, we will tell you." });
+    out.push({ title: "What would change", text: "Nothing, for now. If a cheaper or better model is shown to do the job later, we will tell you." });
   }
 
   out.push({

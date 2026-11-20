@@ -57,7 +57,7 @@ async def test_passed_failed_unchecked_and_excluded_are_counted_apart(session, w
     add_run(session, project, job, outcome="UNKNOWN", state="CAPTURED")
     add_run(session, project, job, outcome="PASS", state="ARCHIVED")      # left out of the checks
     add_run(session, project, job, outcome="FAIL", invalid=True)           # answer invalidated: left out too
-    add_run(session, project, job, kind="SHADOW")                          # not the app's own production call
+    add_run(session, project, job, kind="RETEST")                          # not the app's own production call
     add_run(session, project, job, age_days=90)                            # outside the period
     await session.commit()
     r = await receipt(session, project, days=30)

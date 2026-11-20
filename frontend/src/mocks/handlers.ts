@@ -417,7 +417,7 @@ for (let i = 0; i < 297; i++) {
     latency_ms: latencyMs,
     outcome,
     outcome_reason: outcomeReason,
-    run_kind: i % 7 === 0 ? "SHADOW" : i % 11 === 0 ? "RETEST" : "PRODUCTION",
+    run_kind: i % 11 === 0 ? "RETEST" : "PRODUCTION",
     state: "INDEXED",
     created_at: createdAt,
     prompt_preview: promptPreview,
@@ -790,7 +790,7 @@ export const handlers = [
 
   // GET /auth/config
   http.get("/auth/config", () =>
-    HttpResponse.json({ google: true, dev_login: false, demo_project_id: null } satisfies AuthConfig),
+    HttpResponse.json({ google: true, dev_login: false, demo_project_id: null, auto_replays: false } satisfies AuthConfig),
   ),
 
   // GET /v1/jobs/:job/profile (what the calls prove, plus the optional AI summary)

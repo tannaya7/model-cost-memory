@@ -265,9 +265,9 @@ async def test_the_monthly_budget_can_be_set_validated_and_cleared(client, dev_l
     assert (await client.patch(url, json={"monthly_budget_usd": None})).json()["monthly_budget_usd"] is None
 
 
-async def test_f16_shadow_runs_do_not_count_towards_the_budget(session):
+async def test_f16_replay_runs_do_not_count_towards_the_budget(session):
     job = await make_job(session, budget=Decimal("100"))
-    await spend(session, job, [0], cost="90", kind="SHADOW")
+    await spend(session, job, [0], cost="90", kind="RETEST")
     assert await check_budgets(session, now=NOW) == []
 
 

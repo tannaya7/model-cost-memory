@@ -33,7 +33,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from . import __version__, ingest
 from .db import dispose_engine, get_session
-from .exports import COST_BASIS, PROJECT_COLUMNS, PROJECT_TEXT, write_csv
+from .exports import COST_BASIS, PROJECT_COLUMNS, PROJECT_TEXT, csv_file, write_csv
 from .insights.agents import agent_insights
 from .insights.savings import savings as savings_insight
 from .insights.changes import DAYS as CHANGE_DAYS
@@ -876,7 +876,7 @@ async def export_csv(
         await audit_project(session, project, user, "project_data_exported", days=days, rows=len(rows), filtered=bool(ai_task or model))
         await session.commit()
     safe = re.sub(r"[^A-Za-z0-9._-]", "-", project.slug or project.project_id)
-    return Response(content=body, media_type="text/csv; charset=utf-8", headers={
+    return Response(content=csv_file(body), media_type="text/csv; charset=utf-8", headers={
         "Content-Disposition": f'attachment; filename="model-cost-memory-{safe}-last-{days}-days.csv"', "Cache-Control": "no-store",
         "X-Export-Rows": str(len(rows)), "X-Export-Neutralized": str(changed), "X-Content-Type-Options": "nosniff"})
 

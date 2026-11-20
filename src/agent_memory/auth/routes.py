@@ -95,7 +95,7 @@ def _safe_next(path: str | None) -> str:
 async def auth_config() -> AuthConfig:
     s = get_settings()
     return AuthConfig(google=bool(s.google_client_id and s.google_client_secret), dev_login=s.dev_login,
-                      demo_project_id=s.demo_project_id or None)
+                      demo_project_id=s.demo_project_id or None, auto_replays=s.auto_replays)
 
 
 @router.get("/auth/google/login", tags=["auth"])
@@ -295,6 +295,8 @@ async def patch_project(
             raise HTTPException(422, "notice_alert_webhook: add a webhook address first, then turn this on")
         project.notice_alert_webhook = body.notice_alert_webhook
     if "auto_retests" in sent and body.auto_retests is not None:  # opt in: paid replays that start without a per-replay confirmation
+        if body.auto_retests and not get_settings().auto_replays:
+            raise HTTPException(422, "Automatic trials are switched off on this server. Every trial starts only after you review and confirm it.")
         project.auto_retests = body.auto_retests
     if "ai_summary_consent" in sent and body.ai_summary_consent is not None:
         if body.ai_summary_consent and summary_host() is None:

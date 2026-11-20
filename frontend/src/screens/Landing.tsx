@@ -496,7 +496,7 @@ const STEPS = [
 ];
 
 const FEATURES = [
-  { icon: IconDollar, title: "The cheapest model that still works", text: "A recommendation per AI task, proven on your own traffic with a confidence range, never a public benchmark. With the monthly saving and the expected change in failures." },
+  { icon: IconDollar, title: "The cheapest model that still works", text: "A recommendation per AI task, judged on your own traffic with a confidence range, never a public benchmark. With the monthly saving and the expected change in failures." },
   { icon: IconAlert, title: "A warning when an upgrade breaks things", text: "Every version change is compared with the one before it on the same mix of inputs, and in our simulations a model that quietly got worse under the same name was often caught (a 5-point drop in 77 of 100 simulations at 50 calls a day). Alerts go to Slack or Discord." },
   { icon: IconFlask, title: "New models tried for you", text: "When a cheaper model appears, a sample of your past prompts is replayed on it within a budget you set, so the evidence exists before you need it." },
   { icon: IconShield, title: "Your data has an end", text: "Prompts and answers are deleted after the retention you choose; the figures stay. Delete a project and everything in it goes." },

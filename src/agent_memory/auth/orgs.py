@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
 from ..insights.company import DAYS as OVERVIEW_DAYS
-from ..exports import COMPANY_COLUMNS, COMPANY_TEXT, write_csv
+from ..exports import COMPANY_COLUMNS, COMPANY_TEXT, csv_file, write_csv
 from ..insights.company import company_overview
 from ..models import Membership, OrgEvent, OrgInvite, Organisation, Project, User
 from ..retention import delete_project
@@ -337,7 +337,7 @@ async def export_overview(org_id: uuid.UUID, days: int = Query(default=30, descr
     await _event(session, org_id, user.user_id, "overview_exported", None, days=days, rows=len(rows))
     await session.commit()
     name = f"model-cost-memory-company-last-{days}-days.csv"
-    return Response(content=body, media_type="text/csv; charset=utf-8", headers={
+    return Response(content=csv_file(body), media_type="text/csv; charset=utf-8", headers={
         "Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store", "X-Export-Rows": str(len(rows)),
         "X-Export-Neutralized": str(changed), "X-Content-Type-Options": "nosniff"})
 

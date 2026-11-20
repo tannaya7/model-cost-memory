@@ -37,6 +37,15 @@ def _cell(value: Any) -> Any:
     return value
 
 
+BOM = "﻿"
+
+
+def csv_file(text: str) -> str:
+    """The text of a CSV download: a UTF-8 byte-order mark first, so Excel (which otherwise guesses an old code page) shows accented
+    names correctly. Other programs ignore it. write_csv itself stays plain text, so the mark is added only where a file is sent."""
+    return BOM + text
+
+
 def write_csv(columns: Sequence[str], rows: Iterable[Mapping[str, Any]], *, text_columns: Iterable[str]) -> tuple[str, int]:
     """The CSV text and how many text values were neutralized. Numbers are never changed."""
     text_cols = set(text_columns)

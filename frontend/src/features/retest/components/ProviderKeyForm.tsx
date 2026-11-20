@@ -52,7 +52,7 @@ export function ProviderKeyForm({ onSaved }: { onSaved: () => void }) {
         <details className="mt-1 text-xs text-dim">
           <summary className="cursor-pointer font-semibold text-accent">How trials use this key</summary>
           <p className="mt-1">
-            A trial replays your past prompts on another model to see if it does as well. It uses your own provider key, so the spending is yours. Saving the key lets trials run within your budget, including ones we start when a cheaper model appears. An AI task that has only ever used one model gets one trial of a cheaper model from this provider as soon as you save, with a small budget ($1 by default). Only models with a known price are tried, so the budget always holds.
+            A trial replays your past prompts on another model to see if it does as well. It uses your own provider key, so the spending is yours. Saving the key does not start anything. You choose each trial, review what it will send and roughly what it will cost, and confirm it first. Only models with a known price are tried, and the cost is estimated at list prices, so check your provider's own bill.
           </p>
         </details>
       </div>

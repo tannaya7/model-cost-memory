@@ -572,6 +572,12 @@
       },
       "AuthConfig": {
         "properties": {
+          "auto_replays": {
+            "default": false,
+            "description": "This server allows automatic replays (off unless the operator turns them on)",
+            "title": "Auto Replays",
+            "type": "boolean"
+          },
           "demo_project_id": {
             "anyOf": [
               {
@@ -1131,6 +1137,18 @@
           "flat_plan_calls": {
             "title": "Flat Plan Calls",
             "type": "integer"
+          },
+          "folded_groups": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How many small models an 'Other' row stands for",
+            "title": "Folded Groups"
           },
           "label_source": {
             "const": "caller_supplied",
@@ -8240,7 +8258,6 @@
           "run_kind": {
             "enum": [
               "PRODUCTION",
-              "SHADOW",
               "RETEST"
             ],
             "title": "Run Kind",
@@ -8591,7 +8608,6 @@
           "run_kind": {
             "enum": [
               "PRODUCTION",
-              "SHADOW",
               "RETEST"
             ],
             "title": "Run Kind",

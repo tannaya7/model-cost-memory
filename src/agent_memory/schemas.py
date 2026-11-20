@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, 
 
 CheckKind = Literal["ANSWER_KEY", "TEST_COMMAND", "SCHEMA", "LATE_LABEL"]
 Outcome = Literal["PASS", "FAIL", "UNKNOWN"]
-RunKind = Literal["PRODUCTION", "SHADOW", "RETEST"]
+RunKind = Literal["PRODUCTION", "RETEST"]
 RunState = Literal["CAPTURED", "CHECKED", "INDEXED", "CONSOLIDATED", "ARCHIVED", "INGESTION_FAILED"]
 
 
@@ -753,6 +753,7 @@ class AuthConfig(Model):
     google: bool = Field(description="Google sign-in is configured on this server")
     dev_login: bool = Field(description="Development-only sign-in by email; never on in production")
     demo_project_id: str | None = Field(description="A project anyone may read without signing in")
+    auto_replays: bool = Field(default=False, description="This server allows automatic replays (off unless the operator turns them on)")
 
 
 class DevLogin(Model):
@@ -1751,6 +1752,7 @@ class CompanyModelRow(Model):
     unpriced_calls: int
     flat_plan_calls: int
     label_source: Literal["caller_supplied"]
+    folded_groups: int | None = Field(default=None, description="How many small models an 'Other' row stands for")
 
 
 class CompanyDay(Model):

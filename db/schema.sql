@@ -190,7 +190,7 @@ CREATE TABLE runs (
                         CHECK (outcome IN ('PASS','FAIL','UNKNOWN')),
     outcome_reason    TEXT,                         -- why it passed, failed or is unknown
     run_kind          TEXT NOT NULL DEFAULT 'PRODUCTION'
-                        CHECK (run_kind IN ('PRODUCTION','SHADOW','RETEST')),
+                        CHECK (run_kind IN ('PRODUCTION','RETEST')),   -- no SHADOW kind (0035)
     memory_type       TEXT NOT NULL DEFAULT 'EPISODIC'   -- one run
                         CHECK (memory_type IN ('EPISODIC','SEMANTIC')),
     importance_score  REAL NOT NULL DEFAULT 1.0,

@@ -255,6 +255,7 @@ async def test_automatic_paid_replays_are_off_unless_an_admin_turns_them_on(clie
 
 async def test_a_signed_in_admin_turns_automatic_replays_on_and_a_member_cannot(client, monkeypatch):
     monkeypatch.setenv("DEV_LOGIN", "true")
+    monkeypatch.setenv("AUTO_REPLAYS", "true")  # the operator has allowed them on this server
     await client.post("/auth/dev/login", json={"email": "owner@example.com"})
     org = (await client.post("/v1/organisations", json={"name": "Acme"})).json()["org_id"]
     made = (await client.post("/v1/projects", json={"name": "P", "organisation_id": org})).json()["project"]
@@ -308,3 +309,29 @@ async def test_a_run_with_a_json_null_or_empty_tool_list_still_counts_as_tool_fr
     await session.commit()
     got = await sample_sources(session, job, "mini", 500)
     assert len(got) == 60
+
+
+async def test_automatic_replays_are_off_on_a_server_unless_the_operator_allows_them(client, monkeypatch, session):
+    monkeypatch.setenv("DEV_LOGIN", "true")
+    monkeypatch.delenv("AUTO_REPLAYS", raising=False)
+    await client.post("/auth/dev/login", json={"email": "owner@example.com"})
+    assert (await client.get("/auth/config")).json()["auto_replays"] is False
+    org = (await client.post("/v1/organisations", json={"name": "Acme"})).json()["org_id"]
+    made = (await client.post("/v1/projects", json={"name": "P", "organisation_id": org})).json()["project"]
+    refused = await client.patch(f"/v1/projects/{made['project_id']}", json={"auto_retests": True})
+    assert refused.status_code == 422 and "switched off on this server" in refused.json()["detail"]
+    assert (await client.patch(f"/v1/projects/{made['project_id']}", json={"auto_retests": False})).status_code == 200  # turning off is always fine
+    monkeypatch.setenv("AUTO_REPLAYS", "true")
+    assert (await client.get("/auth/config")).json()["auto_replays"] is True
+
+
+async def test_with_the_server_switch_off_no_trigger_starts_anything_even_for_a_project_that_opted_in(session, world):
+    off = SETTINGS.model_copy(update={"auto_replays": False}) if hasattr(SETTINGS, "model_copy") else __import__("dataclasses").replace(SETTINGS, auto_replays=False)
+    project = await session.get(Project, "demo")
+    assert project.auto_retests is True  # this project opted in
+    new = [CatalogRecord("acme-nano", "acme-nano", "acme", Decimal("0.1"), Decimal("0.4"), None, "ACTIVE")]
+    session.add(CatalogEntry(model="acme-nano", model_version="acme-nano", provider="acme", price_in_per_mtok=Decimal("0.1"), price_out_per_mtok=Decimal("0.4")))
+    await session.flush()
+    assert await start_for_new_models(session, new, settings=off) == []
+    assert await start_on_first_key(session, project, settings=off) == []
+    assert await start_when_unsure(session, settings=off) == []

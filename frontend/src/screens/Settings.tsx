@@ -1,6 +1,7 @@
 /** Settings: one page, one section per decision, with a section menu beside it. */
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { useAuthConfig } from "../features/auth/hooks/useAuth";
 import { AddLimitForm } from "../features/limits/components/AddLimitForm";
 import { LimitCard } from "../features/limits/components/LimitCard";
 import { useLimits } from "../features/limits/hooks/useLimits";
@@ -101,7 +102,7 @@ export function AlertsSection({ project }: { project: Project }) {
             Work the signature out with your secret <span className="font-mono text-dim">{project.webhook_secret.slice(0, 6)}…</span> (HMAC-SHA256 over the timestamp, a dot, then the message body), and ignore messages older than 5 minutes.
           </p>
           <p>
-            For now we also still send the older <span className="font-mono">X-MCM-Signature</span>, which signs the body only.
+            Until 1 March 2027 we also still send the older <span className="font-mono">X-MCM-Signature</span>, which signs the body only and cannot tell a replayed message from a new one. After that date it is not sent, so move your check to the one above.
           </p>
           </div>
         </details>
@@ -609,6 +610,12 @@ export function AiSummariesSection({ project }: { project: Project }) {
   );
 }
 
+/** Shown only on a server whose operator allows automatic trials at all (AUTO_REPLAYS). Everywhere else there is no switch, so every trial needs a confirmation. */
+export function AutoTrialsIfAllowed({ project }: { project: Project }) {
+  const config = useAuthConfig();
+  return config.data?.auto_replays === true ? <AutoTrialsSection project={project} /> : null;
+}
+
 /** Off by default. When on, trials of new models can start by themselves, spending your own provider budget, with no per-trial confirmation. */
 export function AutoTrialsSection({ project }: { project: Project }) {
   const send = useProjectSave(project);
@@ -845,7 +852,7 @@ export default function Settings() {
               <AlertsSection project={project} />
               <ModelNoticesSection project={project} />
               <AiSummariesSection project={project} />
-              <AutoTrialsSection project={project} />
+              <AutoTrialsIfAllowed project={project} />
               <PrivacySection project={project} />
               <BillingSection project={project} />
               {project.billing_mode === "subscription" ? <SubscriptionLimitPointer /> : <><BudgetSection project={project} /><BudgetAlertsSection project={project} /></>}

@@ -240,7 +240,7 @@ async def test_only_production_calls_in_the_period_are_counted(client, session):
     headers, jobs = await tenant(session, "acme")
     s = jobs["support"]
     session.add_all([run(s, agent="a", version="v1"), run(s, agent="a", version="v1", kind="RETEST"),
-                     run(s, agent="a", version="v1", kind="SHADOW"), run(s, agent="a", version="v1", hours=24 * 40)])
+                     run(s, agent="a", version="v1", kind="RETEST"), run(s, agent="a", version="v1", hours=24 * 40)])
     await session.commit()
     body = await receipt(client, headers, days=30)
     assert body["total_calls"] == 1 and body["groups"][0]["calls"] == 1

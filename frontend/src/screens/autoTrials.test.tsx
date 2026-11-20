@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/render";
 import { WithProject } from "../app/project";
 import type { Project } from "../shared/api/types";
-import { AutoTrialsSection } from "./Settings";
+import { AutoTrialsIfAllowed, AutoTrialsSection } from "./Settings";
 
 afterEach(() => {
   localStorage.clear();
@@ -46,5 +46,29 @@ describe("automatic trials", () => {
     expect(patches).toHaveLength(0);
     await userEvent.click(screen.getByRole("button", { name: "Allow automatic trials" }));
     await waitFor(() => expect(patches).toEqual([{ auto_retests: true }]));
+  });
+});
+
+describe("the switch exists only where the server allows automatic trials", () => {
+  function mountGuarded(allowed: boolean) {
+    const p = { project_id: "acme", name: "Acme", slug: "acme", billing_mode: "per_use", auto_retests: false } as Project;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.startsWith("/auth/config")) return json({ google: false, dev_login: true, demo_project_id: null, auto_replays: allowed });
+      return json({ ...p });
+    }));
+    renderWithProviders(<WithProject id="acme"><AutoTrialsIfAllowed project={p} /></WithProject>);
+  }
+
+  it("is not shown at all when the operator has not allowed it, so every trial needs a confirmation", async () => {
+    mountGuarded(false);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText(/Automatic trials/)).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: /Let trials start by themselves/ })).toBeNull();
+  });
+
+  it("is shown, still off by default, when the operator has allowed it", async () => {
+    mountGuarded(true);
+    expect(await screen.findByRole("checkbox", { name: /Let trials start by themselves/ })).not.toBeChecked();
   });
 });

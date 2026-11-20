@@ -419,6 +419,8 @@ async def start_for_new_models(
     """A new model in the catalog gets evidence without anyone asking: for each eligible job, re-test
     the cheapest new models from the provider its key reaches that cost less than the current model."""
     settings = settings or get_settings()
+    if not settings.auto_replays:  # automatic replays are switched off on this server
+        return []
     started: list[Retest] = []
     for project, job, key in await _eligible_jobs(session):
         result = await recommend(session, job, settings=settings)
@@ -479,6 +481,8 @@ async def start_on_first_key(session: AsyncSession, project: Project, *, setting
     provider serves, once per job (removing and re-adding the key does not repeat it)."""
     settings = settings or get_settings()
     today = today or datetime.now(UTC).date()
+    if not settings.auto_replays:  # automatic replays are switched off on this server
+        return []
     key = await session.get(ProviderKey, project.project_id)
     if key is None or not project.retest_allowed or not project.auto_retests:  # automatic replays are opt-in
         return []
@@ -526,6 +530,8 @@ async def start_when_unsure(session: AsyncSession, *, settings: Settings | None 
     """The engine is unsure whether to switch: re-test the model that would settle it (a cheaper candidate,
     or the best model when the current one measures worse), at most once a week per model."""
     settings = settings or get_settings()
+    if not settings.auto_replays:  # automatic replays are switched off on this server
+        return []
     started: list[Retest] = []
     since = datetime.now(UTC) - timedelta(days=quiet_days)
     for project, job, _ in await _eligible_jobs(session):

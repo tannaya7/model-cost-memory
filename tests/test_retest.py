@@ -27,7 +27,7 @@ from agent_memory.retest.runner import (
 )
 from agent_memory.security import decrypt, generate_key, hash_key
 
-SETTINGS = Settings(secret_key="test-secret", retest_concurrency=2, retest_default_sample=20)
+SETTINGS = Settings(secret_key="test-secret", retest_concurrency=2, retest_default_sample=20, auto_replays=True)  # these tests exercise the automatic triggers
 
 
 class FakeProvider:

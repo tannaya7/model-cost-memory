@@ -16,7 +16,7 @@ from tests.test_company_overview import SECRET, _company, _project, _runs
 
 
 def parse(text):
-    return list(csv.reader(io.StringIO(text, newline="")))
+    return list(csv.reader(io.StringIO(text.removeprefix("﻿"), newline="")))
 
 
 @pytest.fixture
@@ -303,3 +303,42 @@ async def test_exports_are_recorded_in_the_audit_trail_without_content(client, d
     kinds = {e["action"]: e for e in events}
     assert kinds["project_data_exported"]["detail"]["days"] == 7 and kinds["overview_exported"]["detail"]["rows"] >= 1
     assert SECRET not in str(events) and "csv" not in str(events).lower()
+
+
+async def test_the_company_report_does_not_name_a_model_used_by_only_a_few_calls(client, dev_login, session):
+    await dev_login(client, "owner@example.com")
+    org = await _company(client)
+    a = await _project(client, session, org, "Alpha", "per_use")
+    await _runs(session, a, "invoice", 12, cost=0.02, model="common")
+    await _runs(session, a, "invoice", 2, cost=0.03, model="one-persons-experiment")
+    r = await client.get(f"/v1/organisations/{org}/overview/export.csv?days=30")
+    assert r.status_code == 200
+    assert "one-persons-experiment" not in r.text
+    rows = parse(r.text)
+    models = [dict(zip(rows[0], x, strict=True)) for x in rows[1:] if x[0] == "model"]
+    assert [m["name"] for m in models] == ["common", "Other small groups"]
+    assert int(models[-1]["calls"]) == 2 and float(models[-1]["cost_usd"]) == pytest.approx(0.06)
+
+
+# ---- Excel opens the files correctly --------------------------------------------------------------------------------------
+
+def test_the_file_helper_adds_one_byte_order_mark_and_the_plain_writer_does_not():
+    from agent_memory.exports import csv_file
+    text, _ = write_csv(["a"], [{"a": "x"}], text_columns=["a"])
+    assert not text.startswith("\ufeff")
+    assert csv_file(text).startswith("\ufeff") and not csv_file(text).startswith("\ufeff\ufeff")
+    assert csv_file(text).encode("utf-8")[:3] == b"\xef\xbb\xbf"
+
+
+async def test_both_downloads_start_with_the_mark_and_accented_names_survive(client, dev_login, session):
+    await dev_login(client, "owner@example.com")
+    org = await _company(client)
+    a = await _project(client, session, org, "Alpha", "per_use")
+    await _runs(session, a, "invoice", 6, cost=0.02, model="modèle-é")
+    company = await client.get(f"/v1/organisations/{org}/overview/export.csv?days=30")
+    pid = a if isinstance(a, str) else str(a)
+    project = await client.get("/v1/insights/export.csv?days=30", headers={"X-Project-Id": pid})
+    for r in (company, project):
+        assert r.status_code == 200 and r.content[:3] == b"\xef\xbb\xbf"
+        assert "modèle-é" in r.content.decode("utf-8-sig")  # reads back correctly with the mark, the way Excel reads it
+        assert parse(r.content.decode("utf-8-sig"))[0][0] in {"section", "day"}  # the mark is not part of the first column name

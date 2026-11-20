@@ -32,6 +32,7 @@ DAYS = (7, 14, 30, 90)
 MIN_CELL = 5  # a task with fewer calls than this in the period is folded into "Other small groups"
 TOP_TASKS = 25
 TOP_MODELS = 15
+MAX_MODEL_ROWS = 1000  # model names are caller-chosen; read at most this many distinct ones, the rest are not counted in any row
 OTHER = "Other small groups"
 
 _TOKENS = Run.tokens_in + Run.tokens_out + Run.cache_read_tokens + Run.cache_write_tokens
@@ -184,16 +185,34 @@ async def company_overview(session: AsyncSession, projects: list[Project], *, da
                               "tokens": folded["tokens"], "cost_usd": round(folded["usd"], 6), "unpriced_calls": 0,
                               "pay_mode": None, "label_source": "caller_supplied", "folded_groups": folded["n"]})
 
-        for model, calls, tokens, usd, unpriced, subs in (await session.execute(
+        model_rows = (await session.execute(
             select(Run.model, func.count(), func.coalesce(func.sum(_TOKENS), 0),
                    func.coalesce(func.sum(Run.cost_usd).filter(Run.project_id.in_(
                        [i for i, m in modes.items() if m != "subscription"] or [""])), 0),
                    func.count().filter(Run.cost_usd.is_(None), Run.project_id.in_(
                        [i for i, m in modes.items() if m != "subscription"] or [""])),
                    func.count().filter(Run.project_id.in_([i for i, m in modes.items() if m == "subscription"] or [""])))
-            .where(*base).group_by(Run.model).order_by(func.count().desc(), Run.model).limit(TOP_MODELS))).all():
-            out.models.append({"model": model, "calls": int(calls), "tokens": int(tokens), "cost_usd": round(float(usd), 6),
-                               "unpriced_calls": int(unpriced), "flat_plan_calls": int(subs), "label_source": "caller_supplied"})
+            .where(*base).group_by(Run.model).order_by(func.count().desc(), Run.model).limit(MAX_MODEL_ROWS))).all()
+        # Model names are chosen by the calling app, so a name used by only a few calls can point at one person's experiments.
+        # Like the task rows, a model with fewer than MIN_CELL calls is folded into "Other small groups", and so is everything
+        # beyond the top TOP_MODELS, so the folded row also keeps the table adding up to the total.
+        folded_models = {"calls": 0, "tokens": 0, "cost_usd": 0.0, "unpriced_calls": 0, "flat_plan_calls": 0, "n": 0}
+        shown_models = []
+        for model, calls, tokens, usd, unpriced, subs in model_rows:
+            row = {"model": model, "calls": int(calls), "tokens": int(tokens), "cost_usd": round(float(usd), 6),
+                   "unpriced_calls": int(unpriced), "flat_plan_calls": int(subs), "label_source": "caller_supplied"}
+            if int(calls) < MIN_CELL or len(shown_models) >= TOP_MODELS:
+                for k in ("calls", "tokens", "cost_usd", "unpriced_calls", "flat_plan_calls"):
+                    folded_models[k] += row[k]
+                folded_models["n"] += 1
+            else:
+                shown_models.append(row)
+        out.models = shown_models
+        if folded_models["n"]:
+            out.models.append({"model": OTHER, "calls": folded_models["calls"], "tokens": folded_models["tokens"],
+                               "cost_usd": round(folded_models["cost_usd"], 6), "unpriced_calls": folded_models["unpriced_calls"],
+                               "flat_plan_calls": folded_models["flat_plan_calls"], "label_source": "caller_supplied",
+                               "folded_groups": folded_models["n"]})
 
     out.attribution = [
         {"dimension": "project", "source": "verified",
@@ -214,7 +233,7 @@ async def company_overview(session: AsyncSession, projects: list[Project], *, da
         "Task and model names come from the calling app and can be spoofed by anyone with a project key.",
         "Model dollars are list prices and include projects in mixed mode; flat-plan projects add calls and tokens only.",
         "Flat-plan projects show calls and tokens only. Projects in mixed mode show list-price dollars separately, because flat-plan calls cannot be told apart.",
-        f"Tasks with fewer than {MIN_CELL} calls are grouped as '{OTHER}'.",
+        f"Tasks and models with fewer than {MIN_CELL} calls are grouped as '{OTHER}'.",
         "No prompt or answer text is read for this view.",
     ]
     if total_calls and total_usage < total_calls:

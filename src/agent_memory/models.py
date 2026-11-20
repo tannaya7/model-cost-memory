@@ -150,7 +150,7 @@ class Run(Base):
     __tablename__ = "runs"
     __table_args__ = (
         CheckConstraint("outcome IN ('PASS','FAIL','UNKNOWN')", name="runs_outcome_check"),
-        CheckConstraint("run_kind IN ('PRODUCTION','SHADOW','RETEST')", name="runs_run_kind_check"),
+        CheckConstraint("run_kind IN ('PRODUCTION','RETEST')", name="runs_run_kind_check"),
         CheckConstraint(
             "price_status IS NULL OR price_status IN ('PRICED','PARTLY_PRICED','CALLER_COST','NO_USAGE',"
             "'UNPRICED_UNKNOWN_MODEL','UNPRICED_NOT_YET_EFFECTIVE','UNPRICED_EXPIRED')",

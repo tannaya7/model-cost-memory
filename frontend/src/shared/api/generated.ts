@@ -1781,6 +1781,12 @@ export interface components {
         /** AuthConfig */
         AuthConfig: {
             /**
+             * Auto Replays
+             * @description This server allows automatic replays (off unless the operator turns them on)
+             * @default false
+             */
+            auto_replays: boolean;
+            /**
              * Demo Project Id
              * @description A project anyone may read without signing in
              */
@@ -2015,6 +2021,11 @@ export interface components {
             cost_usd: number;
             /** Flat Plan Calls */
             flat_plan_calls: number;
+            /**
+             * Folded Groups
+             * @description How many small models an 'Other' row stands for
+             */
+            folded_groups?: number | null;
             /**
              * Label Source
              * @constant
@@ -5236,7 +5247,7 @@ export interface components {
              * Run Kind
              * @enum {string}
              */
-            run_kind: "PRODUCTION" | "SHADOW" | "RETEST";
+            run_kind: "PRODUCTION" | "RETEST";
             /**
              * Span Id
              * @description This call's own id within its task, if the app sent one
@@ -5382,7 +5393,7 @@ export interface components {
              * Run Kind
              * @enum {string}
              */
-            run_kind: "PRODUCTION" | "SHADOW" | "RETEST";
+            run_kind: "PRODUCTION" | "RETEST";
             /**
              * Span Id
              * @description This call's own id within its task, if the app sent one

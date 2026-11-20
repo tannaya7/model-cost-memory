@@ -103,6 +103,10 @@ class Settings:
     retest_concurrency: int = 2
     retest_default_sample: int = 50
     retest_auto_budget_usd: float = 1.0  # budget of a re-test the system starts on its own
+    # Automatic replays (a new model appears, the engine is unsure, a provider key is first added) start a paid replay with no
+    # confirmation for that replay. They are OFF on every server unless the operator sets AUTO_REPLAYS=true: while off, a project
+    # cannot be switched to them and the scheduler starts nothing by itself. Replays a person previews and confirms always work.
+    auto_replays: bool = False
     # Secret for encrypting stored provider keys and signing session cookies. Required in production.
     secret_key: str = ""
     # Google sign-in (Week 11). Without a client id, sign-in is off and the project key is used.
@@ -171,6 +175,7 @@ class Settings:
             public_url=os.environ.get("PUBLIC_URL", cls.public_url).rstrip("/"),
             domain=os.environ.get("DOMAIN", "").strip(),
             dev_login=_bool("DEV_LOGIN"),
+            auto_replays=_bool("AUTO_REPLAYS"),
             demo_project_id=os.environ.get("DEMO_PROJECT_ID", ""),
             summary_model=os.environ.get("SUMMARY_MODEL", cls.summary_model),
             summary_base_url=os.environ.get("SUMMARY_BASE_URL", cls.summary_base_url),

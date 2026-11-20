@@ -4,7 +4,7 @@
 import type { Model, Recommendation } from "../../shared/api/types";
 import { evidenceLine, rangeOf, tooFewFor } from "./wilson";
 
-export type SuggestionLabel = "Cheapest proven" | "Best quality" | "Worth testing";
+export type SuggestionLabel = "Cheapest good enough" | "Best quality" | "Worth testing";
 
 export interface Suggestion {
   label: SuggestionLabel;
@@ -76,7 +76,7 @@ export function suggestForCheckedJob(input: SuggestInput): Suggestion[] {
     const cost = monthly(cheapest.mean_cost_usd);
     used.add(cheapest.model);
     out.push({
-      label: "Cheapest proven",
+      label: "Cheapest good enough",
       model: cheapest.model,
       provider: providerOf(cheapest.model),
       monthlyCostUsd: cost,

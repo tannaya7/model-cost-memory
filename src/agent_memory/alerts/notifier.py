@@ -11,7 +11,7 @@ Replay protection (modelled on Stripe's and Slack's schemes): every delivery als
 `X-MCM-Timestamp: <unix seconds>` and `X-MCM-Signature-V2: sha256=<hex HMAC-SHA256 of
 "<timestamp>.<body>">`. A receiver should recompute the V2 signature with a constant-time compare and
 reject a timestamp more than 5 minutes (TIMESTAMP_TOLERANCE_SECONDS) from its own clock. The old
-body-only `X-MCM-Signature` is still sent unchanged for a transition period (dual-send) so existing
+body-only `X-MCM-Signature` is still sent unchanged until 1 March 2027 (LEGACY_SIGNATURE_UNTIL) so existing
 receivers keep working; it carries no replay protection, so move to V2 and then stop reading it.
 The secret is never logged.
 
@@ -32,7 +32,7 @@ import hmac
 import json
 import logging
 import random
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 from sqlalchemy import select, update
@@ -55,6 +55,13 @@ def sign(secret: str, body: bytes) -> str:
 
 
 TIMESTAMP_TOLERANCE_SECONDS = 300
+# The old body-only X-MCM-Signature has no replay protection. It is sent until this date (inclusive of the days before it) so a
+# receiver has time to move to X-MCM-Signature-V2, then it stops. The same date is written in the Settings screen.
+LEGACY_SIGNATURE_UNTIL = date(2027, 3, 1)
+
+
+def legacy_signature_active(today: date | None = None) -> bool:
+    return (today or datetime.now(UTC).date()) < LEGACY_SIGNATURE_UNTIL
 
 
 def sign_v2(secret: str, timestamp: str, body: bytes) -> str:
@@ -157,7 +164,8 @@ async def deliver_pending(
         headers = {"Content-Type": "application/json"}
         if secret:
             stamp = str(int(datetime.now(UTC).timestamp()))
-            headers["X-MCM-Signature"] = sign(secret, body)  # legacy, body only: kept for existing receivers
+            if legacy_signature_active():
+                headers["X-MCM-Signature"] = sign(secret, body)  # legacy, body only: kept for existing receivers until the date above
             headers["X-MCM-Timestamp"] = stamp
             headers["X-MCM-Signature-V2"] = sign_v2(secret, stamp, body)
         async with gate:
