@@ -31,11 +31,23 @@ recommended and why it changed.
 - A web app built around three questions: which model should each job use, did anything break, and what does
   it cost. A visitor lands on a page that explains the product, signs in with Google, sees all their projects
   (or creates the first: name it, take its key once, wrap the model call), and opens a project's dashboard at
-  `/p/<project>`. Inside a project, four places instead of a long menu: an **Overview** that leads with the monthly saving, spend over
-  time and what needs attention; **Jobs**, where each job's verdict is stated in words and proven on a
+  `/p/<project>`. Inside a project, a short sidebar: an **Overview** that leads with the monthly saving, spend over
+  time and what needs attention; **AI tasks** (jobs), where each task's verdict is stated in words and proven on a
   cost-versus-quality map, with quality and spend over time, evidence, runs, history and trials; **Models**,
-  with prices and retirements; and **Activity**, with alerts, the live pipeline and AI news. Every chart has a
-  table view, and Ctrl/⌘ K jumps anywhere.
+  with prices and retirements; and **Activity**, with alerts, the live pipeline and AI news. Under *Smart tools*,
+  **Smart budget** (where the month is heading, a monthly limit, what changes if others use your key) and **Smart
+  compare** (would another model do this work for less, from your own calls). Under *Analysis*, **MCP & Agents**
+  (which agents, agent tasks and tool servers use the most), **Cost analysis** (how the spend was worked out,
+  where the tokens went, cost per your own feature label), **Cost planner** (what a task might cost at traffic
+  you type in, with a range only when there is enough data, a shareable link and a CSV file) and **Data coverage**
+  (how complete the records we received are, and what cannot be measured). Every chart has a table view, and
+  Ctrl/⌘ K jumps anywhere.
+- **Companies**: a person can sign in for themselves or create a company; company projects are separate from
+  personal ones, roles (viewer, member, admin, owner) are checked on every request, and the company overview shows
+  aggregate totals only, never prompts or people.
+- **Honest accounting**: a call's cost is a list-price estimate from the usage the provider reported and a dated
+  price that is kept with the call. A call with no usage block or no known price has an unknown cost, never zero, and
+  is counted and shown. Nothing here is an invoice, and nothing changes the customer's code, models or traffic.
 - **News about your models**: headlines from the model makers, the press and the community, refreshed hourly.
   Each alert shows what was said about its model around when it happened (a silent drop often has an
   announcement behind it), each job page and the overview show the stories naming the models in use, and a

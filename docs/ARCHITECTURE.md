@@ -19,7 +19,7 @@ The illustrated version, with a walkthrough and glossary, is
 | 4 | Write | The sync worker claims outbox rows with `SELECT … FOR UPDATE SKIP LOCKED` |
 | 5 | Write | It embeds each prompt and stores the embedding in pgvector |
 | 6 | Maintenance | Decay, consolidation and the regression check run on the stored runs |
-| 7 | Maintenance | Re-tests replay sampled runs on new or candidate models: the only calls we make, always under a budget |
+| 7 | Maintenance | Trials replay sampled runs on new or candidate models: the only calls we make, always under a budget |
 | 8 | Maintenance | Regression alerts are pushed to the project's webhook |
 | 9 | Read | The engineer asks: which model, did it break, why did it change, what does each job cost |
 | 10 | Read | People use the web app (Google sign-in; a user sees only their own projects). Visitors cannot spend the budget |
@@ -31,12 +31,12 @@ The illustrated version, with a walkthrough and glossary, is
 |---|---|---|
 | **Write** | Every model call | Validate → pass/fail check (answer key, tests in a sandbox, or schema) → run + outbox row in one transaction → `202` → worker indexes it |
 | **Read** | Someone asks | Load checked runs → weight by freshness → group by model, drop retired models → evidence floor → 95% intervals → tolerance rule → lowest cost per success → verdict with failing runs and a savings forecast. The per-model sums are one Postgres pass in hour buckets, not one Python object per run. Cached for 5 minutes against a fingerprint of the runs; a job slower than 250 ms to compute gets its last verdict (at most a minute old) while the new one is computed in the background. Never writes |
-| **Maintenance** | Scheduler | Decay (hourly) · consolidation and regression sweep (every 15 min) · re-tests (every 30 s, queued) · alert delivery (every minute) · catalog sync (daily) |
+| **Maintenance** | Scheduler | Decay (hourly) · consolidation and regression sweep (every 15 min) · trials (every 30 s, queued) · alert delivery (every minute) · catalog sync (daily) |
 
-They share only the database, so a slow re-test never slows recording and a burst of runs never
+They share only the database, so a slow trial never slows recording and a burst of runs never
 slows answers. Each process keeps a small connection pool (`DB_POOL_SIZE` 3 + `DB_MAX_OVERFLOW` 2), and only one
 scheduler runs jobs at a time: it holds a Postgres advisory lock for its lifetime, and a second one waits as a
-standby, so a re-test can never be started twice.
+standby, so a trial can never be started twice.
 
 **Life of a run:** `CAPTURED → CHECKED → INDEXED → CONSOLIDATED → ARCHIVED` (failure:
 `INGESTION_FAILED`). Archived runs are never deleted; they stop counting.
@@ -47,18 +47,18 @@ standby, so a re-test can never be started twice.
 freshness            R(t) = e^(-t / S),  S = importance × 30 × version_factor
                      version_factor = 1.00 current, 0.25 superseded (fades ~4× faster)
 weighted pass rate   Σ(R × passed) / Σ R, with S = 30 × version_factor (importance decides archiving,
-                     never the average or the re-test sample: an outcome-dependent weight biases both)
+                     never the average or the trial sample: an outcome-dependent weight biases both)
 cost per run         usage × catalog price (input, output incl. thinking, cache read, cache write)
 cost per success     mean cost / weighted pass rate
 pass-rate interval   Wilson 95%, over the Kish effective sample size (Σ R)² / Σ R²
 tolerance rule       a model is GOOD_ENOUGH when we are 95% sure it is at most 3 points worse
                      than the best (Newcombe interval of the difference), CLEARLY_WORSE when sure
-                     it is more, UNSURE otherwise (a re-test settles it)
+                     it is more, UNSURE otherwise (a trial settles it)
 recommendation       lowest cost per success among GOOD_ENOUGH models, never RETIRED;
                      INSUFFICIENT_EVIDENCE until a model reaches the evidence floor. A DOWNGRADE also
                      needs the pick shown within 3 points of the model in use, not only of the best;
-                     otherwise HOLD and re-test it. A model in use that measures more than 3 points
-                     behind the best, unproven, gets the best model re-tested to settle it
+                     otherwise HOLD and trial it. A model in use that measures more than 3 points
+                     behind the best, unproven, gets the best model trialed to settle it
 switch confidence    advising a move to a cheaper model not advised before needs 99% (SWITCH_CONFIDENCE),
                      keeping advice already given 95%: the verdict is recomputed daily, and at 95%
                      alone a world where nothing changed saw ~6 changes of advice per 120 days and,
@@ -85,9 +85,9 @@ silent drop          same version, last 28 days (≥ 20 with runs) split in half
                      above: p < 0.001 AND drop ≥ 3 points, plus a standardized one-sided CUSUM over the
                      second half against what the first half's band rates predict for each day's own
                      mix (k = 0.5, h = 4)
-re-test call         output limit = max(4 × the source run's output, 500 tokens); an answer cut off at it
+trial call         output limit = max(4 × the source run's output, 500 tokens); an answer cut off at it
                      is UNKNOWN, not FAIL. Prompts sampled uniformly (importance over-sampled failures ~3×)
-re-test spend        each call reserves its worst case (input × price + output limit × price). Before it:
+trial spend        each call reserves its worst case (input × price + output limit × price). Before it:
                      spend + this call > budget (or month + this call > cap): stop; spend + reserved +
                      this call > budget or cap: wait for a call in flight to settle; otherwise go
 ```
@@ -124,13 +124,13 @@ which is why a DOWNGRADE now needs that comparison.
 
 | Risk | What stops it |
 |---|---|
-| A webhook or re-test URL pointing inside the server's network (metadata service, database) | `urls.py`: every address the host resolves to must be public, checked when saved and again before each call (DNS rebinding); redirects are not followed. `ALLOW_PRIVATE_URLS=true` lifts it for development or a local Ollama, and is refused on an https server |
+| A webhook or trial URL pointing inside the server's network (metadata service, database) | `urls.py`: every address the host resolves to must be public, checked when saved and again before each call (DNS rebinding); redirects are not followed. `ALLOW_PRIVATE_URLS=true` lifts it for development or a local Ollama, and is refused on an https server |
 | A flood of requests or huge bodies | `ratelimit.py`: a token bucket per project key (1,200/min) or per IP without one (120/min) on `/v1` and `/auth`; bodies over 5 MB refused (also in Caddy); at most 200,000 runs per project per day |
 | Many people watching the live flow | one shared poller per watched project (`pipeline/flow_hub.py`) instead of a query per viewer per second; 3 live views per IP, 200 in all |
-| The public demo exposing the operator's account | the demo reads only the pages it shows; re-test history, key status and the re-test cap answer 403 |
+| The public demo exposing the operator's account | the demo reads only the pages it shows; trial history, key status and the trial cap answer 403 |
 | A weak or development configuration on a public server | the API and the scheduler refuse to start when `PUBLIC_URL` is https and `SECRET_KEY` is missing, or with `DEV_LOGIN` or `ALLOW_PRIVATE_URLS` on; a `SECRET_KEY` must be 32+ characters |
 | One key used for two jobs | cookies and stored provider keys use different keys derived from `SECRET_KEY` (HMAC); keys stored before the split still decrypt |
-| A runaway re-test answer or a free quota emptied in a burst | every re-test call has an output limit and reserves its worst case; calls start at least 1 s apart, back off on 429 (Retry-After up to 5 min, with jitter) |
+| A runaway trial answer or a free quota emptied in a burst | every trial call has an output limit and reserves its worst case; calls start at least 1 s apart, back off on 429 (Retry-After up to 5 min, with jitter) |
 | Customers' prompts kept forever, or a customer asking for erasure | `retention.py`: a run's prompt, answer, tool calls, answer key and embedding are cleared after the project's `content_retention_days` (90 by default, 1-3650) by a nightly job, keeping the figures the statistics use; `DELETE /v1/projects/{id}` (owner, with `?confirm=`) or `scripts/delete_project.py` removes a project and everything under it in one transaction |
 | Another site framing the app or injecting script | Caddy sends a strict `Content-Security-Policy` (scripts and data from this origin only, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, HSTS and `nosniff` |
 | A database left on a default password | `docker-compose.yml` refuses to start without `POSTGRES_PASSWORD`; the database port is bound to localhost |
@@ -144,7 +144,9 @@ The limits live in the one API process's memory; behind several API processes ea
 ## Data model
 
 The authoritative schema is [`db/schema.sql`](../db/schema.sql): `users`, `projects`, `provider_keys`,
-`jobs`, `retests`, `runs`, `recommendations`, `outbox`, `model_catalog`, `model_prices`, `alerts`, `flow_events`, `usage_limits`, `recommendation_summaries`, `scheduler_heartbeats`, `news_items`.
+`jobs`, `retests`, `runs`, `recommendations`, `outbox`, `model_catalog`, `model_prices`, `alerts`, `flow_events`, `usage_limits`, `recommendation_summaries`, `scheduler_heartbeats`, `news_items`, and, added later,
+`price_versions`, `price_sources`, `official_prices`, `notice_sources`, `model_notices`, `task_summaries`, `organisations`, `memberships`,
+`org_invites`, `org_events`, `org_notice_acks` and `ingest_duplicates`.
 
 - `recommendations.consolidated_from` links a conclusion to every run behind it.
 - `recommendations.superseded_by_id` links it to the conclusion that replaced it, with a date and
@@ -169,7 +171,7 @@ The authoritative schema is [`db/schema.sql`](../db/schema.sql): `users`, `proje
   Costs are averaged over priced runs only, and spend reports how many runs it could not price.
 - `runs.embedding_model` names the embedder with its pinned weights (`minilm@<revision>`), so upgrading the model
   never reuses vectors from the old one.
-- `runs.expected` keeps an answer key only when the job has re-test consent, because a replayed run can only be
+- `runs.expected` keeps an answer key only when the job has trial consent, because a replayed run can only be
   checked against the same answers. Otherwise the answers are used for the check and dropped.
 - `recommendations.current_model` records what production used when a verdict was made, so history can say what
   was recommended instead of what.
@@ -178,18 +180,24 @@ The authoritative schema is [`db/schema.sql`](../db/schema.sql): `users`, `proje
   new webhook URL tries again. The reason (`last_error`) stays on the server. Payloads are signed with `projects.webhook_secret` (HMAC-SHA256, header `X-MCM-Signature`) and carry a
   one-line `text`/`content` message, so a Slack, Discord, Google Chat or Mattermost incoming webhook works directly.
 - `retests` records each replay: trigger (`MANUAL`, `NEW_MODEL`, `UNSURE`, `FIRST_KEY`), budget, spend, progress and
-  why it stopped. `provider_keys` holds the customer's key for re-tests, encrypted with a key derived from the server's
+  why it stopped. `provider_keys` holds the customer's key for trials, encrypted with a key derived from the server's
   `SECRET_KEY` (a different one signs cookies); only the last four characters are ever shown.
 - `recommendation_summaries` stores the optional two-sentence summary once per verdict (job, summary model, prompt
   version and what the verdict says, not its exact figures), with a server-wide daily limit on calls.
 - `users` and `projects.owner_user_id`: Google sign-in; a signed-in user sees only their own projects.
 - `runs.content_removed_at` marks a run whose prompt, output, tool calls, answer key and embedding were cleared
-  under `projects.content_retention_days`; `runs.prompt` is then null, and re-tests and similar-run search skip it.
+  under `projects.content_retention_days`; `runs.prompt` is then null, and trials and similar-run search skip it.
 - `scheduler_heartbeats` holds when each scheduled job last succeeded or failed, read by `/healthz/scheduler`.
 - `news_items` holds AI headlines from a fixed list of public feeds (plain-text summaries, http(s) links only),
   shared by every project and kept 30 days; whether a story names a project's models is worked out when listing.
 - `flow_events` is the live data-flow view's trail (`sdk → api → check → index → consolidate`), written in the same
   transaction as each step and deleted after a day.
+- `runs.feature` (0038) is the customer's own optional label for the feature behind a call: never inferred from text, not verified.
+  `runs.data_flags` (0039) lists doubtful usage found when the call was recorded (a provider total that differs from its parts, impossible
+  reasoning or cache splits, an unreadable layout); a flagged call is kept in every total and shown on the Data coverage page. A call that is
+  sent again with the same `run_id` is ignored and counted in `ingest_duplicates`, per project and UTC day.
+- `runs.price_version_id` keeps the dated list price that priced a call, so its cost can be reproduced after the catalog moves on. Prompt
+  hashes are HMAC-SHA256 with a per-project key derived from `SECRET_KEY`, which must be the same when migrating and when running.
 - The schema changes only through Alembic migrations (`migrations/versions/`). `db/schema.sql` is the reference
   snapshot, and a test fails if it disagrees with the migrations or the models.
 
@@ -218,11 +226,11 @@ The machine-readable contract is [`contract/openapi.json`](../contract/openapi.j
 | `GET` | `/v1/jobs/{job}/regressions` | The job's alerts (open by default) | W9 |
 | `GET` | `/v1/alerts` | Every job's alerts in the project | W9 |
 | `POST` | `/v1/alerts/{id}/resolve` | Mark an alert handled | W9 |
-| `POST` | `/v1/jobs/{job}/retest` | Queue a re-test of a candidate, under a budget; 409 with a reason code when it cannot start | W10 |
-| `GET` | `/v1/jobs/{job}/retest/{id}` | Re-test progress and spend so far (the page polls it every 2 s) | W10 |
-| `GET` | `/v1/jobs/{job}/retests` | The job's re-tests | W10 |
+| `POST` | `/v1/jobs/{job}/retest` | Queue a trial of a candidate, under a budget; 409 with a reason code when it cannot start | W10 |
+| `GET` | `/v1/jobs/{job}/retest/{id}` | Trial progress and spend so far (the page polls it every 2 s) | W10 |
+| `GET` | `/v1/jobs/{job}/retests` | The job's trials | W10 |
 | `GET` | `/v1/retest/limits` | Monthly cap, spend this month, and whether the provider key is given | W10 |
-| `PUT` / `DELETE` | `/v1/provider-key` | Give or remove the key re-tests use (asked for when first needed) | W10 |
+| `PUT` / `DELETE` | `/v1/provider-key` | Give or remove the key trials use (asked for when first needed) | W10 |
 | `GET` / `POST` | `/v1/limits` | Usage limits, each with its forecast (runs out before the reset?) and what to change per job | after W12 |
 | `PUT` | `/v1/limits/{id}/used` | A plan shown only as a percentage: the share used now | after W12 |
 | `DELETE` | `/v1/limits/{id}` | Remove a limit | after W12 |
@@ -232,7 +240,7 @@ The machine-readable contract is [`contract/openapi.json`](../contract/openapi.j
 | `POST` | `/auth/logout` | End the session | W11 |
 | `GET` | `/v1/me` | The signed-in user | W11 |
 | `GET` / `POST` | `/v1/projects` | The user's own projects; create one (its key is returned once) | W11 |
-| `GET` / `PATCH` | `/v1/projects/{id}` | Name, alert webhook, monthly re-test cap, re-test switch, days run content is kept | W11, W12 |
+| `GET` / `PATCH` | `/v1/projects/{id}` | Name, alert webhook, monthly trial cap, trial switch, days run content is kept | W11, W12 |
 | `DELETE` | `/v1/projects/{id}?confirm={id}` | Delete the project and everything recorded under it | W12 |
 | `GET` | `/v1/news` | Latest AI news from public feeds, with stories naming this project's models marked; `?mine=`, `?source=`, `?model=` (an alert's model), `?job=` (a job's models), `?since=`/`?until=` | W12 |
 | `POST` | `/v1/news/refresh` | Fetch the feeds now, at most once every 10 minutes across everyone | W12 |
@@ -240,6 +248,59 @@ The machine-readable contract is [`contract/openapi.json`](../contract/openapi.j
 | `GET` | `/v1/jobs/{job}/insights` | Cost per success per model; pass rate by input size and prompt version | W11 |
 | `GET` | `/v1/flow` | The live data-flow trail, polled | W12 |
 | `GET` | `/v1/flow/stream` | The same as Server-Sent Events (resumes from `Last-Event-ID`) | W12 |
+
+### Added since week 12
+
+Listed from [`contract/openapi.json`](../contract/openapi.json), which is the authority. Every `/v1/insights` read follows the same rules as the
+rest: one project, no prompt text, costs are list-price estimates (never an invoice), an unknown cost is never counted as zero. Exports
+(`.../export.csv`) are for admins and owners only, neutralize text a spreadsheet could run as a formula, and add an audit event for company projects.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/v1/insights/agent-task` | One task as a tree: each recorded call with its parent and children, unlinked and unstructured calls apart, totals that count each call once, and any possible repeated call with the calls themselves as evidence. |
+| `GET` | `/v1/insights/agent-tasks` | The project's largest tasks (calls sharing a trace id), with what each measured, how much of its structure is known, any possible repeated call at the chosen threshold, and cohorts of equivalent tasks. |
+| `GET` | `/v1/insights/agents` | Tokens and spend per agent, the ten heaviest traces (with a retry-loop flag), and what tool definitions add to each call. |
+| `GET` | `/v1/insights/changes` | What changed between the last `days` whole days and the same number of days before: calls, tokens, cached share, repeated calls, model mix, task mix and spend, with coverage and missing data, plus what else the product... |
+| `GET` | `/v1/insights/cost-receipt` | How the spend figure is worked out: currency and period, passed / failed / unchecked / left-out calls, how many are unpriced, the dated list prices used, and cost per correct answer with its formula. |
+| `GET` | `/v1/insights/coverage` | How complete and reliable the records Model & Cost Memory RECEIVED are: attempts, usage, prices, checks, duplicates and flagged calls, each with its denominator and the reason it is doubtful. |
+| `GET` | `/v1/insights/export.csv` | The project's daily figures as a CSV file, for admins and owners: one row per day, AI task and model, for exactly the period and filters asked for. |
+| `GET` | `/v1/insights/features` | Calls, tokens, list-price cost and checked answers for each feature label your app sent, with the calls that carried no label shown as their own row. |
+| `GET` | `/v1/insights/features/export.csv` | Cost by feature label as a CSV file, for admins and owners: one row per label, with calls, tokens, list-price cost, unpriced calls and cost per correct answer. |
+| `GET` | `/v1/insights/planner` | What a task might cost at traffic levels you type, from its own recorded calls: list-price scenarios with a range where the data supports one. |
+| `GET` | `/v1/insights/planner/export.csv` | The planner's current result as a CSV file, for admins and owners: one row per model and scenario, with the assumptions, the history period, the price versions used and the not-a-bill wording on every row. |
+| `GET` | `/v1/insights/projection` | This month's spend so far and a month-end forecast, kept apart. |
+| `GET` | `/v1/insights/prompt-versions` | One job's prompt versions side by side: calls, tokens, cached share, list-price cost and checked answers. |
+| `GET` | `/v1/insights/prompts` | Where the tokens went: the biggest contributors by share of billed tokens, with call counts and per-call averages, what each total is made of (only where the provider reports it) and how much of a prompt is identical in every... |
+| `GET` | `/v1/insights/savings` | After you changed the model a task runs on: the observed change in cost per correct answer (it can be negative) and, kept apart, an estimated counterfactual. |
+| `GET` | `/v1/insights/tool-servers` | MCP and tool-server calls recorded in this project, by server and tool, with the tasks they came from, how often, how long the requests took and the usage of those whole requests. |
+| `POST` | `/v1/invites/accept` | Join a company with an invite link. |
+| `GET` | `/v1/jobs/{job}/profile` | What the recorded calls prove about a task: models, tool use, typical size (measured, no AI). |
+| `POST` | `/v1/jobs/{job}/retest/preview` | What a replay would send, to whom, and what it could cost, before anything is called. |
+| `POST` | `/v1/jobs/{job}/retest/{retest_id}/stop` | Stop a trial. |
+| `DELETE` | `/v1/jobs/{job}/summary` | Delete the stored AI summary of this task. |
+| `PATCH` | `/v1/me/ui-flags` | Remember which first-visit guides this person has seen. |
+| `GET` | `/v1/notices` | Deprecation and shutdown notices from the providers' own pages for the models this project ran in the last 30 days. |
+| `POST` | `/v1/organisations` | Create a company. |
+| `DELETE` | `/v1/organisations/{org_id}` | Owner only. |
+| `GET` | `/v1/organisations/{org_id}/events` | The company's audit trail, newest first: who did what and when. |
+| `GET` | `/v1/organisations/{org_id}/invites` | List Invites. |
+| `POST` | `/v1/organisations/{org_id}/invites` | Invite one email address. |
+| `DELETE` | `/v1/organisations/{org_id}/invites/{invite_id}` | Withdraw Invite. |
+| `POST` | `/v1/organisations/{org_id}/leave` | Leave a company. |
+| `GET` | `/v1/organisations/{org_id}/me` | Your own role, job role and notice state in this company. |
+| `PUT` | `/v1/organisations/{org_id}/me/job-role` | Say what kind of work you do, or clear it (null). |
+| `GET` | `/v1/organisations/{org_id}/members` | List Members. |
+| `DELETE` | `/v1/organisations/{org_id}/members/{user_id}` | End someone's membership. |
+| `PATCH` | `/v1/organisations/{org_id}/members/{user_id}` | Owners change any role. |
+| `GET` | `/v1/organisations/{org_id}/notice` | The company's privacy notice as it applies to you, whether you have acknowledged this version, and (for admins) how many have. |
+| `POST` | `/v1/organisations/{org_id}/notice/ack` | Record that you were shown this version. |
+| `GET` | `/v1/organisations/{org_id}/overview` | Counts, tokens and list-price cost across the company's projects, by project, task and model and over time. |
+| `GET` | `/v1/organisations/{org_id}/overview/export.csv` | The company overview as a CSV file, for admins and owners. |
+| `GET` | `/v1/organisations/{org_id}/rollups` | How many members declared each job role, for groups of MIN_GROUP or more only. |
+| `GET` | `/v1/permissions` | What each role may do, for companies and for projects. |
+| `DELETE` | `/v1/projects/{project_id}/tool-inputs` | Remove the stored inputs of tool calls from every run of this project. |
+| `PUT` | `/v1/task-summary-consent` | Switch the AI-written task summaries on or off for this project. |
+| `GET` | `/v1/workspaces` | Your personal workspace first, then every company you are an active member of. |
 
 ## Repository layout
 
@@ -263,7 +324,7 @@ src/agent_memory/
 ├── embeddings.py      MiniLM and hashing embedders behind an LRU cache
 ├── corpus.py          invoice-extraction corpus with exact known answers
 ├── recorder.py        RunRecorder SDK
-├── scheduler.py       maintenance jobs: janitor, decay, consolidation, regression sweep, re-tests, alerts, catalog, retention, news
+├── scheduler.py       maintenance jobs: janitor, decay, consolidation, regression sweep, trials, alerts, catalog, retention, news
 ├── checks/            OutcomeChecker interface; answer key, schema, late label (test command and sandbox: later)
 ├── storage/           vector_store (pgvector); lineage (recursive SQL over superseded_by_id)
 ├── pipeline/          sync_worker, janitor, scoring, decay, consolidation, regression, flow events
@@ -291,7 +352,7 @@ db/schema.sql · tests/ · docker-compose.yml · Dockerfile · pyproject.toml
 
 Python 3.11 · FastAPI · Pydantic v2 · PostgreSQL + SQLAlchemy 2 + Alembic · pgvector with local
 `all-MiniLM-L6-v2` embeddings · scipy · APScheduler · cachetools · `cryptography` (provider keys) · `openai` client
-for re-tests, demo data and the optional summary against any OpenAI-compatible endpoint (Gemini and Groq free
+for trials, demo data and the optional summary against any OpenAI-compatible endpoint (Gemini and Groq free
 tiers; the summary defaults to gemini-3.5-flash-lite at minimal thinking) · React + Vite +
 TypeScript web app (TanStack Query, React Router, Recharts) with Google sign-in via `authlib` ·
 Neon (hosted PostgreSQL) for development, docker-compose on one VPS behind Caddy (HTTPS) for production.
