@@ -415,6 +415,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/insights/features/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Features Csv
+         * @description Cost by feature label as a CSV file, for admins and owners: one row per label, with calls, tokens, list-price cost, unpriced calls and
+         *     cost per correct answer. Labels are your app's own words and are not verified. Aggregates only: no prompts, answers, keys or people.
+         */
+        get: operations["export_features_csv_v1_insights_features_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/insights/planner": {
         parameters: {
             query?: never;
@@ -428,6 +449,27 @@ export interface paths {
          *     supports one. Not a bill or a forecast. Nothing is sent to a provider and nothing is changed.
          */
         get: operations["get_planner_v1_insights_planner_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/planner/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Planner Csv
+         * @description The planner's current result as a CSV file, for admins and owners: one row per model and scenario, with the assumptions, the history
+         *     period, the price versions used and the not-a-bill wording on every row. Unknown figures are empty, never 0. No prompt or answer text.
+         */
+        get: operations["export_planner_csv_v1_insights_planner_export_csv_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7460,6 +7502,42 @@ export interface operations {
             };
         };
     };
+    export_features_csv_v1_insights_features_export_csv_get: {
+        parameters: {
+            query?: {
+                /** @description The last N days */
+                days?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_planner_v1_insights_planner_get: {
         parameters: {
             query: {
@@ -7494,6 +7572,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlannerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_planner_csv_v1_insights_planner_export_csv_get: {
+        parameters: {
+            query: {
+                /** @description The task whose recorded calls the scenario is based on */
+                job: string;
+                /** @description How many days of history to use */
+                days?: number;
+                /** @description Tasks per period to price (up to 6 scenarios) */
+                calls?: number[];
+                /** @description Extra attempts per task, typed by you */
+                retry_rate?: number;
+                input_change_pct?: number;
+                output_change_pct?: number;
+                /** @description Leave out far-out calls (visible, reversible) */
+                exclude_far_out?: boolean;
+                period?: string;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

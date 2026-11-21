@@ -1,9 +1,13 @@
 /** Cost planner: what one task might cost at traffic levels the user types, worked out from that task's own recorded calls.
  *  A scenario calculator, never a forecast: it reads our own server, calls no provider, changes nothing, and keeps the user's assumptions apart
  *  from measured history. Unknown and unpriced calls stay visible; with too little data it says so instead of showing a number. */
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { canAdminister, useMyRole } from "../app/useMyRole";
+import { useProject } from "../app/project";
+import { ExportButton } from "../features/exports/ExportButton";
 import { useJobs } from "../features/jobs/hooks/useJobs";
-import { usePlanner, type ModelPlan, type PlannerInput } from "../features/insights/api/plannerApi";
+import { plannerQuery, usePlanner, type ModelPlan, type PlannerInput } from "../features/insights/api/plannerApi";
 import { count, pct, shortDate, usd } from "../ui/format";
 import { EmptyState, ErrorState, Panel, PanelHeader, Pill, Reveal, Segmented, Skeleton } from "../ui/primitives";
 
@@ -20,6 +24,37 @@ interface Draft {
   output: string;
   farOut: boolean;
   period: "day" | "week" | "month";
+}
+
+/** The assumptions as link parameters. Only what the person typed: no numbers from their data ever go into a link. */
+export function draftToParams(d: Draft): Record<string, string> {
+  const out: Record<string, string> = { task: d.job, days: d.days, period: d.period };
+  const calls = d.calls.map((c) => c.trim()).filter(Boolean);
+  if (calls.length) out.tasks = calls.join(",");
+  if (d.retry.trim()) out.retry = d.retry.trim();
+  if (d.input.trim()) out.input = d.input.trim();
+  if (d.output.trim()) out.output = d.output.trim();
+  if (d.farOut) out.farout = "1";
+  return out;
+}
+
+/** The reverse, forgiving: anything unknown falls back to the default. Whatever comes back is checked again by parseDraft and by the server. */
+export function draftFromParams(sp: URLSearchParams): Draft | null {
+  const job = sp.get("task");
+  if (!job) return null;
+  const tasks = (sp.get("tasks") ?? "").split(",").map((c) => c.trim()).slice(0, 3);
+  const period = sp.get("period");
+  const days = sp.get("days");
+  return {
+    job,
+    days: days && (DAYS as readonly number[]).includes(Number(days)) ? days : "30",
+    calls: [0, 1, 2].map((i) => tasks[i] ?? ""),
+    retry: sp.get("retry") ?? "",
+    input: sp.get("input") ?? "",
+    output: sp.get("output") ?? "",
+    farOut: sp.get("farout") === "1",
+    period: period === "day" || period === "week" ? period : "month",
+  };
 }
 
 /** The typed assumptions as a request, or the first thing wrong with them in words. Mirrors the server's limits; the server checks again. */
@@ -121,9 +156,23 @@ function ModelCard({ m, period, farOut }: { m: ModelPlan; period: string; farOut
 
 export default function CostPlanner() {
   const taskList = useJobs();
-  const [draft, setDraft] = useState<Draft>({ job: "", days: "30", calls: DEFAULT_CALLS, retry: "", input: "", output: "", farOut: false, period: "month" });
-  const [applied, setApplied] = useState<PlannerInput | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  const fromLink = draftFromParams(params);
+  const startDraft: Draft = fromLink ?? { job: "", days: "30", calls: DEFAULT_CALLS, retry: "", input: "", output: "", farOut: false, period: "month" };
+  const [draft, setDraft] = useState<Draft>(startDraft);
+  const startApplied = fromLink ? parseDraft(fromLink) : null;
+  const [applied, setApplied] = useState<PlannerInput | null>(startApplied && "input" in startApplied ? startApplied.input : null);
+  const [error, setError] = useState<string | null>(startApplied && "error" in startApplied ? startApplied.error : null);
+  const [copied, setCopied] = useState<"idle" | "done" | "failed">("idle");
+  const { mode: scope } = useProject();
+  const role = useMyRole();
+  // The server decides who may download; the button is only left out for people it would refuse.
+  const canExport = scope === "owned" && canAdminister(role);
+  useEffect(() => {
+    if (copied === "idle") return undefined;
+    const t = window.setTimeout(() => setCopied("idle"), 4000);
+    return () => window.clearTimeout(t);
+  }, [copied]);
   const q = usePlanner(applied);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => ({ ...d, [k]: v }));
   const names = taskList.data?.map((j) => j.name) ?? [];
@@ -135,6 +184,16 @@ export default function CostPlanner() {
     if ("error" in r) { setError(r.error); return; }
     setError(null);
     setApplied(r.input);
+    setParams(draftToParams({ ...draft, job: chosen }), { replace: true });
+  }
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied("done");
+    } catch {
+      setCopied("failed");
+    }
   }
 
   return (
@@ -195,7 +254,23 @@ export default function CostPlanner() {
       {applied && (
         <Reveal delay={0.05}>
           <Panel className="p-5 md:p-6" aria-live="polite">
-            <PanelHeader title={`Scenarios for “${applied.job}”`} hint="Measured history and your assumptions are shown apart. List-price estimates, not an invoice." />
+            <PanelHeader
+              title={`Scenarios for “${applied.job}”`}
+              hint="Measured history and your assumptions are shown apart. List-price estimates, not an invoice."
+              actions={
+                <div className="flex flex-wrap items-start justify-end gap-3">
+                  <div className="flex flex-col items-end gap-1.5">
+                    <button type="button" onClick={() => void copyLink()} className="rounded-[10px] border border-rule bg-surface px-3 py-2 text-sm font-medium text-ink hover:bg-surface-2">Copy link to this scenario</button>
+                    <p role="status" aria-live="polite" className="max-w-xs text-right text-xs text-dim" data-testid="copy-note">
+                      {copied === "done" ? "Link copied. It holds only the numbers you typed. Whoever opens it sees their own recorded calls and prices." : copied === "failed" ? "Could not copy. Copy the address from your browser instead." : ""}
+                    </p>
+                  </div>
+                  {canExport && (
+                    <ExportButton path={`/v1/insights/planner/export.csv?${plannerQuery(applied)}`} what={`the “${applied.job}” scenarios`} title="Download these scenarios as a spreadsheet file (CSV)">Download scenarios (CSV)</ExportButton>
+                  )}
+                </div>
+              }
+            />
             <div className="mt-4 flex flex-col gap-4">
               {q.isPending ? <Skeleton className="h-48" /> : q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : q.data.models.length === 0 ? (
                 <EmptyState title="No recorded calls for this task in this period" hint="Pick a longer history or another task. Nothing is made up to fill the gap." />

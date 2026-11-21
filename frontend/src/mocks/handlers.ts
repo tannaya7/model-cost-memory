@@ -1857,6 +1857,17 @@ export const handlers = [
     const body = "day,ai_task,model,runs,passed,failed,unchecked_runs,unpriced_runs,spend_usd,tokens_in,tokens_out,cache_read_tokens,cache_write_tokens,currency,cost_basis,pay_mode,period_start,period_end,filter_ai_task,filter_model\r\n";
     return new HttpResponse(body, { status: 200, headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="model-cost-memory-production-last-${days}-days.csv"`, "x-export-rows": "0", "x-export-neutralized": "0" } });
   }),
+  // The cost-by-feature file and the planner file: only the column names in the sample (no calls recorded here)
+  http.get("/v1/insights/features/export.csv", ({ request }) => {
+    const days = new URL(request.url).searchParams.get("days") ?? "30";
+    const body = "feature,label_kind,runs,passed,failed,unchecked_runs,excluded_runs,tokens,no_usage_runs,spend_usd,unpriced_runs,share_of_spend,cost_per_correct_answer_usd,currency,cost_basis,label_note,period_start,period_end\r\n";
+    return new HttpResponse(body, { status: 200, headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="model-cost-memory-production-cost-by-feature-last-${days}-days.csv"`, "x-export-rows": "0", "x-export-neutralized": "0" } });
+  }),
+  http.get("/v1/insights/planner/export.csv", ({ request }) => {
+    const job = new URL(request.url).searchParams.get("job") ?? "task";
+    const body = "ai_task,model,provider,tasks_per_period,period,attempts,estimate_usd,low_usd,high_usd,per_task_usd,result,calls_observed,calls_used,calls_left_out,mean_call_usd,price_versions_used,retry_rate,input_size_change_pct,output_size_change_pct,far_out_calls_left_out,history_start,history_end,currency,estimate_basis,assumptions_source\r\n";
+    return new HttpResponse(body, { status: 200, headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="model-cost-memory-production-planner-${job}.csv"`, "x-export-rows": "0", "x-export-neutralized": "0" } });
+  }),
   http.get("/v1/organisations/:org/overview/export.csv", ({ request }) => {
     const days = new URL(request.url).searchParams.get("days") ?? "30";
     return new HttpResponse("section,name\r\n", { status: 200, headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="model-cost-memory-company-last-${days}-days.csv"`, "x-export-rows": "0", "x-export-neutralized": "0" } });

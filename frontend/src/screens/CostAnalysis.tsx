@@ -3,7 +3,9 @@
  *  estimate from recorded calls at list prices, never an invoice, and nothing on this page changes anything. */
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useP } from "../app/project";
+import { useP, useProject } from "../app/project";
+import { canAdminister, useMyRole } from "../app/useMyRole";
+import { ExportButton } from "../features/exports/ExportButton";
 import { CostReceipt } from "../features/insights/components/CostReceipt";
 import { EmptyState, Panel, PanelHeader, Reveal, Segmented } from "../ui/primitives";
 import { FeatureCostsBody } from "./costs/FeatureCosts";
@@ -15,6 +17,10 @@ export default function CostAnalysis() {
   const [days, setDays] = useState("30");
   const n = Number(days);
   const p = useP();
+  const { mode: scope } = useProject();
+  const role = useMyRole();
+  // The server decides who may download; the button is only left out for people it would refuse.
+  const canExport = scope === "owned" && canAdminister(role);
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -43,7 +49,11 @@ export default function CostAnalysis() {
 
       <Reveal delay={0.1}>
         <Panel className="p-5 md:p-6" id="features">
-          <PanelHeader title="Cost by your own feature labels" hint="Optional. Your app names a feature or workflow on each call, and we add up what each cost." />
+          <PanelHeader
+            title="Cost by your own feature labels"
+            hint="Optional. Your app names a feature or workflow on each call, and we add up what each cost."
+            actions={canExport && <ExportButton path={`/v1/insights/features/export.csv?days=${n}`} what={`the last ${n} days of cost by feature`} title={`Download the last ${n} days of cost by feature as a spreadsheet file (CSV)`}>Download (CSV)</ExportButton>}
+          />
           <div className="mt-4"><FeatureCostsBody days={n} /></div>
         </Panel>
       </Reveal>
