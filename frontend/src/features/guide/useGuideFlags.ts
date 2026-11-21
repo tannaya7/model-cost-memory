@@ -7,7 +7,7 @@ import type { User } from "../../shared/api/types";
 import { meKey, useMe } from "../auth/hooks/useAuth";
 import type { GuideFlags } from "./steps";
 
-const KEYS = ["tour_seen", "first_results_seen"] as const;
+const KEYS = ["tour_seen", "first_results_seen", "welcome_seen"] as const;
 export type GuideFlag = (typeof KEYS)[number];
 
 const storageKey = (userId: string) => `mcm_guide_${userId}`;

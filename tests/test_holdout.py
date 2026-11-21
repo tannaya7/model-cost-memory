@@ -76,10 +76,10 @@ async def test_recorded_runs_are_read_per_model_family_and_prompt(session):
     for version, prompt, outcome in [("big-2026-09-01", "a", "PASS"), ("big-2026-09-01", "b", "FAIL"),
                                      ("mini-2026-09-01", "a", "PASS"), ("mini-2026-09-01", "b", "UNKNOWN")]:
         session.add(Run(run_id=uuid.uuid4(), job_id=job.job_id, project_id="demo", prompt=prompt,
-                        prompt_hash=prompt_hash(prompt), model=version.split("-")[0], model_version=version,
+                        prompt_hash=prompt_hash(prompt, "demo"), model=version.split("-")[0], model_version=version,
                         outcome=outcome, cost_usd=0.01, state="CHECKED"))
     await session.commit()
     data = await load_outcomes(session, job)
     assert set(data) == {"big", "mini"}
-    assert data["big"][prompt_hash("b")] == Outcome(False, 0.01)
-    assert list(data["mini"]) == [prompt_hash("a")]  # an unchecked run is not evidence
+    assert data["big"][prompt_hash("b", "demo")] == Outcome(False, 0.01)
+    assert list(data["mini"]) == [prompt_hash("a", "demo")]  # an unchecked run is not evidence

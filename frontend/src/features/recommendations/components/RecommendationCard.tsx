@@ -1,13 +1,17 @@
 import type { Forecast, ModelEvidence, Recommendation, Verdict } from "../../../shared/api/types";
+import { volumeWords, wrongAnswerWords } from "../../../screens/forecastText";
 import { Badge } from "../../../shared/components/Badge";
 import { Card } from "../../../shared/components/Card";
 import { CountUp } from "../../../shared/motion/CountUp";
 import { findModel, range } from "../evidence";
+import { serverText } from "../../projects/moneyWording";
+import { useBillingMode } from "../../projects/hooks/useBillingMode";
+import { AI_SUMMARY_NOTE } from "../../../screens/job/VerdictTab";
 
-export function getVerdictChip(verdict: Verdict) {
+export function getVerdictChip(verdict: Verdict, lighter = false) {
   switch (verdict) {
     case "DOWNGRADE":
-      return <Badge tone="ok">Cheaper model available</Badge>;
+      return <Badge tone="ok">{lighter ? "Lighter model available" : "Cheaper model available"}</Badge>;
     case "SWITCH":
       return <Badge tone="warn">Switch model</Badge>;
     case "HOLD":
@@ -37,7 +41,7 @@ function ModelNumbers({ label, model }: { label: string; model: ModelEvidence })
           {range(model) && <div className="font-mono text-[11px] text-dim">likely {range(model)}</div>}
         </div>
         <div>
-          <div className="text-xs text-dim">Cost per correct answer</div>
+          <div className="text-xs text-dim">{useBillingMode().mode === "per_use" ? "Cost per correct answer" : "Cost per correct answer, at list prices"}</div>
           <div className="font-mono text-lg font-bold text-ink">
             {model.cost_per_success_usd !== null ? (
               <CountUp value={model.cost_per_success_usd} decimals={4} prefix="$" />
@@ -51,38 +55,22 @@ function ModelNumbers({ label, model }: { label: string; model: ModelEvidence })
   );
 }
 
-function failuresText(n: number): string {
-  const rounded = Math.round(Math.abs(n) * 10) / 10;
-  return `${rounded} ${rounded === 1 ? "wrong answer" : "wrong answers"}`;
-}
-
-function ForecastPanel({ forecast }: { forecast: Forecast }) {
+function ForecastPanel({ forecast, model }: { forecast: Forecast; model?: string | null }) {
   const saving = forecast.monthly_saving_usd;
-  const extra = forecast.extra_failures_per_month;
+  const words = wrongAnswerWords(forecast);
   return (
     <div className="space-y-3 rounded-card border border-rule bg-bg p-4">
       <div>
         <div className={`text-2xl font-bold tracking-tight ${saving >= 0 ? "text-ok" : "text-warn"}`}>
-          {saving >= 0 ? "Save " : "Costs "}
+          {saving >= 0 ? "Save " : "Your bill would rise by "}
           <CountUp value={Math.abs(saving)} decimals={2} prefix="$" />
-          {saving >= 0 ? " a month" : " more a month"}
+          {" a month"}
         </div>
-        <p className="mt-0.5 text-xs text-dim">
-          Based on {forecast.runs_per_month.toLocaleString()} AI calls in the last 30 days
-        </p>
+        <p className="mt-0.5 text-xs text-dim">{volumeWords(forecast, model).replace(/^b/, "B")}</p>
       </div>
       <div className="text-xs font-medium">
-        {Math.abs(extra) < 0.05 ? (
-          <span className="text-dim">No change in wrong answers expected</span>
-        ) : extra > 0 ? (
-          <span className="text-warn">About {failuresText(extra)} more a month</span>
-        ) : (
-          <span className="text-ok">About {failuresText(extra)} fewer a month</span>
-        )}
-        <span className="text-dim">
-          {" "}
-          (likely between {forecast.extra_failures_low.toFixed(1)} and {forecast.extra_failures_high.toFixed(1)})
-        </span>
+        <span className={forecast.extra_failures_per_month > 0 ? "text-warn" : "text-ok"}>{words.headline.replace(/^a/, "A")}</span>
+        <span className="text-dim">{" "}({words.range})</span>
       </div>
       <p className="text-xs text-dim">Estimate, not a promise. It assumes next month looks like the last 30 days.</p>
     </div>
@@ -90,6 +78,8 @@ function ForecastPanel({ forecast }: { forecast: Forecast }) {
 }
 
 export function RecommendationCard({ recommendation }: { recommendation: Recommendation }) {
+  const { mode: billing } = useBillingMode();
+  const summary = serverText(recommendation.summary, billing, null);
   const { verdict, warnings, progress, next_step, rules, models, current, recommended } = recommendation;
   const recommendedStats = findModel(recommendation, recommended?.model);
   const currentStats = findModel(recommendation, current?.model);
@@ -111,14 +101,15 @@ export function RecommendationCard({ recommendation }: { recommendation: Recomme
       {/* Header: Chip & Headline */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-bold tracking-tight text-ink">{headline}</h2>
-        <div>{getVerdictChip(verdict)}</div>
+        <div>{getVerdictChip(verdict, billing === "subscription")}</div>
       </div>
 
       {/* Optional plain-English summary, written from the figures below and never deciding anything */}
-      {recommendation.summary && (
-        <p className="rounded-card border border-accent/20 bg-accent-soft p-3 text-sm text-ink">
-          {recommendation.summary}
-        </p>
+      {summary && (
+        <div className="rounded-card border border-accent/20 bg-accent-soft p-3 text-sm text-ink">
+          <p>{summary}</p>
+          <p className="mt-1 text-[11px] text-muted">{AI_SUMMARY_NOTE}</p>
+        </div>
       )}
 
       {/* Warnings List with warn-colored left border */}
@@ -149,8 +140,8 @@ export function RecommendationCard({ recommendation }: { recommendation: Recomme
       )}
 
       {/* Savings Forecast Panel */}
-      {recommendation.forecast && (
-        <ForecastPanel forecast={recommendation.forecast} />
+      {recommendation.forecast && billing !== "subscription" && (
+        <ForecastPanel forecast={recommendation.forecast} model={recommendation.current?.model} />
       )}
 
       {/* Progress Bar for INSUFFICIENT_EVIDENCE */}

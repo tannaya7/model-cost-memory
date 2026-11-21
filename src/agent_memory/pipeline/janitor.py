@@ -62,7 +62,7 @@ async def fail_unhandled(session: AsyncSession) -> int:
     result = await session.execute(
         text(
             "UPDATE outbox SET status = 'FAILED', updated_at = now(), "
-            "last_error = 'no worker handles op ' || op || ' (re-tests are queued in the retests table)' "
+            "last_error = 'no worker handles op ' || op || ' (trials are queued in the retests table)' "
             "WHERE status = 'PENDING' AND op <> ALL(:ops)"
         ),
         {"ops": list(HANDLED_OPS)},

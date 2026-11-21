@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -18,13 +19,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .checks import CheckResult, Outcome, check_run
+from .config import get_settings
+from .data_quality import flags_for
 from .costing import Price, compute_cost
+from .pricing import PARTLY_PRICED, PRICED, modifier_factor, resolve_price
+from .usage_ledger import sanitize_raw
 from .pipeline import flow
 from .options import normalize_effort
-from .models import CatalogEntry, Job, OutboxRow, Project, ProviderPrice, Run
+from .models import IngestDuplicate, Job, OutboxRow, Project, Run
 from .privacy import sanitize_tool_calls
 from .schemas import JobCreate, RunCreate
-from .versions import normalize
+from .security import keyed_prompt_hash
 
 
 log = logging.getLogger("agent_memory.ingest")
@@ -46,9 +51,17 @@ class AlreadyResolved(ValueError):
     """The run already has a PASS or FAIL outcome."""
 
 
-def prompt_hash(prompt: str) -> str:
-    """Stable key for de-duplicating and caching by prompt text."""
+def plain_prompt_hash(prompt: str) -> str:
+    """The unkeyed SHA-256 of the prompt text. Never stored: it is only the first step of prompt_hash, and what rows made before
+    keying kept. A plain hash can be guessed back from short or common prompts, which is why it is not stored any more."""
     return hashlib.sha256(prompt.encode("utf8")).hexdigest()
+
+
+def prompt_hash(prompt: str, project_id: str, secret_key: str | None = None) -> str:
+    """Stable key for de-duplicating and caching by prompt text, inside one project. Keyed by the server's secret and the project,
+    so a prompt that was deleted after retention cannot be guessed from what is left, and the same prompt in two projects
+    gives two different values."""
+    return keyed_prompt_hash(project_id, plain_prompt_hash(prompt), get_settings().secret_key if secret_key is None else secret_key)
 
 
 async def create_job(session: AsyncSession, project: Project, body: JobCreate) -> Job:
@@ -75,38 +88,8 @@ async def update_job_description(session: AsyncSession, job: Job, description: s
 async def find_price(
     session: AsyncSession, model: str, model_version: str, provider: str | None = None
 ) -> Price | None:
-    """The catalog price for this call, or None when unpriced.
-
-    Tries the provider-resolved version first (usually the full dated name), then the model that was
-    asked for (the alias), after normalising both. A hand-entered (MANUAL) catalog price always wins;
-    otherwise, when the run names its provider, that provider's own price is used, because the same
-    model can cost several times more on one provider than on another.
-    """
-    candidates = [normalize(model_version), normalize(model)]
-    rows = (
-        await session.execute(
-            select(CatalogEntry).where(
-                CatalogEntry.model.in_(candidates), CatalogEntry.price_in_per_mtok.is_not(None),
-                CatalogEntry.price_out_per_mtok.is_not(None),
-            )
-        )
-    ).scalars().all()
-    best = min(rows, key=lambda r: (candidates.index(r.model), -r.first_seen_at.timestamp())) if rows else None
-    if provider and not (best and best.source == "MANUAL"):
-        sold = (
-            await session.execute(
-                select(ProviderPrice).where(
-                    ProviderPrice.model.in_(candidates), ProviderPrice.provider == provider.strip().lower(),
-                    ProviderPrice.price_in_per_mtok.is_not(None), ProviderPrice.price_out_per_mtok.is_not(None),
-                )
-            )
-        ).scalars().all()
-        if sold:
-            own = min(sold, key=lambda r: candidates.index(r.model))
-            return Price.from_input_output(own.price_in_per_mtok, own.price_out_per_mtok, model=model_version or model)
-    if best is None:
-        return None
-    return Price.from_input_output(best.price_in_per_mtok, best.price_out_per_mtok, model=model_version or model)
+    """The price in force now for this call, or None when unpriced (see pricing.resolve_price)."""
+    return (await resolve_price(session, model, model_version, provider)).price
 
 
 async def record_run(
@@ -130,13 +113,29 @@ async def record_run(
     keep_expected = body.expected if job.retest_consent and job.check_kind == "ANSWER_KEY" else None
 
     provider = body.provider.strip().lower() if body.provider else None
-    price = await find_price(session, body.model, body.model_version, provider)
-    if price is not None:
-        cost = compute_cost(price, body.tokens_in, body.tokens_out, body.cache_read_tokens, body.cache_write_tokens)
+    resolution = await resolve_price(session, body.model, body.model_version, provider)
+    usage_raw = sanitize_raw(body.usage_raw)
+    # A response with no usage block reports nothing: its zero counts are unknown, so pricing them would store
+    # $0 ("free"). Such a run keeps an unknown cost unless the caller sent one.
+    usage_unreported = body.usage_shape == "none" and not (
+        body.tokens_in or body.tokens_out or body.cache_read_tokens or body.cache_write_tokens)
+    caller_cost = Decimal(str(body.cost_usd)) if body.cost_usd is not None else None
+    factor, unmodelled = modifier_factor(
+        body.usage_shape, body.model_version or body.model, usage_raw,
+        prompt_tokens=body.tokens_in + body.cache_read_tokens + body.cache_write_tokens)
+    version_id = None
+    if resolution.price is not None and not usage_unreported:
+        cost = compute_cost(resolution.price, body.tokens_in, body.tokens_out, body.cache_read_tokens,
+                            body.cache_write_tokens, body.cache_write_1h_tokens, factor or Decimal(1))
+        version_id = resolution.version_id
+        price_status = PARTLY_PRICED if unmodelled else PRICED
     else:
-        # No catalog price and no cost sent: unknown, not free. Storing 0 would make the model win
-        # every cost comparison.
-        cost = Decimal(str(body.cost_usd)) if body.cost_usd is not None else None
+        # No usable catalog price, or nothing reported: unknown, not free. Storing 0 would make the model win
+        # every cost comparison. A cost the caller sent is used and labelled as theirs.
+        cost = caller_cost
+        price_status = "CALLER_COST" if caller_cost is not None else (
+            "NO_USAGE" if usage_unreported else resolution.status)
+        factor = None
 
     if unknown_reason is not None:
         result = CheckResult(Outcome.UNKNOWN, unknown_reason)
@@ -144,7 +143,7 @@ async def record_run(
         result = check_run(job.check_kind, job.check_config, body.output, body.expected)
     state = "CAPTURED" if result.outcome is Outcome.UNKNOWN else "CHECKED"
 
-    digest = prompt_hash(body.prompt)
+    digest = prompt_hash(body.prompt, project.project_id)
     inserted = (
         await session.execute(
             insert(Run)
@@ -157,14 +156,25 @@ async def record_run(
                 tool_calls=sanitize_tool_calls(body.tool_calls, keep_arguments=project.store_tool_arguments),
                 outcome=result.outcome.value, outcome_reason=result.reason, state=state, run_kind=run_kind,
                 retest_id=retest_id, expected=keep_expected, provider=provider,
-                agent=body.agent, trace_id=body.trace_id, tools_tokens=body.tools_tokens,
+                agent=body.agent, feature=body.feature, trace_id=body.trace_id, span_id=body.span_id, parent_span_id=body.parent_span_id,
+                tools_tokens=body.tools_tokens,
                 tool_call_count=len(body.tool_calls) if body.tool_calls is not None else None,
+                usage_shape=body.usage_shape, usage_raw=usage_raw, reasoning_tokens=body.reasoning_tokens,
+                price_version_id=version_id, price_status=price_status, price_factor=factor,
+                cache_write_1h_tokens=body.cache_write_1h_tokens or None,
+                tool_use_input_tokens=body.tool_use_input_tokens,
+                data_flags=flags_for(usage_raw=usage_raw, tokens_out=body.tokens_out, reasoning_tokens=body.reasoning_tokens,
+                                     cache_write_tokens=body.cache_write_tokens, cache_write_1h_tokens=body.cache_write_1h_tokens) or None,
             )
             .on_conflict_do_nothing(index_elements=["run_id"])
             .returning(Run.run_id)
         )
     ).scalar_one_or_none()
     if inserted is None:
+        # The same call arrived again (an SDK retry, a replayed delivery). It is ignored, as before, and now counted per project and UTC day.
+        await session.execute(
+            insert(IngestDuplicate).values(project_id=project.project_id, day=datetime.now(UTC).date(), duplicates=1)
+            .on_conflict_do_update(index_elements=["project_id", "day"], set_={"duplicates": IngestDuplicate.duplicates + 1}))
         log.info("duplicate run ignored", extra={"run_id": str(body.run_id), "job_id": str(job.job_id),
                                                  "project_id": project.project_id})
         return False
@@ -175,7 +185,7 @@ async def record_run(
                "from_state": None, "to_state": state, "cost_usd": float(cost) if cost is not None else None},
     )
     session.add(OutboxRow(run_id=body.run_id, op="UPSERT", payload={"run_id": str(body.run_id), "prompt_hash": digest}))
-    source = "Re-test runner" if run_kind == "RETEST" else "RunRecorder"
+    source = "Trial runner" if run_kind == "RETEST" else "RunRecorder"
     flow.emit(session, project.project_id, "sdk", f"{source} captured a call to '{body.model}' for '{job.name}'",
               run_id=body.run_id, data={"job": job.name, "model": body.model, "run_kind": run_kind})
     flow.emit(session, project.project_id, "api", "POST /v1/runs accepted: stored and queued for indexing",

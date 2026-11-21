@@ -21,7 +21,8 @@
  *  R5  Budget. estimated cost = (tokensIn * priceIn + tokensOut * priceOut) / 1e6 from the catalog's prices per
  *      1M tokens. Without both prices, or without recorded tokens, the cost is null, never a guess. A cost above
  *      the budget flags the option; it does not remove it.
- *  R6  People: changes only the wording about overlapping requests and sharing the cost, never the ranking.
+ *  R6  (removed) Team size is no longer asked: it only changed one sentence, and it is organisational data the list does not need.
+ *  Every answer is optional. With no answer at all this is a general list of what the providers publish, in a fixed order.
  *  Ties: broken by name, so the same inputs always give the same output. */
 import { MODEL_CATALOG, type CatalogEntry } from "./modelCatalog";
 import { modelLink } from "./modelLinks";
@@ -97,7 +98,7 @@ export function suggestFromProfile(answers: Answers, usage: ProfileUsage, catalo
       );
     }
     let score = hits.length * 2;
-    const prio = `You said ${label(PRIORITIES, answers.priority).toLowerCase()} matters most`;
+    const prio = answers.priority === null ? "" : `You said ${label(PRIORITIES, answers.priority).toLowerCase()} matters most`;
     if (answers.priority === "quality" || answers.priority === "balanced") {
       score += e.tier;
       why.push(`${prio}; this is ${e.tier === 2 ? "one of the larger" : e.tier === 1 ? "a mid-sized" : "one of the smaller"} families from ${e.provider}, which only sets the order here and is not a measured result.`);
@@ -125,11 +126,8 @@ export function suggestFromProfile(answers: Answers, usage: ProfileUsage, catalo
     if (cost === null) {
       why.push(c.priceIn === null || c.priceOut === null ? "No price for this model is in the catalog, so no cost is estimated." : "No usage with tokens is recorded yet, so no cost is estimated.");
     } else {
-      why.push(`At your recent volume (${n(usage.monthlyTokensIn)} tokens in and ${n(usage.monthlyTokensOut)} out a month) it would cost an estimated ${money(cost)} a month.`);
+      why.push(`At your recent volume (${n(usage.monthlyTokensIn)} tokens in and ${n(usage.monthlyTokensOut)} out a month) it would cost ${usage.daysOfHistory < 7 ? `a rough guess of ${money(cost)} a month (we have only ${usage.daysOfHistory} ${usage.daysOfHistory === 1 ? "day" : "days"} of use, so this is not reliable yet)` : `an estimated ${money(cost)} a month`}.`);
       if (answers.budgetUsd !== null) why.push(fits ? `That is within your ${money(answers.budgetUsd)} monthly budget.` : `That is over your ${money(answers.budgetUsd)} monthly budget.`);
-    }
-    if (answers.people !== "1") {
-      why.push(`${label(PEOPLE_LABEL, answers.people)} people share this, so requests can overlap (check the provider's rate limits)${cost !== null ? " and the estimated cost is shared between them" : ""}.`);
     }
     rows.push({
       s: { model: c.model, provider: e.provider, why, estimatedMonthlyUsd: cost, fitsBudget: fits, link: modelLink(c.model) ?? { url: e.officialUrl, label: "Read about it on the provider's site" }, confidence: "profile" },
@@ -154,9 +152,3 @@ export function suggestFromProfile(answers: Answers, usage: ProfileUsage, catalo
   });
   return rows.slice(0, 3).map((r) => r.s);
 }
-
-const PEOPLE_LABEL: { value: string; label: string }[] = [
-  { value: "2-10", label: "2 to 10" },
-  { value: "11-50", label: "11 to 50" },
-  { value: "50+", label: "More than 50" },
-];

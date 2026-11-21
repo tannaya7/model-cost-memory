@@ -1,6 +1,6 @@
 """Catalog sync and overrides. The price list here is made up."""
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 import httpx
@@ -66,7 +66,7 @@ def test_a_provider_prefixed_duplicate_does_not_override_the_plain_entry():
 
 @pytest.mark.parametrize(
     "shutdown, status",
-    [(None, "ACTIVE"), (date(2026, 12, 1), "DEPRECATED"), (date(2026, 10, 14), "RETIRED"), (date(2026, 1, 1), "RETIRED")],
+    [(None, "ACTIVE"), (date(2026, 12, 1), "DEPRECATED"), (date(2026, 10, 13), "RETIRED"), (date(2026, 1, 1), "RETIRED")],
 )
 def test_status_follows_the_shutdown_date(shutdown, status):
     assert status_for(shutdown, TODAY) == status
@@ -182,3 +182,8 @@ async def test_filling_provider_prices_for_an_existing_catalog_starts_no_re_test
     result = await sync_catalog(session, newer, today=TODAY)
     assert [r.model for r in result.added_models] == ["acme-tiny"]
     assert len((await session.execute(select(ProviderPrice))).scalars().all()) == 6
+
+
+def test_f31_a_model_is_still_deprecated_on_its_shutdown_date_and_retired_the_day_after():
+    assert status_for(TODAY, TODAY) == "DEPRECATED"
+    assert status_for(TODAY - timedelta(days=1), TODAY) == "RETIRED"

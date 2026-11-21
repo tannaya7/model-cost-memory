@@ -8,6 +8,7 @@ import { setActiveProject, setApiKey } from "../shared/api/apiFetch";
 import { queryClient } from "../shared/api/queryClient";
 import { IconAlert, IconDollar, IconLogo, IconShield } from "../ui/icons";
 import { ThemeToggle } from "../ui/ThemeToggle";
+import { projectPath } from "../shared/projectPath";
 import { Button } from "../ui/primitives";
 
 function safeNext(next: string | null): string {
@@ -55,8 +56,10 @@ export default function SignIn() {
   const navigate = useNavigate();
   const config = useAuthConfig();
   const [email, setEmail] = useState("");
-  const [error, setError] = useState<string | null>(searchParams.get("error") === "google" ? "Google sign-in did not finish. Please try again." : null);
+  const [error, setError] = useState<string | null>(searchParams.get("error") === "google" ? "Google sign-in did not finish. Please try again." : searchParams.get("error") === "unverified" ? "Google says this email address is not verified, so it cannot be used to sign in. Verify it with Google, or use another account." : null);
   const next = safeNext(searchParams.get("next"));
+  /** Switching accounts: stay on this page even though someone is signed in, and make Google show its account chooser. */
+  const switching = searchParams.get("switch") === "1";
   const isMock = import.meta.env.DEV && import.meta.env.VITE_USE_MOCK === "true";
 
   // Signing in means "use my account": a project key or project left in this browser would otherwise be
@@ -83,7 +86,7 @@ export default function SignIn() {
       finish();
     } else {
       forgetSavedAccess();
-      window.location.assign(`/auth/google/login?next=${encodeURIComponent(next)}`);
+      window.location.assign(`/auth/google/login?next=${encodeURIComponent(next)}${switching ? "&switch=true" : ""}`);
     }
   };
 
@@ -100,11 +103,11 @@ export default function SignIn() {
 
   const me = useMe();
   const google = isMock || Boolean(config.data?.google);
-  if (me.data) return <Navigate to={next === "/" ? "/projects" : next} replace />;
+  if (me.data && !switching) return <Navigate to={next === "/" ? "/projects" : next} replace />;
   const dev = Boolean(config.data?.dev_login);
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1.15fr_1fr]">
+    <main className="grid min-h-screen lg:grid-cols-[1.15fr_1fr]">
       <section className="relative hidden overflow-hidden border-r border-rule p-12 lg:flex lg:flex-col lg:justify-between">
         <div aria-hidden className="pointer-events-none absolute -left-40 top-1/3 h-[480px] w-[480px] rounded-full bg-accent/15 blur-3xl" />
         <div className="relative flex items-center justify-between gap-3">
@@ -142,6 +145,12 @@ export default function SignIn() {
           </div>
           <h2 className="text-2xl font-semibold tracking-tight">Sign in</h2>
           <p className="mt-1 text-sm text-dim">See which models your AI features should use, and what that saves.</p>
+          {switching && me.data && (
+            <p role="status" className="mt-4 rounded-[10px] border border-rule bg-surface-2/60 p-3 text-sm text-dim">
+              You are signed in as <strong className="text-ink [overflow-wrap:anywhere]">{me.data.email}</strong>. Pick the account you want next. Each account keeps its own
+              projects and teams, and nothing is shared between them.
+            </p>
+          )}
 
           {error && <p role="alert" className="mt-5 rounded-[10px] border border-bad/30 bg-bad-soft p-3 text-sm text-bad">{error}</p>}
 
@@ -181,11 +190,11 @@ export default function SignIn() {
           <p className="mt-8 border-t border-rule pt-5 text-xs text-muted">
             Have a project key? <Link to="/key" className="font-semibold text-accent hover:underline">Use it instead</Link>
             {config.data?.demo_project_id && (
-              <> or <Link to="/p/demo" className="font-semibold text-accent hover:underline">explore the demo</Link></>
+              <> or <Link to={projectPath("demo")} className="font-semibold text-accent hover:underline">explore the demo</Link></>
             )}
           </p>
         </motion.div>
       </section>
-    </div>
+    </main>
   );
 }

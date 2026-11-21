@@ -10,7 +10,7 @@ const CATALOG = [
   m("gpt-6.1-sol", 3, 12), m("gpt-6-luna", 0.2, 1),
 ];
 const USAGE: ProfileUsage = { daysOfHistory: 30, runs: 3000, monthlyTokensIn: 6_000_000, monthlyTokensOut: 1_000_000, monthlySpendUsd: 30, budgetUsd: null, currentModels: ["claude-sonnet-5-5"], periodFrom: "2026-10-14", periodTo: "2026-11-13" };
-const A: Answers = { people: "1", tasks: [], priority: "balanced", needs: [], budgetUsd: null };
+const A: Answers = { tasks: [], priority: "balanced", needs: [], budgetUsd: null };
 
 describe("suggestFromProfile", () => {
   it("is deterministic and returns at most three options", () => {
@@ -80,19 +80,28 @@ describe("suggestFromProfile", () => {
     expect(r.find((x) => x.model === "Claude Opus")?.estimatedMonthlyUsd).toBeNull();
   });
 
-  it("changes only the wording with the number of people", () => {
-    const a = { ...A, tasks: ["coding" as const], priority: "quality" as const };
-    const one = suggestFromProfile(a, USAGE, CATALOG);
-    const many = suggestFromProfile({ ...a, people: "50+" }, USAGE, CATALOG);
-    expect(many.map((x) => x.model)).toEqual(one.map((x) => x.model));
-    expect(many[0].why.join(" ")).toContain("share");
-    expect(one[0].why.join(" ")).not.toContain("overlap");
+  it("no longer asks about team size, so no wording depends on it", () => {
+    const r = suggestFromProfile({ ...A, tasks: ["coding"] }, USAGE, CATALOG);
+    expect(r.map((x) => x.why.join(" ")).join(" ")).not.toMatch(/people share this|overlap/);
+  });
+
+  it("with no answer at all it is a general list: fixed order, no 'you said', nothing matched to the work", () => {
+    const none: Answers = { tasks: [], priority: null, needs: [], budgetUsd: null };
+    const r = suggestFromProfile(none, USAGE, CATALOG);
+    expect(r.length).toBeGreaterThan(0);
+    expect(r.map((x) => x.why.join(" ")).join(" ")).not.toMatch(/You said/);
+    expect(suggestFromProfile(none, USAGE, [...CATALOG].reverse())).toEqual(r);
+  });
+
+  it("a priority that was never chosen orders nothing and is never quoted back", () => {
+    const r = suggestFromProfile({ tasks: ["coding"], priority: null, needs: [], budgetUsd: null }, USAGE, CATALOG);
+    expect(r.map((x) => x.why.join(" ")).join(" ")).not.toMatch(/matters most/);
   });
 
   it("never calls a model better or best, and always has profile confidence and a link", () => {
     const priorities = ["cost", "quality", "speed", "balanced"] as const;
     for (const priority of priorities) {
-      const all = suggestFromProfile({ people: "11-50", tasks: ["coding", "reasoning", "long-documents", "support"], priority, needs: ["privacy", "long-inputs"], budgetUsd: 20 }, USAGE, CATALOG);
+      const all = suggestFromProfile({ tasks: ["coding", "reasoning", "long-documents", "support"], priority, needs: ["privacy", "long-inputs"], budgetUsd: 20 }, USAGE, CATALOG);
       for (const o of all) {
         expect(o.confidence).toBe("profile");
         expect(o.link?.url).toMatch(/^https:\/\//);

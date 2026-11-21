@@ -13,35 +13,67 @@ import asyncio
 import base64
 import binascii
 import json
+import re
 import logging
 import secrets
 import uuid
 from collections import defaultdict
+from dataclasses import asdict
+from typing import Any, Literal
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy import func, select, text, tuple_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import __version__, ingest
 from .db import dispose_engine, get_session
+from .insights.coverage import CoverageOut, coverage
+from .insights.planner import PlannerOut, plan
+from .insights.features import FeatureBreakdownOut, feature_breakdown
+from .exports import (
+    COST_BASIS, FEATURE_COLUMNS, FEATURE_TEXT, PLANNER_COLUMNS, PLANNER_TEXT, PROJECT_COLUMNS, PROJECT_TEXT, csv_file, feature_rows, planner_rows,
+    write_csv,
+)
 from .insights.agents import agent_insights
+from .insights.savings import savings as savings_insight
+from .insights.changes import DAYS as CHANGE_DAYS
+from .insights.agent_tree import METHOD as AGENT_METHOD
+from .insights.agent_tree import MIN_COHORT as AGENT_MIN_COHORT
+from .insights.agent_tree import REPEAT_CHOICES as AGENT_REPEAT_CHOICES
+from .insights.agent_tree import WINDOW_CHOICES as AGENT_WINDOW_CHOICES
+from .insights.agent_tree import agent_task as agent_task_insight
+from .insights.agent_tree import agent_tasks as agent_tasks_insight
+from .insights.changes import what_changed
+from .insights.tool_servers import DAYS as TOOL_DAYS
+from .insights.tool_servers import tool_servers as tool_servers_insight
+from .insights.prompt_versions import prompt_versions
 from .insights.prompts import prompt_insights
+from .insights.projection import month_projection
+from .notices.service import BY_ID, PROVIDER_NAMES, STALE_AFTER, project_notices
+from .insights.receipt import cost_receipt
 from .insights.service import daily as insights_daily
 from .insights.service import job_insights, spend_by_job
 from .logging_config import configure_logging, set_context
 from .limits import forecast as limit_forecast
-from .models import Alert, CatalogEntry, Job, Project, ProviderKey, Retest, Run, UsageLimit
+from .models import Alert, CatalogEntry, Job, PriceVersion, Project, ProviderKey, Retest, Run, UsageLimit, User
 from .recommend.cache import cached_recommend
 from .recommend.engine import JobRecommendation, ModelEvidence
+from .catalog.official import CATALOG_SOURCE, reference_for
+from .catalog.official import STALE_AFTER as OFFICIAL_STALE_AFTER
+from .catalog.official import load as load_official
+from .recommend.evidence import basis_for
+from .recommend.stats import assess, difference, z_for
 from .insights.task_profile import MIN_CALLS, task_profile
 from .recommend.summary import summarize
-from .recommend.task_summary import delete_summary, provider_name, task_summary_state
+from .recommend.task_summary import delete_project_summaries, delete_summary, provider_name, task_summary_state
 from .retest import keys as provider_keys
+from .retest.confirm import build_preview, conclusion, read_token, single_use_hash
 from .retest.runner import RetestRefused, enqueue, spent_this_month, start_on_first_key
 from .schemas import (
     TaskProfileOut,
@@ -76,21 +108,55 @@ from .schemas import (
     ModelEvidenceOut,
     ModelOut,
     ModelPage,
+    ModelReferenceOut,
+    PriceSourceOut,
+    TaskTotalsOut,
+    TaskStructureOut,
+    TaskNodeOut,
+    SpreadOut,
+    RepeatedCallOut,
+    RepeatedCallItemOut,
+    CohortSideOut,
+    CohortOut,
+    AgentTasksOut,
+    AgentTaskSummaryOut,
+    AgentTaskOut,
+    ToolServersOut,
     ModelRef,
     ModelVersionSeen,
+    PromptComparisonOut,
     PromptGroupOut,
     PromptsOut,
+    PromptVersionOut,
+    PromptVersionsOut,
     ProviderKeyIn,
     ProviderKeyOut,
+    CatalogInfoOut,
+    ChangesOut,
+    DifferenceOut,
+    PairedOut,
     RecommendationEvidence,
+    PromisingOut,
     RecommendationOut,
+    SureEnoughOut,
     RecommendationRules,
     RetestCreate,
     RetestLimits,
+    RetestPreviewOut,
+    SavingsEntry,
+    SavingsOut,
+    SavingsTotal,
+    RetestPreviewRequest,
     RetestOut,
     RunAccepted,
     RunCreate,
     RunDetail,
+    CostReceiptOut,
+    NoticeElsewhereOut,
+    NoticeOut,
+    NoticesOut,
+    NoticeSourceOut,
+    ProjectionOut,
     RunOut,
     RunPage,
     SpendOut,
@@ -98,9 +164,13 @@ from .schemas import (
     UsageLimitOut,
     UsedPercentIn,
 )
+from .auth import orgs as orgs_routes
+from .auth import privacy as privacy_routes
 from .auth import routes as auth_routes
-from .auth.access import current_project
+from .auth.access import can_see_content, current_project, optional_user, signed_in_project
+from .auth.permissions import role_can
 from .config import check_startup, get_settings
+from .csrf import CsrfMiddleware
 from .heartbeat import overdue
 from .news import service as news_service
 from .news.feeds import FEEDS as NEWS_FEEDS
@@ -114,6 +184,7 @@ from .storage import lineage
 from .versions import normalize
 
 PREVIEW_CHARS = 200
+MAX_JOBS_PER_PROJECT = 500  # generous: a project has a few dozen tasks; this stops runaway creation
 log = logging.getLogger("agent_memory.api")
 
 
@@ -141,8 +212,11 @@ app.add_middleware(
     SessionMiddleware, secret_key=_session_secret(), session_cookie="mcm_session", same_site="lax",
     https_only=get_settings().public_url.startswith("https://"), max_age=14 * 24 * 3600,
 )
+app.add_middleware(CsrfMiddleware)  # a changing request with the sign-in cookie must come from this site
 app.add_middleware(RateLimitMiddleware)  # added last, so it runs first: refused requests do no work
 app.include_router(auth_routes.router)
+app.include_router(orgs_routes.router)
+app.include_router(privacy_routes.router)
 
 
 @app.get("/healthz", response_model=Health, tags=["system"])
@@ -209,9 +283,12 @@ async def _weights(session: AsyncSession, runs: list[Run], now: datetime | None 
 def _run_fields(r: Run, job_name: str, weight: float | None = None) -> dict:
     return dict(
         run_id=r.run_id, job_id=r.job_id, job=job_name, model=r.model, model_version=r.model_version,
-        prompt_version=r.prompt_version, effort=r.effort, agent=r.agent, trace_id=r.trace_id,
+        prompt_version=r.prompt_version, effort=r.effort, agent=r.agent, feature=r.feature, trace_id=r.trace_id, span_id=r.span_id,
+        parent_span_id=r.parent_span_id,
         tools_tokens=r.tools_tokens, tool_call_count=r.tool_call_count, tokens_in=r.tokens_in, tokens_out=r.tokens_out,
         cache_read_tokens=r.cache_read_tokens, cache_write_tokens=r.cache_write_tokens,
+        usage_shape=r.usage_shape, reasoning_tokens=r.reasoning_tokens, tool_use_input_tokens=r.tool_use_input_tokens,
+        price_status=r.price_status,
         cost_usd=float(r.cost_usd) if r.cost_usd is not None else None, latency_ms=r.latency_ms, outcome=r.outcome,
         outcome_reason=r.outcome_reason, run_kind=r.run_kind, state=r.state, created_at=r.created_at,
         prompt_preview=r.prompt[:PREVIEW_CHARS] if r.prompt is not None else None,
@@ -293,12 +370,15 @@ async def get_task_profile(
 @app.put("/v1/task-summary-consent", response_model=TaskSummaryOut, tags=["jobs"])
 async def put_task_summary_consent(
     body: TaskSummaryConsentIn,
-    project: Project = Depends(current_project),
+    project: Project = Depends(signed_in_project),
     session: AsyncSession = Depends(get_session),
 ) -> TaskSummaryOut:
     """Switch the AI-written task summaries on or off for this project. Off by default; while off, no
-    sample prompt is ever sent to an outside AI service."""
+    sample prompt is ever sent to an outside AI service. Only the signed-in owner may change it (a project
+    key, which an SDK holds, is refused), and switching it off deletes the project's stored summaries."""
     project.task_summary_consent = body.enabled
+    if not body.enabled:
+        await delete_project_summaries(session, project.project_id)
     await session.commit()
     return TaskSummaryOut(state="off" if not body.enabled else "pending", text=None, consent=body.enabled,
                           service=provider_name(get_settings()))
@@ -343,6 +423,7 @@ async def list_runs(
     recommendation: uuid.UUID | None = Query(default=None, description="Only the runs this verdict rests on"),
     limit: int = Query(default=50, ge=1, le=200),
     cursor: str | None = None,
+    request: Request = None,  # type: ignore[assignment]
     project: Project = Depends(current_project),
     session: AsyncSession = Depends(get_session),
 ) -> RunPage:
@@ -369,6 +450,8 @@ async def list_runs(
     page, more = rows[:limit], len(rows) > limit
     weights = await _weights(session, [r for r, _ in page])
     items = [_run_out(r, job_name, weights.get(r.run_id)) for r, job_name in page]
+    if not can_see_content(request):  # a viewer sees the numbers, not the text
+        items = [i.model_copy(update={"prompt_preview": None, "output_preview": None}) for i in items]
     next_cursor = _encode_cursor(page[-1][0].created_at, page[-1][0].run_id) if more else None
     return RunPage(items=items, next_cursor=next_cursor)
 
@@ -380,6 +463,10 @@ async def create_job_endpoint(
     session: AsyncSession = Depends(get_session),
 ) -> JobOut:
     """Define a job and how a correct answer is recognised."""
+    count = (await session.execute(select(func.count()).select_from(Job).where(Job.project_id == project.project_id))).scalar_one()
+    if count >= MAX_JOBS_PER_PROJECT:
+        raise HTTPException(409, f"This project already has {MAX_JOBS_PER_PROJECT} jobs, which is the most one "
+                                 "project can have. Use fewer, broader job names or delete ones you no longer need.")
     try:
         job = await ingest.create_job(session, project, body)
     except ingest.DuplicateJob as exc:
@@ -422,6 +509,7 @@ async def record_run_endpoint(
 @app.get("/v1/runs/{run_id}", response_model=RunDetail, tags=["runs"])
 async def get_run(
     run_id: uuid.UUID,
+    request: Request = None,  # type: ignore[assignment]
     project: Project = Depends(current_project),
     session: AsyncSession = Depends(get_session),
 ) -> RunDetail:
@@ -431,11 +519,11 @@ async def get_run(
     ).scalar_one_or_none()
     if run is None:
         raise HTTPException(404, "Run not found")
-    return RunDetail(
-        **_run_fields(run, await _job_name(session, run.job_id, project.project_id),
-                      (await _weights(session, [run])).get(run.run_id)),
-        prompt=run.prompt, output=run.output, tool_calls=run.tool_calls,
-    )
+    fields = _run_fields(run, await _job_name(session, run.job_id, project.project_id),
+                         (await _weights(session, [run])).get(run.run_id))
+    if not can_see_content(request):  # a viewer sees the numbers, not the text, tool calls or answer key
+        return RunDetail(**{**fields, "prompt_preview": None, "output_preview": None}, prompt=None, output=None, tool_calls=None)
+    return RunDetail(**fields, prompt=run.prompt, output=run.output, tool_calls=run.tool_calls)
 
 
 @app.post("/v1/runs/{run_id}/label", response_model=RunOut, tags=["runs"])
@@ -489,6 +577,24 @@ async def list_models(
         query = query.where(tuple_(CatalogEntry.model, CatalogEntry.model_version) > tuple_(last_model, last_version))
     rows = (await session.execute(query)).scalars().all()
     page, more = rows[:limit], len(rows) > limit
+    sources, official_rows = await load_official(session)
+    now = datetime.now(UTC)
+    synced = dict((await session.execute(
+        select(PriceVersion.model, func.max(PriceVersion.checked_at)).where(PriceVersion.model.in_([m.model for m in page] or [""]))
+        .group_by(PriceVersion.model))).all())
+    last_synced = (await session.execute(select(func.max(PriceVersion.checked_at)))).scalar_one()
+
+    def reference(m: CatalogEntry) -> ModelReferenceOut:
+        r = reference_for(m.model, m.provider, m.price_in_per_mtok, m.price_out_per_mtok, manual=m.source == "MANUAL",
+                          sources=sources, official=official_rows, now=now)
+        return ModelReferenceOut(
+            kind="api_model", maker=r.provider_name, docs_url=r.docs_url, pricing_url=r.pricing_url,
+            deprecations_url=r.deprecations_url, price_check=r.price_check, price_check_note=r.price_check_note,
+            price_checked_at=r.checked_at, price_check_stale=r.stale,
+            official_input_per_mtok=float(r.official_input) if r.official_input is not None else None,
+            official_output_per_mtok=float(r.official_output) if r.official_output is not None else None,
+            price_basis=r.price_basis, catalog_source=r.catalog_source, catalog_synced_at=synced.get(m.model))
+
     items = [
         ModelOut(
             model=m.model, model_version=m.model_version, provider=m.provider, status=m.status,
@@ -496,13 +602,38 @@ async def list_models(
             price_in_per_mtok=float(m.price_in_per_mtok) if m.price_in_per_mtok is not None else None,
             price_out_per_mtok=float(m.price_out_per_mtok) if m.price_out_per_mtok is not None else None,
             source=m.source, first_seen_at=m.first_seen_at, used_by_project=m.model in used_names,
+            reference=reference(m),
         )
         for m in page
     ]
     next_cursor = None
     if more:
         next_cursor = base64.urlsafe_b64encode(f"{page[-1].model}|{page[-1].model_version}".encode()).decode()
-    return ModelPage(items=items, next_cursor=next_cursor)
+    return ModelPage(
+        items=items, next_cursor=next_cursor,
+        catalog=CatalogInfoOut(source=CATALOG_SOURCE, last_synced_at=last_synced,
+                               note="Prices come from a community-maintained list and refresh daily. Where a maker's own pricing "
+                                    "page can be read, it is compared with this and shown beside it."),
+        official_sources=[PriceSourceOut(
+            source_id=s.source_id, name=s.name, provider=s.provider, url=s.url, status=s.status,
+            last_checked_at=s.last_checked_at, last_ok_at=s.last_ok_at, detail=s.detail, model_count=s.model_count,
+            stale=s.last_ok_at is not None and now - s.last_ok_at > OFFICIAL_STALE_AFTER)
+            for s in sorted(sources.values(), key=lambda x: x.source_id)],
+        kind_note="This is a list of API models you can call. Coding tools and subscription apps, such as Cursor or Copilot, are "
+                  "not API endpoints, so they are not listed or ranked here.")
+
+
+def _vs_current(m: ModelEvidence, cur: ModelEvidence | None, settings) -> DifferenceOut | None:
+    """The engine's own difference interval against the model in use, at the confidence a move needs."""
+    if cur is None or m is cur or m.sample is None or cur.sample is None:
+        return None
+    conf = max(settings.switch_confidence, settings.confidence_level)
+    z = z_for(conf)
+    low, high = difference(m.sample, cur.sample, z)
+    return DifferenceOut(
+        against=cur.model, gap_points=(m.sample.pass_rate - cur.sample.pass_rate) * 100, low_points=low * 100,
+        high_points=high * 100, confidence=conf, margin_points=settings.tolerance_points * 100,
+        status=assess(m.sample, cur.sample, margin=settings.tolerance_points, z=z))
 
 
 def _ref(m: ModelEvidence | None) -> ModelRef | None:
@@ -529,17 +660,35 @@ def _recommendation_out(r: JobRecommendation, summary: str | None = None,
                 weighted_pass_rate=m.sample.pass_rate if m.sample else None,
                 pass_rate_low=m.pass_rate_low, pass_rate_high=m.pass_rate_high, mean_cost_usd=m.mean_cost_usd,
                 cost_per_success_usd=m.cost_per_success_usd, status=m.status, eligible=m.eligible, why=m.why,
+                vs_current=_vs_current(m, d.current, r.settings), priced_runs=m.priced_runs,
+                unpriced_runs=m.unpriced_runs, retest_runs=m.retest_runs, cost_p50_usd=m.cost_p50_usd,
+                cost_p90_usd=m.cost_p90_usd,
             )
             for m in d.models
         ],
         evidence=RecommendationEvidence(
             n_runs=r.n_runs, evidence_weight=r.evidence_weight, floor=r.settings.evidence_floor,
             failing_runs=[vars(f) for f in r.failing_runs],
+            state=r.state, state_note=r.state_note, check=vars(basis_for(r.check_kind)),
+            window_from=r.window_from, window_to=r.window_to,
+            comparison="paired" if r.paired else "unpaired", limitations=r.limitations,
+            paired=PairedOut(
+                candidate=r.paired.candidate, current=r.paired.current, n_prompts=r.paired.n_prompts,
+                both_passed=r.paired.both, only_candidate_passed=r.paired.only_candidate,
+                only_current_passed=r.paired.only_current, neither_passed=r.paired.neither,
+                gap_points=r.paired.gap * 100, low_points=r.paired.low * 100, high_points=r.paired.high * 100,
+            ) if r.paired else None,
         ),
         progress=d.progress, retest_candidates=d.retest_candidates,
         forecast=ForecastOut(**vars(r.forecast)) if r.forecast else None, summary=summary,
         summary_prompt_version=summary_version, warnings=d.warnings,
         next_step=d.next_step, computed_at=r.computed_at,
+        promising=PromisingOut(
+            model=d.promising.model, current=d.promising.current, gap_points=d.promising.gap * 100,
+            low_points=d.promising.low * 100, high_points=d.promising.high * 100,
+            more_needed=d.promising.more_needed) if d.promising else None,
+        sure_enough=SureEnoughOut(needed=d.sure_enough_needed, have=d.sure_enough_have)
+        if d.verdict == "INSUFFICIENT_EVIDENCE" and d.sure_enough_have is not None else None,
     )
 
 
@@ -607,6 +756,412 @@ async def get_spend(
     return [SpendOut(**vars(s)) for s in await spend_by_job(session, project.project_id, days=days)]
 
 
+@app.get("/v1/insights/features", response_model=FeatureBreakdownOut, tags=["insights"])
+async def get_feature_breakdown(
+    days: int = Query(default=30, ge=1, le=365, description="How many days back to count"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> FeatureBreakdownOut:
+    """Calls, tokens, list-price cost and checked answers for each feature label your app sent, with the calls that carried no
+    label shown as their own row. The labels are your app's own words: not verified, not a chargeback record. Analysis only."""
+    return await feature_breakdown(session, project.project_id, days=days)
+
+
+def planner_query(
+    job: str = Query(max_length=200, description="The task whose recorded calls the scenario is based on"),
+    days: int = Query(default=30, ge=1, le=365, description="How many days of history to use"),
+    calls: list[int] = Query(default=[1000, 10000, 100000], max_length=6, description="Tasks per period to price (up to 6 scenarios)"),
+    retry_rate: float = Query(default=0.0, ge=0, le=10, description="Extra attempts per task, typed by you"),
+    input_change_pct: float = Query(default=0.0, ge=-90, le=1000),
+    output_change_pct: float = Query(default=0.0, ge=-90, le=1000),
+    exclude_far_out: bool = Query(default=False, description="Leave out far-out calls (visible, reversible)"),
+    period: str = Query(default="month", pattern="^(day|week|month)$"),
+) -> dict[str, Any]:
+    """The planner's typed assumptions, checked once. The screen and its CSV file both read them through here."""
+    if any(c < 1 or c > 1_000_000_000 for c in calls):
+        raise HTTPException(422, "Tasks per period must be between 1 and 1,000,000,000")
+    return {"job": job, "days": days, "calls": calls, "retry_rate": retry_rate, "input_change_pct": input_change_pct,
+            "output_change_pct": output_change_pct, "exclude_far_out": exclude_far_out, "period": period}
+
+
+async def _plan_or_404(session: AsyncSession, project: Project, q: dict[str, Any]) -> PlannerOut:
+    try:
+        return await plan(session, project.project_id, **q)
+    except LookupError as exc:
+        raise HTTPException(404, f"Unknown task '{q['job']}'") from exc
+
+
+@app.get("/v1/insights/planner", response_model=PlannerOut, tags=["insights"])
+async def get_planner(
+    q: dict[str, Any] = Depends(planner_query),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> PlannerOut:
+    """What a task might cost at traffic levels you type, from its own recorded calls: list-price scenarios with a range where the data
+    supports one. Not a bill or a forecast. Nothing is sent to a provider and nothing is changed."""
+    return await _plan_or_404(session, project, q)
+
+
+async def _csv_download(session: AsyncSession, project: Project, user: User | None, *, columns, rows, text, filename: str, event: str, **audit) -> Response:
+    """The one way a new project export leaves the server: neutralized text, a BOM for Excel, an audit event for company projects."""
+    body, changed = write_csv(columns, rows, text_columns=text)
+    if project.organisation_id is not None and user is not None:
+        from .auth.orgs import audit_project
+        await audit_project(session, project, user, event, rows=len(rows), **audit)
+        await session.commit()
+    safe = re.sub(r"[^A-Za-z0-9._-]", "-", project.slug or project.project_id)
+    return Response(content=csv_file(body), media_type="text/csv; charset=utf-8", headers={
+        "Content-Disposition": f'attachment; filename="model-cost-memory-{safe}-{filename}.csv"', "Cache-Control": "no-store",
+        "X-Export-Rows": str(len(rows)), "X-Export-Neutralized": str(changed), "X-Content-Type-Options": "nosniff"})
+
+
+@app.get("/v1/insights/planner/export.csv", tags=["insights"])
+async def export_planner_csv(
+    q: dict[str, Any] = Depends(planner_query),
+    project: Project = Depends(current_project), user: User | None = Depends(optional_user),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """The planner's current result as a CSV file, for admins and owners: one row per model and scenario, with the assumptions, the history
+    period, the price versions used and the not-a-bill wording on every row. Unknown figures are empty, never 0. No prompt or answer text."""
+    result = await _plan_or_404(session, project, q)
+    rows = planner_rows(result, retry_rate=q["retry_rate"], input_change_pct=q["input_change_pct"], output_change_pct=q["output_change_pct"],
+                        far_out=q["exclude_far_out"])
+    return await _csv_download(session, project, user, columns=PLANNER_COLUMNS, rows=rows, text=PLANNER_TEXT, filename=f"planner-{re.sub(r'[^A-Za-z0-9._-]', '-', q['job'])}",
+                               event="project_data_exported", export="planner", days=q["days"])
+
+
+@app.get("/v1/insights/coverage", response_model=CoverageOut, tags=["insights"])
+async def get_coverage(
+    days: int = Query(default=30, ge=1, le=365, description="How many days back to count"),
+    provider: str | None = Query(default=None, max_length=100, description="Only this provider"),
+    model: str | None = Query(default=None, max_length=200, description="Only this model"),
+    job: str | None = Query(default=None, max_length=200, description="Only this task"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> CoverageOut:
+    """How complete and reliable the records Model & Cost Memory RECEIVED are: attempts, usage, prices, checks, duplicates and flagged
+    calls, each with its denominator and the reason it is doubtful. It cannot see calls that never reached this product. Read-only."""
+    return await coverage(session, project.project_id, days=days, provider=provider, model=model, job=job)
+
+
+@app.get("/v1/insights/features/export.csv", tags=["insights"])
+async def export_features_csv(
+    days: int = Query(default=30, ge=1, le=365, description="The last N days"),
+    project: Project = Depends(current_project), user: User | None = Depends(optional_user),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Cost by feature label as a CSV file, for admins and owners: one row per label, with calls, tokens, list-price cost, unpriced calls and
+    cost per correct answer. Labels are your app's own words and are not verified. Aggregates only: no prompts, answers, keys or people."""
+    mode = project.billing_mode if project.billing_mode in ("subscription", "both") else "per_use"
+    cost = "spend_usd" if mode == "per_use" else "list_price_usd"
+    columns = [cost if c == "spend_usd" else c for c in FEATURE_COLUMNS]
+    rows = feature_rows(await feature_breakdown(session, project.project_id, days=days), cost_column=cost, cost_basis=COST_BASIS[mode])
+    return await _csv_download(session, project, user, columns=columns, rows=rows, text=FEATURE_TEXT, filename=f"cost-by-feature-last-{days}-days",
+                               event="project_data_exported", export="features", days=days)
+
+
+@app.get("/v1/insights/cost-receipt", response_model=CostReceiptOut, tags=["insights"])
+async def get_cost_receipt(
+    days: int = Query(default=30, ge=1, le=365, description="How many days back to count"),
+    job: str | None = Query(default=None, max_length=200, description="Only this job"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> CostReceiptOut:
+    """How the spend figure is worked out: currency and period, passed / failed / unchecked / left-out calls,
+    how many are unpriced, the dated list prices used, and cost per correct answer with its formula.
+    List prices at the time of each call: an estimate, not an invoice."""
+    job_id = (await _job(session, project, job)).job_id if job else None
+    return CostReceiptOut.model_validate(
+        asdict(await cost_receipt(session, project.project_id, days=days, job_id=job_id)))
+
+
+@app.get("/v1/insights/projection", response_model=ProjectionOut, tags=["insights"])
+async def get_projection(
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> ProjectionOut:
+    """This month's spend so far and a month-end forecast, kept apart. The forecast is a range, says "not enough
+    history" instead of guessing from a short or sparse history, and names the timezone, the month's first and last
+    day, how many calls have no price, and what can make the figures late. The same figures drive the budget alerts.
+    Alert-only: nothing is blocked."""
+    p = await month_projection(session, project)
+    data = asdict(p)
+    data["recent_days"] = [{"day": d, "spend_usd": float(v)} for d, v in p.recent_days]
+    return ProjectionOut.model_validate(data)
+
+
+BASIS_NOTE = ("Measured from this project's own calls, whole UTC days only, the last period against the same number of "
+              "days before it. This shows what changed and what else was recorded at the same time. It cannot show why: "
+              "a recorded change can coincide with a difference without causing it.")
+
+
+@app.get("/v1/insights/changes", response_model=ChangesOut, tags=["insights"])
+async def get_changes(
+    days: int = Query(7, description="Length of each period: 7, 14 or 30"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> ChangesOut:
+    """What changed between the last `days` whole days and the same number of days before: calls, tokens, cached share,
+    repeated calls, model mix, task mix and spend, with coverage and missing data, plus what else the product recorded in
+    the window (a new prompt version, a new model, a list-price change). Observation and context are kept apart; nothing
+    here is a cause. Deterministic: no model writes any of it."""
+    if days not in CHANGE_DAYS:
+        raise HTTPException(422, f"days must be one of {list(CHANGE_DAYS)}")
+    mode = project.billing_mode if project.billing_mode in ("subscription", "both") else "per_use"
+    c = await what_changed(session, project.project_id, days=days, mode=mode)
+    money = mode != "subscription"
+
+    def period(p):
+        d = asdict(p)
+        d["cache_read_tokens"] = d.pop("cache_read")
+        d["spend_usd"] = d["spend_usd"] if money else None
+        d["calls_with_usage"] = d.pop("with_usage")
+        d["calls_with_task_id"] = d.pop("with_trace")
+        d.pop("repeats")
+        return d
+
+    return ChangesOut(
+        days=days, mode=mode, comparable=c.comparable, current=period(c.current), previous=period(c.previous),
+        observations=[asdict(o) for o in c.observations], model_mix=[asdict(r) for r in c.model_mix],
+        task_mix=[asdict(r) for r in c.task_mix], splits=[asdict(s) for s in c.splits],
+        events=[asdict(e) for e in c.events], notes=c.notes, not_recorded=c.not_recorded, basis=BASIS_NOTE)
+
+
+@app.get("/v1/insights/savings", response_model=SavingsOut, tags=["insights"])
+async def get_savings(project: Project = Depends(current_project), session: AsyncSession = Depends(get_session)) -> SavingsOut:
+    """After you changed the model a task runs on: the observed change in cost per correct answer (it can be negative) and, kept apart,
+    an estimated counterfactual. Needs 14 comparable days on each side, enough checked calls and a like-for-like prompt mix, else it says
+    "not enough comparable data". Recommendations, "promising" labels and trials are never counted. Analysis only: nothing is changed."""
+    found = await savings_insight(session, project)
+    entries = [SavingsEntry(**{**asdict(e), "switch_date": e.switch_date}) for e in found.entries]
+    counts: dict[str, int] = {}
+    for e in entries:
+        counts[e.status] = counts.get(e.status, 0) + 1
+    est = [e.estimated_avoided for e in entries if e.estimated_avoided is not None]
+    total = SavingsTotal(
+        label="ESTIMATED counterfactuals added up. Not money you can count, and separate from the realized changes above",
+        unit=found.unit, point=sum(x.point or 0.0 for x in est), low=sum(x.low or 0.0 for x in est), high=sum(x.high or 0.0 for x in est),
+        entries=len(est)) if est else None
+    return SavingsOut(
+        mode=found.mode, unit=found.unit, as_of=found.today, jobs_checked=found.jobs_checked, entries=entries, counts=counts,
+        estimated_avoided_total=total, notes=found.notes,
+        method=["Each task's own cost per correct answer, before and after the day its model changed, over equal periods of whole weeks.",
+                "Prompts are compared by size, so a shift in the kind of work is not counted as a saving.",
+                "The shown range is 90%. A saving is shown only when even its cautious end is above zero.",
+                "If quality fell beyond its range it is called cheaper but less correct, not a saving.",
+                "Fewer than 14 days, 100 checked calls or 30 correct answers on either side: not enough comparable data."])
+
+
+@app.get("/v1/insights/export.csv", tags=["insights"])
+async def export_csv(
+    days: int = Query(30, ge=1, le=365, description="The last N days, today included: the same period the Overview shows"),
+    ai_task: str | None = Query(default=None, max_length=200, description="Only this AI task"),
+    model: str | None = Query(default=None, max_length=200, description="Only this model"),
+    project: Project = Depends(current_project), user: User | None = Depends(optional_user),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """The project's daily figures as a CSV file, for admins and owners: one row per day, AI task and model, for exactly the period and
+    filters asked for. Aggregates and labels only: no prompt or answer text, no keys, no people. Each row carries its period, filters,
+    units and cost basis. Text values a spreadsheet could run as a formula are prefixed with an apostrophe; `X-Export-Neutralized` says how many."""
+    mode = project.billing_mode if project.billing_mode in ("subscription", "both") else "per_use"
+    today = datetime.now(UTC).date()
+    start = today - timedelta(days=days - 1)
+    points = [p for p in await insights_daily(session, project.project_id, days=days + 1) if start <= p.day <= today]
+    if ai_task:
+        points = [p for p in points if p.job == ai_task]
+    if model:
+        points = [p for p in points if p.model == model]
+    cost = "spend_usd" if mode == "per_use" else "list_price_usd"
+    columns = [cost if c == "spend_usd" else c for c in PROJECT_COLUMNS]
+    meta = {"currency": "USD", "cost_basis": COST_BASIS[mode], "pay_mode": mode, "period_start": start.isoformat(), "period_end": today.isoformat(),
+            "filter_ai_task": ai_task or "", "filter_model": model or ""}
+    rows = [{
+        "day": p.day.isoformat(), "ai_task": p.job, "model": p.model, "runs": p.runs, "passed": p.passed, "failed": p.failed,
+        "unchecked_runs": max(0, p.runs - p.passed - p.failed), "unpriced_runs": p.unpriced_runs, cost: p.spend_usd,
+        "tokens_in": p.tokens_in, "tokens_out": p.tokens_out, "cache_read_tokens": p.cache_read_tokens, "cache_write_tokens": p.cache_write_tokens, **meta,
+    } for p in points]
+    body, changed = write_csv(columns, rows, text_columns=PROJECT_TEXT)
+    if project.organisation_id is not None and user is not None:
+        from .auth.orgs import audit_project
+        await audit_project(session, project, user, "project_data_exported", days=days, rows=len(rows), filtered=bool(ai_task or model))
+        await session.commit()
+    safe = re.sub(r"[^A-Za-z0-9._-]", "-", project.slug or project.project_id)
+    return Response(content=csv_file(body), media_type="text/csv; charset=utf-8", headers={
+        "Content-Disposition": f'attachment; filename="model-cost-memory-{safe}-last-{days}-days.csv"', "Cache-Control": "no-store",
+        "X-Export-Rows": str(len(rows)), "X-Export-Neutralized": str(changed), "X-Content-Type-Options": "nosniff"})
+
+
+@app.get("/v1/insights/tool-servers", response_model=ToolServersOut, tags=["insights"])
+async def get_tool_servers(
+    days: int = Query(30, description="Period in days: 7, 14, 30 or 90"),
+    job: str | None = Query(default=None, max_length=200, description="Only one AI task"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> ToolServersOut:
+    """MCP and tool-server calls recorded in this project, by server and tool, with the tasks they came from, how often, how long the
+    requests took and the usage of those whole requests. A server is `provider_reported` only when the provider's own response named
+    it; a tool name that merely looks like mcp__server__tool is `likely`. No provider reports tokens per tool, so none is claimed.
+    Analysis only: nothing is called, blocked or changed."""
+    if days not in TOOL_DAYS:
+        raise HTTPException(422, f"days must be one of {list(TOOL_DAYS)}")
+    if job is not None and (await session.execute(
+            select(Job.job_id).where(Job.project_id == project.project_id, Job.name == job))).first() is None:
+        raise HTTPException(404, "No such AI task")
+    mode = project.billing_mode if project.billing_mode in ("subscription", "both") else "per_use"
+    t = await tool_servers_insight(session, project.project_id, days=days, job=job, mode=mode)
+    server_rows = [asdict(s) | {"tools": [{"name": n, "calls": c} for n, c in s.tools], "tasks": [{"name": n, "calls": c} for n, c in s.tasks]}
+                   for s in t.servers]
+    return ToolServersOut(
+        days=days, since=t.since, until=t.until, job=job, mode=mode, servers=server_rows,
+        own_tools=asdict(t.own_tools) | {"tools": [{"name": n, "calls": c} for n, c in t.own_tools.tools]},
+        totals=asdict(t.totals), support=[asdict(s) for s in t.support], unreadable_calls=t.unreadable_calls,
+        truncated=t.truncated, notes=t.notes, method=t.method)
+
+
+def _totals(t) -> TaskTotalsOut:
+    return TaskTotalsOut(calls=t.calls, tokens=t.tokens, cost_usd=t.cost_usd, unpriced_calls=t.unpriced_calls)
+
+
+def _structure(tree) -> TaskStructureOut:
+    linked = sum(1 for n in tree.roots for _ in _walk(n)) - len(tree.roots)
+    linked += sum(1 for n in tree.unlinked for _ in _walk(n)) - len(tree.unlinked)
+    return TaskStructureOut(roots=len(tree.roots), linked_children=linked, unlinked=len(tree.unlinked), no_structure=len(tree.unstructured))
+
+
+def _walk(node):
+    stack = [node]
+    while stack:
+        cur = stack.pop()
+        yield cur
+        stack.extend(reversed(cur.children))
+
+
+def _flat_nodes(tree) -> list[TaskNodeOut]:
+    """Display order: every tree, then the unlinked ones, then the calls with no structure. Depth and parent let the screen fold any branch."""
+    out: list[TaskNodeOut] = []
+
+    def emit(top, section):
+        stack = [(top, 0, None)]
+        while stack:
+            n, depth, parent = stack.pop()
+            c = n.call
+            out.append(TaskNodeOut(
+                run_id=c.run_id, parent_run_id=parent, depth=depth, section=section, link=n.link, reason=n.reason,
+                missing_parent=n.missing_parent, duplicate_span=n.duplicate_span, child_count=len(n.children), agent=c.agent, model=c.model,
+                job=c.job, span_id=c.span_id, parent_span_id=c.parent_span_id, started_at=c.created_at, latency_ms=c.latency_ms,
+                tools=sorted(set(c.tool_names))[:8], own=_totals(n.own), subtree=_totals(n.subtree)))
+            for child in reversed(n.children):
+                stack.append((child, depth + 1, c.run_id))
+
+    for n in tree.roots:
+        emit(n, "tree")
+    for n in tree.unlinked:
+        emit(n, "unlinked")
+    for n in tree.unstructured:
+        emit(n, "no_structure")
+    return out
+
+
+def _repeated_out(r) -> RepeatedCallOut | None:
+    if r is None:
+        return None
+    return RepeatedCallOut(
+        step=r.step, basis=r.basis, repeats=r.repeats, in_window=r.in_window, threshold=r.repeats_threshold, window=r.window,
+        calls=[RepeatedCallItemOut(**c) for c in r.calls], median_gap_seconds=r.median_gap_seconds, results_stored=r.results_stored,
+        distinct_results=r.distinct_results, failed_calls=r.failed_calls, cost_usd=r.cost_usd, hints=r.hints)
+
+
+def _spread(d) -> SpreadOut:
+    return SpreadOut(**d)
+
+
+@app.get("/v1/insights/agent-tasks", response_model=AgentTasksOut, tags=["insights"])
+async def get_agent_tasks(
+    days: int = Query(30, description="Period in days: 7, 14, 30 or 90"),
+    job: str | None = Query(default=None, max_length=200),
+    repeats: int = Query(5, description="Flag a call repeated at least this many times: 3, 4, 5, 6, 8 or 10"),
+    window: int = Query(7, description="within this many consecutive calls: 5, 7, 10 or 15"),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> AgentTasksOut:
+    """The project's largest tasks (calls sharing a trace id), with what each measured, how much of its structure is known, any
+    possible repeated call at the chosen threshold, and cohorts of equivalent tasks. Analysis only: nothing is stopped, cancelled
+    or reconfigured. A repeated call is a possibility, never a verdict: polling and retries repeat on purpose."""
+    if job is not None and (await session.execute(
+            select(Job.job_id).where(Job.project_id == project.project_id, Job.name == job))).first() is None:
+        raise HTTPException(404, "No such AI task")
+    mode = project.billing_mode if project.billing_mode in ("subscription", "both") else "per_use"
+    try:
+        r = await agent_tasks_insight(session, project.project_id, days=days, job=job, repeats=repeats, window=window, mode=mode)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return AgentTasksOut(
+        days=r.days, repeats=r.repeats, window=r.window, mode=mode, repeat_choices=list(AGENT_REPEAT_CHOICES),
+        window_choices=list(AGENT_WINDOW_CHOICES), min_cohort=AGENT_MIN_COHORT,
+        tasks=[AgentTaskSummaryOut(
+            trace_id=t.trace_id, jobs=t.jobs, agents=t.agents, models=t.models, first_at=t.first_at, last_at=t.last_at,
+            totals=_totals(t.tree.totals), structure=_structure(t.tree), repeated_step=t.repeated.step if t.repeated else None,
+            repeated_times=t.repeated.repeats if t.repeated else None, notes=t.tree.notes) for t in r.tasks],
+        cohorts=[CohortOut(job=c.job, models=c.models, single_agent=CohortSideOut(tokens=_spread(c.single_agent["tokens"]),
+                 cost_usd=_spread(c.single_agent["cost_usd"]) if c.single_agent["cost_usd"] else None),
+                 multi_agent=CohortSideOut(tokens=_spread(c.multi_agent["tokens"]),
+                 cost_usd=_spread(c.multi_agent["cost_usd"]) if c.multi_agent["cost_usd"] else None)) for c in r.cohorts],
+        notes=r.notes, method=r.method)
+
+
+@app.get("/v1/insights/agent-task", response_model=AgentTaskOut, tags=["insights"])
+async def get_agent_task(
+    trace_id: str = Query(max_length=200),
+    repeats: int = Query(5),
+    window: int = Query(7),
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> AgentTaskOut:
+    """One task as a tree: each recorded call with its parent and children, unlinked and unstructured calls apart, totals that count
+    each call once, and any possible repeated call with the calls themselves as evidence. Scoped to this project: another project's
+    trace id is a 404."""
+    if repeats not in AGENT_REPEAT_CHOICES or window not in AGENT_WINDOW_CHOICES or window < repeats:
+        raise HTTPException(422, "choose repeats from 3, 4, 5, 6, 8 or 10 and a window from 5, 7, 10 or 15, at least as large as repeats")
+    mode = project.billing_mode if project.billing_mode in ("subscription", "both") else "per_use"
+    t = await agent_task_insight(session, project.project_id, trace_id, repeats=repeats, window=window, mode=mode)
+    if t is None:
+        raise HTTPException(404, "No such task")
+    return AgentTaskOut(
+        trace_id=t.trace_id, jobs=t.jobs, agents=t.agents, models=t.models, first_at=t.first_at, last_at=t.last_at,
+        totals=_totals(t.tree.totals), structure=_structure(t.tree), nodes=_flat_nodes(t.tree), repeated=_repeated_out(t.repeated),
+        notes=t.tree.notes + (["Only the first 1,000 calls of this task were read."] if t.truncated else []), truncated=t.truncated,
+        method=AGENT_METHOD)
+
+
+@app.get("/v1/notices", response_model=NoticesOut, tags=["notices"])
+async def get_notices(
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> NoticesOut:
+    """Deprecation and shutdown notices from the providers' own pages for the models this project ran in the last 30
+    days. Each has a checked-at date, the provider's own wording and a link to its exact section. Information only:
+    nothing is changed or switched. A notice about a provider's own API is not applied to calls served by another host,
+    which sets its own dates."""
+    now = datetime.now(UTC)
+    shown, elsewhere, sources = await project_notices(session, project, now=now)
+    by_source = {s.source_id: s for s in sources}
+    return NoticesOut(
+        notices=[NoticeOut(
+            notice_id=p.notice.notice_id, provider=p.notice.provider, provider_name=PROVIDER_NAMES.get(p.notice.provider, p.notice.provider),
+            model=p.notice.model, status=p.notice.status, listed_date=p.notice.notice_date, date_wording=p.notice.wording,
+            deprecated_on=p.notice.deprecated_on, replacement=p.notice.replacement, section=p.notice.section,
+            notice_url=p.notice.notice_url, source_name=by_source[p.notice.source_id].name, checked_at=p.notice.checked_at,
+            text=p.text, served_by_known=p.served_by_known, stale_note=p.stale_note) for p in shown],
+        hosted_elsewhere=[NoticeElsewhereOut(model=n.model, provider_name=PROVIDER_NAMES.get(n.provider, n.provider), notice_url=n.notice_url)
+                          for n in elsewhere],
+        sources=[NoticeSourceOut(
+            source_id=s.source_id, name=s.name, provider=s.provider, url=s.url, status=s.status or "NEVER",
+            last_checked_at=s.last_checked_at, last_ok_at=s.last_ok_at, detail=s.detail, notice_count=s.notice_count or 0,
+            stale=bool(s.last_ok_at and now - s.last_ok_at > STALE_AFTER), covers=BY_ID[s.source_id].covers) for s in sources],
+        note="Notices are information only. Nothing is changed, replaced or switched for you. Dates are the provider's own "
+             "wording: 'not sooner than', 'tentative' and 'earliest possible' are never promised dates.")
+
+
 @app.get("/v1/insights/daily", response_model=list[DayPointOut], tags=["insights"])
 async def get_daily(
     days: int = Query(default=60, ge=1, le=365, description="How many days back"),
@@ -643,16 +1198,47 @@ async def get_agent_insights(
 async def get_prompt_insights(
     days: int = Query(default=30, ge=1, le=365, description="How many days back"),
     job: str | None = Query(default=None, max_length=200, description="Only this job"),
-    limit: int = Query(default=3, ge=1, le=10, description="How many prompts to return"),
+    limit: int = Query(default=3, ge=1, le=10, description="How many rows to return"),
+    group_by: Literal["task_version", "task", "agent", "prompt_version", "template"] = Query(
+        default="task_version", description="What a row is: a task and its prompt version, a task, an agent, a prompt version, or the agent, task and version together (the template receipt)"),
+    request: Request = None,  # type: ignore[assignment]
+    show_text: bool = Query(default=False, description="Also return a masked preview of the repeated start of a prompt. Off by default: prompt text is not returned unless asked for"),
     project: Project = Depends(current_project),
     session: AsyncSession = Depends(get_session),
 ) -> PromptsOut:
-    """Which prompts use the most tokens (largest first), and how much of each prompt is identical in
-    every call, so you can see what to trim or cache. Production runs only; the repeated-text figures
-    use the most recent calls whose text is still stored."""
-    found = await prompt_insights(session, project.project_id, days=days, job=job, limit=limit)
+    """Where the tokens went: the biggest contributors by share of billed tokens, with call counts and
+    per-call averages, what each total is made of (only where the provider reports it) and how much of a
+    prompt is identical in every call. Production runs, over the exact period returned. Token sums cover
+    every call; the repeated-text figures are an estimate from the newest calls whose text is still stored."""
+    found = await prompt_insights(session, project.project_id, days=days, job=job, limit=limit, group_by=group_by,
+                                  show_text=show_text and can_see_content(request))
     return PromptsOut(
-        days=found.days, total_tokens=found.total_tokens, groups=[PromptGroupOut(**vars(g)) for g in found.groups]
+        days=found.days, total_tokens=found.total_tokens, period_start=found.period_start,
+        period_end=found.period_end, timezone=found.timezone, total_calls=found.total_calls,
+        group_by=found.group_by, grouping_note=found.grouping_note,
+        groups=[PromptGroupOut.model_validate(asdict(g)) for g in found.groups],
+    )
+
+
+@app.get("/v1/insights/prompt-versions", response_model=PromptVersionsOut, tags=["insights"])
+async def get_prompt_versions(
+    job: str = Query(max_length=200, description="The job to compare prompt versions for"),
+    days: int = Query(default=30, ge=1, le=365, description="How many days back"),
+    request: Request = None,  # type: ignore[assignment]
+    project: Project = Depends(current_project),
+    session: AsyncSession = Depends(get_session),
+) -> PromptVersionsOut:
+    """One job's prompt versions side by side: calls, tokens, cached share, list-price cost and checked answers.
+    Versions are the `prompt_version` values you sent, or, when you sent none, detected from where the start of
+    the stored prompt text changed and stayed changed. Production runs only. Shows what changed, not why."""
+    found = await prompt_versions(session, project.project_id, job, days=days)
+    if found is None:
+        raise HTTPException(404, f"No job named '{job}'")
+    seen = can_see_content(request)
+    return PromptVersionsOut(
+        job=job, days=days, source=found.source, reason=found.reason,
+        versions=[PromptVersionOut(**({**vars(v), "start_preview": None} if not seen else vars(v))) for v in found.versions],
+        comparison=PromptComparisonOut(**vars(found.comparison)) if found.comparison else None,
     )
 
 
@@ -720,35 +1306,99 @@ async def _retest_out(session: AsyncSession, row: Retest, job_name: str, project
     cap = float(project.retest_monthly_cap_usd)
     spent = float(await spent_this_month(session, project.project_id))
     decided = row.passed + row.failed
+    verdict = conclusion(row.passed, row.failed, row.runs_planned, row.status)
     return RetestOut(
+        confirmed_at=row.confirmed_at, provider_host=row.provider_host, evaluator=row.evaluator, price_basis=row.price_basis,
+        sample_size=len(row.sample_run_ids) if row.sample_run_ids is not None else None,
+        evidence=verdict["evidence"] if row.status not in ("QUEUED", "RUNNING") else "inconclusive",
+        evidence_note=verdict["evidence_note"] if row.status not in ("QUEUED", "RUNNING") else "Still running: no result yet.",
+        pass_rate_low=verdict["pass_rate_low"], pass_rate_high=verdict["pass_rate_high"],
         retest_id=row.retest_id, job=job_name, candidate_model=row.candidate_model, trigger=row.trigger,
         status=row.status, budget_usd=float(row.budget_usd), spent_usd=float(row.spent_usd),
         runs_planned=row.runs_planned, runs_done=row.runs_done, passed=row.passed, failed=row.failed,
         pass_rate=row.passed / decided if decided else None, monthly_cap_usd=cap,
         cap_remaining_usd=max(cap - spent, 0.0), message=row.message, created_at=row.created_at,
         started_at=row.started_at, finished_at=row.finished_at,
+        stopping=row.stop_requested_at is not None and row.status in ("QUEUED", "RUNNING"),
     )
+
+
+@app.post("/v1/jobs/{job}/retest/{retest_id}/stop", response_model=RetestOut, tags=["retests"])
+async def stop_retest(
+    job: str, retest_id: uuid.UUID, project: Project = Depends(current_project),
+    user: User | None = Depends(optional_user), session: AsyncSession = Depends(get_session),
+) -> RetestOut:
+    """Stop a trial. One that has not started is closed at once and sends nothing. One that is running starts no new call; the calls
+    already in flight finish (they are already paid for) and every result so far is kept. Asking twice is harmless."""
+    found = await _job(session, project, job)
+    row = await session.get(Retest, retest_id, with_for_update=True)
+    if row is None or row.job_id != found.job_id:
+        raise HTTPException(404, "Trial not found")
+    now = datetime.now(UTC)
+    if row.status == "QUEUED":
+        row.status, row.stop_requested_at, row.finished_at = "STOPPED_USER", now, now
+        row.message = "Stopped by you before it started. Nothing was sent to the provider."
+    elif row.status == "RUNNING":
+        if row.stop_requested_at is None:
+            row.stop_requested_at = now
+    elif row.status != "STOPPED_USER":
+        raise HTTPException(409, {"code": "already_finished", "message": "This trial has already finished, so there is nothing to stop."})
+    if user is not None:
+        from .auth.orgs import audit_project
+        await audit_project(session, project, user, "trial_stopped")
+    await session.commit()
+    return await _retest_out(session, row, found.name, project)
 
 
 @app.post("/v1/jobs/{job}/retest", response_model=RetestOut, status_code=202, tags=["retests"])
 async def start_retest(
     job: str, body: RetestCreate, project: Project = Depends(current_project),
-    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(optional_user), session: AsyncSession = Depends(get_session),
 ) -> RetestOut:
     """Queue a re-test: replay sampled past runs on `candidate_model`, spending at most `budget_usd`.
+
+    Needs the single-use `confirmation` from `POST /v1/jobs/{job}/retest/preview` of exactly these values: nothing is sent to
+    a provider before a person has seen what would be sent and confirmed it.
 
     409 with `{"code", "message"}` when it cannot start; `code` is one of consent_off, project_off,
     not_checkable, provider_key_required (ask for the key, then try again), cap_reached, already_running.
     Poll `GET /v1/jobs/{job}/retest/{id}` for progress.
     """
     found = await _job(session, project, job)
+    wanted = body.sample_size or get_settings().retest_default_sample
     try:
+        nonce = read_token(body.confirmation, project_id=project.project_id, job_id=found.job_id, candidate=body.candidate_model,
+                           budget=body.budget_usd, sample=wanted, user_id=user.user_id if user else None)
+        shown = await build_preview(session, project, found, body.candidate_model, body.budget_usd, body.sample_size,
+                                    user_id=user.user_id if user else None)  # what the person is agreeing to, as of now
         row = await enqueue(session, project, found, body.candidate_model, body.budget_usd, "MANUAL")
     except RetestRefused as exc:
         raise HTTPException(409, {"code": exc.code, "message": str(exc)}) from exc
-    row.runs_planned = body.sample_size or get_settings().retest_default_sample
-    await session.commit()
+    row.runs_planned = wanted
+    row.confirmation_hash, row.confirmed_at = single_use_hash(nonce), datetime.now(UTC)
+    row.confirmed_by = user.user_id if user else None
+    row.preview = {k: v for k, v in shown.items() if k not in ("confirmation", "expires_at")}
+    row.price_basis = shown.get("price_basis")
+    try:
+        await session.commit()
+    except IntegrityError as exc:  # the same confirmation used twice
+        await session.rollback()
+        raise HTTPException(409, {"code": "confirmation_used", "message": "This confirmation was already used. Ask for a new preview."}) from exc
     return await _retest_out(session, row, found.name, project)
+
+
+@app.post("/v1/jobs/{job}/retest/preview", response_model=RetestPreviewOut, tags=["retests"])
+async def preview_retest(
+    job: str, body: RetestPreviewRequest, project: Project = Depends(current_project),
+    user: User | None = Depends(optional_user), session: AsyncSession = Depends(get_session),
+) -> RetestPreviewOut:
+    """What a replay would send, to whom, and what it could cost, before anything is called. Makes no provider call and
+    changes nothing. When it can start, the answer holds a single-use confirmation for exactly these values; starting the
+    replay needs it, and it expires after a few minutes."""
+    found = await _job(session, project, job)
+    shown = await build_preview(session, project, found, body.candidate_model, body.budget_usd, body.sample_size,
+                                user_id=user.user_id if user else None)
+    return RetestPreviewOut(**shown)
 
 
 @app.get("/v1/jobs/{job}/retest/{retest_id}", response_model=RetestOut, tags=["retests"])
@@ -760,7 +1410,7 @@ async def get_retest(
     found = await _job(session, project, job)
     row = await session.get(Retest, retest_id)
     if row is None or row.job_id != found.job_id:
-        raise HTTPException(404, "Re-test not found")
+        raise HTTPException(404, "Trial not found")
     return await _retest_out(session, row, found.name, project)
 
 
@@ -785,13 +1435,17 @@ def _key_out(key: ProviderKey | None) -> ProviderKeyOut | None:
 
 @app.get("/v1/retest/limits", response_model=RetestLimits, tags=["retests"])
 async def get_retest_limits(
+    request: Request = None,  # type: ignore[assignment]
     project: Project = Depends(current_project), session: AsyncSession = Depends(get_session)
 ) -> RetestLimits:
-    """This month's re-test cap, what is spent, and whether the provider key has been given."""
+    """This month's re-test cap, what is spent, and whether the provider key has been given. Only people who may
+    change the key see its last four characters; everyone else sees that one is stored."""
     cap, spent = float(project.retest_monthly_cap_usd), float(await spent_this_month(session, project.project_id))
+    key = _key_out(await session.get(ProviderKey, project.project_id))
+    if key is not None and not role_can(getattr(request.state, "role", None), "providerkey.change"):
+        key = key.model_copy(update={"key_hint": "\u2022\u2022\u2022\u2022"})
     return RetestLimits(monthly_cap_usd=cap, spent_this_month_usd=spent, cap_remaining_usd=max(cap - spent, 0.0),
-                        retest_allowed=project.retest_allowed,
-                        provider_key=_key_out(await session.get(ProviderKey, project.project_id)))
+                        retest_allowed=project.retest_allowed, provider_key=key)
 
 
 @app.put("/v1/provider-key", response_model=ProviderKeyOut, tags=["retests"])
@@ -813,7 +1467,7 @@ async def put_provider_key(
         await start_on_first_key(session, project)
     except Exception:  # the key is saved either way; the scheduler's triggers still run
         await session.rollback()
-        log.exception("first-key re-tests were not started", extra={"project_id": project.project_id})
+        log.exception("first-key trials were not started", extra={"project_id": project.project_id})
     return _key_out(key)
 
 

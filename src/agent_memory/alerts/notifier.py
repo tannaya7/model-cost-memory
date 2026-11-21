@@ -11,7 +11,7 @@ Replay protection (modelled on Stripe's and Slack's schemes): every delivery als
 `X-MCM-Timestamp: <unix seconds>` and `X-MCM-Signature-V2: sha256=<hex HMAC-SHA256 of
 "<timestamp>.<body>">`. A receiver should recompute the V2 signature with a constant-time compare and
 reject a timestamp more than 5 minutes (TIMESTAMP_TOLERANCE_SECONDS) from its own clock. The old
-body-only `X-MCM-Signature` is still sent unchanged for a transition period (dual-send) so existing
+body-only `X-MCM-Signature` is still sent unchanged until 1 March 2027 (LEGACY_SIGNATURE_UNTIL) so existing
 receivers keep working; it carries no replay protection, so move to V2 and then stop reading it.
 The secret is never logged.
 
@@ -32,7 +32,7 @@ import hmac
 import json
 import logging
 import random
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 from sqlalchemy import select, update
@@ -55,6 +55,13 @@ def sign(secret: str, body: bytes) -> str:
 
 
 TIMESTAMP_TOLERANCE_SECONDS = 300
+# The old body-only X-MCM-Signature has no replay protection. It is sent until this date (inclusive of the days before it) so a
+# receiver has time to move to X-MCM-Signature-V2, then it stops. The same date is written in the Settings screen.
+LEGACY_SIGNATURE_UNTIL = date(2027, 3, 1)
+
+
+def legacy_signature_active(today: date | None = None) -> bool:
+    return (today or datetime.now(UTC).date()) < LEGACY_SIGNATURE_UNTIL
 
 
 def sign_v2(secret: str, timestamp: str, body: bytes) -> str:
@@ -62,10 +69,25 @@ def sign_v2(secret: str, timestamp: str, body: bytes) -> str:
     return "sha256=" + hmac.new(secret.encode(), timestamp.encode() + b"." + body, hashlib.sha256).hexdigest()
 
 
+def verify_v2(secret: str, timestamp: str, body: bytes, signature: str, *, now: float | None = None,
+              tolerance: int = TIMESTAMP_TOLERANCE_SECONDS) -> bool:
+    """What a receiver should do with X-MCM-Timestamp and X-MCM-Signature-V2: true only if the timestamp is a whole number of
+    seconds within `tolerance` of the receiver's clock (past or future) AND the signature matches, compared in constant time.
+    A captured request replayed after the window, or with its timestamp edited, fails. Inside the window a replay still passes:
+    a receiver that must refuse even those keeps the alert_id values it has seen."""
+    if not timestamp.isascii() or not timestamp.isdigit():
+        return False
+    clock = datetime.now(UTC).timestamp() if now is None else now
+    if abs(clock - int(timestamp)) > tolerance:
+        return False
+    return hmac.compare_digest(sign_v2(secret, timestamp, body), signature)
+
+
 KIND_LABELS = {
     "VERSION_REGRESSION": "Regression after a model upgrade",
     "SILENT_DROP": "Pass rate dropped with no version change",
     "MODEL_DEPRECATED": "Recommended model is being retired",
+    "MODEL_NOTICE": "Provider notice about a model you use",
     "TOKEN_BURST": "Unusual token use",
     "BUDGET": "Monthly budget",
     "TRIAL_BUDGET": "Budget for trials on a new model",
@@ -117,6 +139,14 @@ async def deliver_pending(
             .join(Job, Job.job_id == Alert.job_id).join(Project, Project.project_id == Job.project_id)
             .where(Alert.delivered_at.is_(None), Alert.resolved_at.is_(None), Alert.delivery_failed_at.is_(None),
                    Project.webhook_url.is_not(None),
+                   # A subscription project pays a flat price, so an old money alert (BUDGET, which also carries
+                   # the PROJECTED level) is never sent out in dollars. TRIAL_BUDGET stays: trials spend real money.
+                   ~((Alert.kind == "BUDGET") & (Project.billing_mode == "subscription")),
+                   # Budget alerts are always shown in the app; they are sent to the webhook only if the owner opted in.
+                   ~((Alert.kind == "BUDGET") & (Project.budget_alert_webhook.is_(False))),
+                   # Model notices (and the older price-list retirement alerts) are always shown in the app and are sent
+                   # to the webhook only if the owner opted in.
+                   ~(Alert.kind.in_(("MODEL_NOTICE", "MODEL_RETIRING", "MODEL_DEPRECATED")) & (Project.notice_alert_webhook.is_(False))),
                    (Alert.next_attempt_at.is_(None)) | (Alert.next_attempt_at <= now))
             .order_by(Alert.created_at).limit(BATCH).with_for_update(of=Alert, skip_locked=True)
         )
@@ -134,7 +164,8 @@ async def deliver_pending(
         headers = {"Content-Type": "application/json"}
         if secret:
             stamp = str(int(datetime.now(UTC).timestamp()))
-            headers["X-MCM-Signature"] = sign(secret, body)  # legacy, body only: kept for existing receivers
+            if legacy_signature_active():
+                headers["X-MCM-Signature"] = sign(secret, body)  # legacy, body only: kept for existing receivers until the date above
             headers["X-MCM-Timestamp"] = stamp
             headers["X-MCM-Signature-V2"] = sign_v2(secret, stamp, body)
         async with gate:

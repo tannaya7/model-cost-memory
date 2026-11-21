@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useModalFocus } from "../../../ui/useModalFocus";
 import { jobTitle } from "../../jobs/jobTitle";
 import { useRunDetail } from "../hooks/useRunDetail";
 import { Badge } from "../../../shared/components/Badge";
@@ -34,18 +34,7 @@ export function RunDetailPanel({
   runId: string | null;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    if (!runId) return;
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    }
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [runId, onClose]);
+  const dialogRef = useModalFocus<HTMLDivElement>(!!runId, onClose);
 
   const { data: run, isPending, isError, error } = useRunDetail(runId);
 
@@ -62,10 +51,12 @@ export function RunDetailPanel({
 
       {/* Slide-over Drawer */}
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="run-detail-title"
-        className="relative z-50 flex h-full w-full max-w-2xl flex-col border-l border-rule bg-surface shadow-2xl overflow-y-auto"
+        className="relative z-50 flex h-full w-full max-w-2xl flex-col border-l border-rule bg-surface shadow-2xl overflow-y-auto focus:outline-none"
       >
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-rule bg-surface px-6 py-4">

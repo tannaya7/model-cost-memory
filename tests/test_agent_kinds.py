@@ -1,5 +1,6 @@
 """Plain-language labels for tool use, agents, tool servers, several agents and possible loops."""
 
+import pytest
 from agent_memory.insights.agent_kinds import (
     Step, detect_loop, is_multi_agent, make_step, mcp_servers, tool_source, top_tools, uses_tools, works_like_agent,
 )
@@ -77,3 +78,10 @@ def test_make_step_hashes_arguments_only_when_stored():
     b = make_step(agent=None, trace_id="t", model="m", prompt_hash="p", tool_calls=[{"name": "s", "arguments": {"q": 1}}],
                   tools_tokens=None, tool_call_count=1, output="o", cost_usd=0.5, tokens=1, created_at=None)
     assert a.arguments_hash is None and b.arguments_hash and b.output_hash and b.cost_usd == 0.5
+
+
+def test_f19_loop_size_covers_the_whole_trace_not_the_7_step_window():
+    steps = [step(tools=["search"], args="x", out="same") for _ in range(20)]
+    loop = detect_loop(steps)
+    assert loop and loop.repeats == 20
+    assert loop.cost_usd == pytest.approx(0.20)

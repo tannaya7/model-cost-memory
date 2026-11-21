@@ -118,3 +118,9 @@ def test_a_failed_backup_pings_fail_and_copies_nothing(tmp_path):
 def test_without_a_remote_the_backup_warns_that_it_is_only_local(tmp_path):
     result, calls = _backup(tmp_path, "POSTGRES_PASSWORD=x\n")
     assert result.returncode == 0 and "only on this machine" in result.stderr and calls == ""
+
+
+def test_backups_are_readable_only_by_the_user_who_makes_them():
+    script = (ROOT / "deploy" / "backup.sh").read_text(encoding="utf8")
+    assert "umask 077" in script and "chmod 700 backups" in script
+    assert script.index("umask 077") < script.index("pg_dump")  # set before the first dump file is created

@@ -25,11 +25,11 @@ from decimal import Decimal
 from typing import Any
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
-from ..models import CatalogEntry, ProviderPrice
+from ..models import CatalogEntry, PriceVersion, ProviderPrice
 from ..versions import normalize
 
 log = logging.getLogger("agent_memory.catalog")
@@ -82,7 +82,9 @@ def _parse_date(value: Any) -> date | None:
 def status_for(shutdown: date | None, today: date) -> str:
     if shutdown is None:
         return "ACTIVE"
-    return "RETIRED" if shutdown <= today else "DEPRECATED"
+    # Providers serve a model until the end of its shutdown date ("not before" that date): it is still
+    # DEPRECATED on the day itself and RETIRED from the day after (F31).
+    return "RETIRED" if shutdown < today else "DEPRECATED"
 
 
 def _priced_entries(data: dict[str, Any], today: date):
@@ -162,6 +164,8 @@ async def sync_catalog(session: AsyncSession, data: dict[str, Any], *, today: da
         row.price_in_per_mtok, row.price_out_per_mtok = rec.price_in_per_mtok, rec.price_out_per_mtok
         result.updated += 1
     await _sync_provider_prices(session, data, today, result, new_names, backfill=bool(existing))
+    await session.flush()
+    await _mark_prices_checked(session, {rec.model for rec in records})
     await session.commit()
     log.info("catalog sync: %d added, %d updated, %d unchanged, %d manual", result.added, result.updated,
              result.unchanged, result.skipped_manual)
@@ -194,6 +198,20 @@ async def _sync_provider_prices(
             row.shutdown_date = rec.shutdown_date
             if old != new and (rec.model, old, new) not in result.status_changes:
                 result.status_changes.append((rec.model, old, new))
+
+
+async def _mark_prices_checked(session: AsyncSession, names: set[str]) -> None:
+    """Stamp checked_at on every price version this sync just confirmed (unchanged prices included), so a price
+    that has not moved for months still shows when it was last looked at. Hand-entered versions are never stamped:
+    nobody checked them against a provider page."""
+    if not names:
+        return
+    await session.execute(
+        update(PriceVersion)
+        .where(PriceVersion.effective_to.is_(None), PriceVersion.source_kind.in_(("SYNC", "BACKFILL")),
+               PriceVersion.model.in_(sorted(names)))
+        .values(checked_at=datetime.now(UTC))
+    )
 
 
 async def set_override(

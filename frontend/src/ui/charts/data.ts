@@ -20,11 +20,16 @@ export function dayRange(points: DayPoint[], days?: number, today: Date = new Da
   return out;
 }
 
-/** Spend (or runs) per day, one column per job or model, missing days as 0. */
+/** Every token a day point used: uncached input, output, and cache reads and writes (missing counts as 0). */
+export function tokensOf(p: Partial<Pick<DayPoint, "tokens_in" | "tokens_out" | "cache_read_tokens" | "cache_write_tokens">>): number {
+  return (p.tokens_in ?? 0) + (p.tokens_out ?? 0) + (p.cache_read_tokens ?? 0) + (p.cache_write_tokens ?? 0);
+}
+
+/** Spend (or runs, or tokens) per day, one column per job or model, missing days as 0. */
 export function pivot(
   points: DayPoint[],
   by: "job" | "model",
-  metric: "spend_usd" | "runs",
+  metric: "spend_usd" | "runs" | "tokens",
   days?: number,
   today?: Date,
 ): { rows: Row[]; names: string[] } {
@@ -34,7 +39,7 @@ export function pivot(
   );
   for (const p of points) {
     const row = rows.get(p.day);
-    if (row) row[p[by]] = (row[p[by]] as number) + p[metric];
+    if (row) row[p[by]] = (row[p[by]] as number) + (metric === "tokens" ? tokensOf(p) : p[metric]);
   }
   return { rows: [...rows.values()], names };
 }
@@ -73,8 +78,8 @@ export function rollingPassRate(
   return { rows, names };
 }
 
-export function total(points: DayPoint[], metric: "spend_usd" | "runs" | "passed" | "failed"): number {
-  return points.reduce((sum, p) => sum + p[metric], 0);
+export function total(points: DayPoint[], metric: "spend_usd" | "runs" | "passed" | "failed" | "tokens"): number {
+  return points.reduce((sum, p) => sum + (metric === "tokens" ? tokensOf(p) : p[metric]), 0);
 }
 
 /** The last `days` days' total against the `days` before them, as a fraction (0.12 = up 12%). */

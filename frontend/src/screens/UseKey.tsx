@@ -2,6 +2,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { ProjectKeySettings } from "../features/settings/components/ProjectKeySettings";
 import { hasApiKey } from "../shared/api/apiFetch";
+import { projectPath } from "../shared/projectPath";
 import { IconArrowRight, IconLogo } from "../ui/icons";
 import { Button, Panel } from "../ui/primitives";
 import { ThemeToggle } from "../ui/ThemeToggle";
@@ -28,7 +29,7 @@ export default function UseKey() {
           <ProjectKeySettings />
         </Panel>
         <div className="flex justify-end">
-          <Button variant="primary" onClick={() => (hasApiKey() ? navigate("/p/key") : undefined)}>
+          <Button variant="primary" onClick={() => (hasApiKey() ? navigate(projectPath("key")) : undefined)}>
             Open the project <IconArrowRight size={16} />
           </Button>
         </div>

@@ -31,10 +31,32 @@ async def _resolve(host: str, port: int) -> list[str]:
     return [info[4][0] for info in infos]
 
 
+_NAT64 = ipaddress.ip_network("64:ff9b::/96")
+_NAT64_LOCAL = ipaddress.ip_network("64:ff9b:1::/48")
+
+
 def _public(address: str) -> bool:
     ip = ipaddress.ip_address(address.split("%", 1)[0])  # drop an IPv6 zone id
-    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
-        ip = ip.ipv4_mapped
+    if isinstance(ip, ipaddress.IPv6Address):
+        # IPv6 forms that carry an IPv4 address: a gateway may deliver the call to that IPv4 address, so
+        # the embedded one must be public too (the IPv6 prefix itself reads as global).
+        if ip in _NAT64_LOCAL:
+            return False
+        embedded = None
+        if ip.ipv4_mapped is not None:
+            embedded = ip.ipv4_mapped
+        elif ip in _NAT64:
+            embedded = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+        elif ip.sixtofour is not None:  # 2002::/16
+            embedded = ip.sixtofour
+        elif ip.teredo is not None:  # 2001::/32: (server, client); the server field is not the target
+            embedded = ip.teredo[1]
+            if not _public(str(ip.teredo[0])):
+                return False
+        elif (int(ip) >> 32) == 0:  # ::a.b.c.d, the deprecated IPv4-compatible form
+            embedded = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+        if embedded is not None:
+            return _public(str(embedded))
     return ip.is_global and not ip.is_multicast
 
 

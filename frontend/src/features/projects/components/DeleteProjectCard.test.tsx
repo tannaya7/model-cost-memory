@@ -20,16 +20,16 @@ describe("DeleteProjectCard", () => {
     const fetch = stubFetch(204);
     const onDeleted = vi.fn();
     setActiveProject("acme-1234");
-    renderWithProviders(<DeleteProjectCard projectId="acme-1234" projectName="Acme" onDeleted={onDeleted} />);
+    renderWithProviders(<DeleteProjectCard projectId="acme-1234" projectSlug="acme" projectName="Acme" onDeleted={onDeleted} />);
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("button", { name: /Delete this project/ }));
     const confirm = screen.getByRole("button", { name: "Delete project and all its data" });
     expect(confirm).toBeDisabled();
 
-    await user.type(screen.getByLabelText(/to confirm/), "acme-123");
+    await user.type(screen.getByLabelText(/to confirm/), "acm");
     expect(confirm).toBeDisabled();
-    await user.type(screen.getByLabelText(/to confirm/), "4");
+    await user.type(screen.getByLabelText(/to confirm/), "e");
     expect(confirm).toBeEnabled();
 
     await user.click(confirm);
@@ -43,20 +43,20 @@ describe("DeleteProjectCard", () => {
   it("shows the server's reason and stays on the page when deleting fails", async () => {
     stubFetch(404, { detail: "Project not found" });
     const onDeleted = vi.fn();
-    renderWithProviders(<DeleteProjectCard projectId="acme-1234" projectName="Acme" onDeleted={onDeleted} />);
+    renderWithProviders(<DeleteProjectCard projectId="acme-1234" projectSlug="acme" projectName="Acme" onDeleted={onDeleted} />);
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /Delete this project/ }));
-    await user.type(screen.getByLabelText(/to confirm/), "acme-1234");
+    await user.type(screen.getByLabelText(/to confirm/), "acme");
     await user.click(screen.getByRole("button", { name: "Delete project and all its data" }));
     expect(await screen.findByText("Project not found")).toBeInTheDocument();
     expect(onDeleted).not.toHaveBeenCalled();
   });
 
   it("cancel closes the confirmation and forgets what was typed", async () => {
-    renderWithProviders(<DeleteProjectCard projectId="acme-1234" projectName="Acme" onDeleted={vi.fn()} />);
+    renderWithProviders(<DeleteProjectCard projectId="acme-1234" projectSlug="acme" projectName="Acme" onDeleted={vi.fn()} />);
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /Delete this project/ }));
-    await user.type(screen.getByLabelText(/to confirm/), "acme-1234");
+    await user.type(screen.getByLabelText(/to confirm/), "acme");
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await user.click(screen.getByRole("button", { name: /Delete this project/ }));
     expect(screen.getByLabelText(/to confirm/)).toHaveValue("");

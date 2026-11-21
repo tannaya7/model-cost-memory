@@ -1,5 +1,6 @@
 /** The whole app's frame: a left sidebar (the project, four destinations and the project's own pages),
  * a top bar with search (Ctrl/⌘ K), theme, alerts and the account menu, and a bottom bar on phones. */
+import { useBillingMode } from "../features/projects/hooks/useBillingMode";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, MotionConfig } from "framer-motion";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -10,6 +11,9 @@ import { useLogout, useMe } from "../features/auth/hooks/useAuth";
 import { jobTitle } from "../features/jobs/jobTitle";
 import { useJobs } from "../features/jobs/hooks/useJobs";
 import { useProjects } from "../features/projects/hooks/useProjects";
+import { useWorkspaces } from "../features/workspaces/hooks/useWorkspaces";
+import { canAdminister, useMyRole } from "./useMyRole";
+import { projectPath } from "../shared/projectPath";
 import {
   IconActivity,
   IconArrowRight,
@@ -17,6 +21,7 @@ import {
   IconBolt,
   IconChart,
   IconChevron,
+  IconDollar,
   IconFlask,
   IconJobs,
   IconLogo,
@@ -24,27 +29,55 @@ import {
   IconOverview,
   IconSearch,
   IconSettings,
+  IconShield,
   IconSidebar,
+  IconSpark,
+  IconTable,
 } from "../ui/icons";
 import { ThemeToggle } from "../ui/ThemeToggle";
+import { useModalFocus } from "../ui/useModalFocus";
 import { TourHost } from "../features/guide/TourHost";
 import { cx, Skeleton } from "../ui/primitives";
+import { ToastProvider } from "../ui/Toast";
 
 /** Which part of the tour points at which item (the tour looks for data-tour="..."). */
-const TOUR_TARGET: Record<string, string> = { Overview: "overview", "AI tasks": "tasks", Compare: "compare", Activity: "activity", Settings: "settings" };
+const TOUR_TARGET: Record<string, string> = { Overview: "overview", "AI tasks": "tasks", "Smart compare": "compare", "Smart budget": "budget", Activity: "activity", Settings: "settings" };
 
 const NAV = [
   { to: "/", label: "Overview", icon: IconOverview, end: true },
   { to: "/jobs", label: "AI tasks", icon: IconJobs },
   { to: "/models", label: "Models", icon: IconModels },
-  { to: "/compare", label: "Compare", icon: IconChart },
   { to: "/activity", label: "Activity", icon: IconActivity },
 ];
 
-/** The four destinations, inside the current project. */
+/** The two features the product is built around, kept out of the ordinary list so they stand out. */
+const SMART = [
+  { to: "/budget", label: "Smart budget", hint: "Where the month is heading", icon: IconDollar },
+  { to: "/compare", label: "Smart compare", hint: "Would another model do?", icon: IconChart },
+];
+
+/** Two more top-level places for an API user: what the agents and tool servers use, and how the spend was worked out. */
+const ANALYSIS = [
+  { to: "/agents", label: "MCP & Agents", hint: "Agents, tasks and tool servers", icon: IconSpark },
+  { to: "/costs", label: "Cost analysis", hint: "How the spend adds up, by feature", icon: IconTable },
+  { to: "/planner", label: "Cost planner", hint: "What a task might cost at traffic you type in", icon: IconDollar },
+  { to: "/coverage", label: "Data coverage", hint: "How complete the records we received are", icon: IconShield },
+];
+
+/** The four ordinary destinations, inside the current project. */
 function useNav() {
   const p = useP();
   return NAV.map((item) => ({ ...item, to: p(item.to) }));
+}
+
+function useSmart() {
+  const p = useP();
+  return SMART.map((item) => ({ ...item, to: p(item.to) }));
+}
+
+function useAnalysis() {
+  const p = useP();
+  return ANALYSIS.map((item) => ({ ...item, to: p(item.to) }));
 }
 
 function useOutsideClose(open: boolean, close: () => void) {
@@ -68,11 +101,15 @@ function useOutsideClose(open: boolean, close: () => void) {
 function ProjectSwitcher() {
   const { id: active, mode } = useProject();
   const projects = useProjects();
+  const workspaces = useWorkspaces(mode === "owned");
   const [open, setOpen] = useState(false);
   const ref = useOutsideClose(open, () => setOpen(false));
   const navigate = useNavigate();
   const list = mode === "owned" ? projects.data ?? [] : [];
   const current = list.find((p) => p.project_id === active);
+  /** "Personal", or the company's name: so it is never unclear which side of the line a project is on. */
+  const spaceOf = (p: { organisation_id?: string | null }) =>
+    p.organisation_id ? workspaces.data?.find((w) => w.org_id === p.organisation_id)?.name ?? "Company" : "Personal";
   if (mode !== "owned") {
     return (
       <span className="rounded-full border border-rule px-2.5 py-1 text-xs font-semibold text-dim">
@@ -80,6 +117,7 @@ function ProjectSwitcher() {
       </span>
     );
   }
+  if (projects.isPending) return <span role="status" className="block truncate px-2 py-1 text-sm text-muted">Loading projects…</span>;
   if (projects.isError || list.length === 0) return null;
   return (
     <div ref={ref} className="relative">
@@ -90,6 +128,7 @@ function ProjectSwitcher() {
         className="flex w-full min-w-0 items-center justify-between gap-1.5 rounded-[9px] px-2 py-1 text-sm text-dim transition-colors hover:bg-surface-2 hover:text-ink"
       >
         <span className="truncate font-medium">{current?.name ?? "Choose a project"}</span>
+        {current && <span data-testid="workspace-label" className={cx("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold", current.organisation_id ? "bg-accent-soft text-accent" : "bg-surface-3 text-muted")}>{spaceOf(current)}</span>}
         <IconChevron size={14} className={cx("shrink-0 transition-transform", open ? "-rotate-90" : "rotate-90")} />
       </button>
       <AnimatePresence>
@@ -107,15 +146,18 @@ function ProjectSwitcher() {
                 type="button"
                 onClick={() => {
                   setOpen(false);
-                  navigate(`/p/${encodeURIComponent(p.project_id)}`);
+                  navigate(projectPath(p));
                 }}
                 className={cx(
                   "flex w-full items-center justify-between rounded-[10px] px-3 py-2 text-left text-sm transition-colors hover:bg-surface-3",
                   p.project_id === active ? "text-ink" : "text-dim",
                 )}
               >
-                <span className="truncate">{p.name}</span>
-                {p.project_id === active && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
+                <span className="min-w-0 truncate">{p.name}</span>
+                <span className="ml-2 flex shrink-0 items-center gap-2">
+                  <span className="max-w-[7rem] truncate text-[10px] text-muted">{spaceOf(p)}</span>
+                  {p.project_id === active && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
+                </span>
               </button>
             ))}
             <div className="my-1 h-px bg-rule" />
@@ -132,6 +174,7 @@ function ProjectSwitcher() {
 function AccountMenu({ onTour }: { onTour: () => void }) {
   const p = useP();
   const { mode } = useProject();
+  const role = useMyRole();
   const { data: user } = useMe();
   const logout = useLogout();
   const navigate = useNavigate();
@@ -166,9 +209,11 @@ function AccountMenu({ onTour }: { onTour: () => void }) {
             )}
             <div className="my-1 h-px bg-rule" />
             {[
-              ...(user ? [{ to: "/projects", label: "All projects" }] : []),
-              { to: p("/settings"), label: mode === "demo" ? "About this demo" : "Project settings" },
-              { to: p("/settings#limits"), label: "Usage limits" },
+              ...(user ? [{ to: "/projects", label: "All projects" }, { to: "/signin?switch=1&next=%2Fprojects", label: "Switch account" }] : []),
+              ...(canAdminister(role) ? [
+                { to: p("/settings"), label: mode === "demo" ? "About this demo" : "Project settings" },
+                { to: p("/settings#limits"), label: "Usage limits" },
+              ] : []),
             ].map((item) => (
               <Link key={item.to} to={item.to} onClick={() => setOpen(false)} className="block rounded-[10px] px-3 py-2 text-sm text-dim hover:bg-surface-3 hover:text-ink">
                 {item.label}
@@ -191,6 +236,7 @@ function AccountMenu({ onTour }: { onTour: () => void }) {
                 <div className="my-1 h-px bg-rule" />
                 <button
                   type="button"
+                  title="Signs you out on every device"
                   onClick={async () => {
                     try {
                       await logout.mutateAsync();
@@ -222,6 +268,7 @@ interface Command {
 
 function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const p = useP();
+  const role = useMyRole();
   const jobs = useJobs();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
@@ -230,14 +277,20 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
     const pages: Command[] = [
       { label: "Overview", hint: "Savings, spend and what needs attention", to: p("/") },
       { label: "AI tasks", hint: "Every kind of work your app asks an AI to do, and our recommendation for each", to: p("/jobs") },
+      { label: "Smart budget", hint: "Where this month is heading, a monthly limit, and what changes if others use your key", to: p("/budget") },
+      { label: "Smart compare", hint: "Would another model do this work for less? Based on your own calls", to: p("/compare") },
+      { label: "MCP & Agents", hint: "Which agents, agent tasks and tool servers use the most, from your recorded calls", to: p("/agents") },
+      { label: "Cost analysis", hint: "How the spend was worked out, where the tokens went, and cost by your own feature labels", to: p("/costs") },
+      { label: "Cost planner", hint: "What a task might cost at traffic levels you type in, from its own recorded calls", to: p("/planner") },
+      { label: "Data coverage", hint: "How complete and reliable the records we received are, and what cannot be measured", to: p("/coverage") },
       { label: "Models", hint: "Prices, retirements and the catalog", to: p("/models") },
       { label: "Activity", hint: "Quality drops, trials on new models, live AI calls and AI news", to: p("/activity") },
       { label: "Alerts", hint: "Quality drops, quiet slowdowns and models being retired", to: p("/activity?tab=alerts") },
       { label: "Live pipeline", hint: "AI calls arriving right now", to: p("/activity?tab=live") },
       { label: "AI news", hint: "Stories about your models", to: p("/activity?tab=news") },
       { label: "Settings", hint: "Project name, keys, alert webhook and data retention (how long data is kept)", to: p("/settings") },
-      { label: "Usage limits", hint: "Caps that stop a mistake running up a huge bill", to: p("/settings#limits") },
-    ];
+      { label: "Usage limits", hint: "Caps we warn you about before you reach them", to: p("/settings#limits") },
+    ].filter((c) => canAdminister(role) || !c.to.includes("/settings"));
     const jobItems = (jobs.data ?? []).map((j) => ({ label: jobTitle(j.name), code: j.name, hint: "AI task", to: p(`/jobs/${encodeURIComponent(j.name)}`) }));
     const q = query.trim().toLowerCase();
     return [...jobItems, ...pages].filter((c) => !q || c.label.toLowerCase().includes(q) || (c.code ?? "").toLowerCase().includes(q) || c.hint.toLowerCase().includes(q)).slice(0, 9);
@@ -249,6 +302,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
       setIndex(0);
     }
   }, [open]);
+  const dialogRef = useModalFocus<HTMLDivElement>(open, onClose, "input");
 
   const go = (c: Command | undefined) => {
     if (!c) return;
@@ -267,7 +321,9 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
           onMouseDown={(e) => e.target === e.currentTarget && onClose()}
         >
           <motion.div
+            ref={dialogRef}
             role="dialog"
+            aria-modal="true"
             aria-label="Go to"
             initial={{ opacity: 0, y: 12, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -278,7 +334,11 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
             <div className="flex items-center gap-3 border-b border-rule px-4">
               <IconSearch size={18} className="text-muted" />
               <input
-                autoFocus
+                role="combobox"
+                aria-expanded="true"
+                aria-controls="palette-results"
+                aria-autocomplete="list"
+                aria-activedescendant={commands[index] ? `palette-opt-${index}` : undefined}
                 value={query}
                 onChange={(e) => {
                   setQuery(e.target.value);
@@ -288,7 +348,6 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
                   if (e.key === "ArrowDown") setIndex((i) => Math.min(i + 1, commands.length - 1));
                   else if (e.key === "ArrowUp") setIndex((i) => Math.max(i - 1, 0));
                   else if (e.key === "Enter") go(commands[index]);
-                  else if (e.key === "Escape") onClose();
                 }}
                 placeholder="Jump to an AI task, a page or a setting…"
                 aria-label="Search"
@@ -296,15 +355,18 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
               />
               <kbd className="rounded-md border border-rule px-1.5 py-0.5 font-mono text-[10px] text-muted">esc</kbd>
             </div>
-            <ul className="max-h-[50vh] overflow-auto p-2">
-              {commands.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted">Nothing matches “{query}”.</li>}
+            <ul id="palette-results" role="listbox" aria-label="Results" className="max-h-[50vh] overflow-auto p-2">
+              {commands.length === 0 && <li role="presentation" className="px-3 py-6 text-center text-sm text-muted">Nothing matches “{query}”.</li>}
               {commands.map((c, i) => (
-                <li key={`${c.to}-${c.label}`}>
-                  <button
-                    type="button"
+                <li key={`${c.to}-${c.label}`} role="presentation">
+                  <div
+                    id={`palette-opt-${i}`}
+                    role="option"
+                    aria-selected={i === index}
                     onMouseEnter={() => setIndex(i)}
                     onClick={() => go(c)}
                     className={cx(
+                      "cursor-pointer",
                       "flex w-full items-center justify-between gap-3 rounded-[10px] px-3 py-2.5 text-left",
                       i === index ? "bg-surface-3 text-ink" : "text-dim",
                     )}
@@ -317,7 +379,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
                       <span className="block truncate text-xs text-muted">{c.hint}</span>
                     </span>
                     {i === index && <IconArrowRight size={15} className="shrink-0 text-accent" />}
-                  </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -331,6 +393,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
 function PageFallback() {
   return (
     <div className="grid gap-4" role="status" aria-label="Loading page">
+      <span className="sr-only">Loading…</span>
       <Skeleton className="h-28 w-full" />
       <div className="grid gap-4 md:grid-cols-3">
         <Skeleton className="h-36" />
@@ -355,10 +418,15 @@ function readCollapsed(): boolean {
 /** The left sidebar: the project, the four destinations, the project's own pages, and a way to try a
  * cheaper model. Collapses to icons; the choice is remembered in this browser. */
 function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle: () => void; alerts: number }) {
+  const { mode: billing } = useBillingMode();
   const p = useP();
   const nav = useNav();
+  const smart = useSmart();
+  const analysis = useAnalysis();
   const { mode } = useProject();
   const { data: user } = useMe();
+  const workspaces = useWorkspaces(!!user);
+  const companies = (workspaces.data ?? []).filter((w) => w.kind === "company" && w.org_id);
   const { hash } = useLocation();
   const item = (active: boolean) =>
     cx(
@@ -366,11 +434,12 @@ function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle
       collapsed && "justify-center px-0",
       active ? "text-accent-ink" : "text-dim hover:bg-surface-2 hover:text-ink",
     );
+  const role = useMyRole();
   const project = [
     { to: p("/retest"), label: "Model trials", icon: IconFlask, match: (on: boolean) => on },
     { to: p("/settings"), label: mode === "demo" ? "About this demo" : "Settings", icon: IconSettings, match: (on: boolean) => on && hash !== "#limits" },
     { to: p("/settings#limits"), label: "Usage limits", icon: IconBolt, match: (on: boolean) => on && hash === "#limits" },
-  ];
+  ].filter((i) => canAdminister(role) || (!i.to.endsWith("/settings") && !i.to.endsWith("#limits") && !i.to.endsWith("/retest")));
   return (
     <motion.aside
       initial={false}
@@ -380,7 +449,7 @@ function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle
       aria-label="Sidebar"
     >
       <div className={cx("flex h-16 shrink-0 items-center gap-2.5 border-b border-rule px-4", collapsed && "justify-center px-0")}>
-        <Link to={user ? "/projects" : p("/")} className="flex min-w-0 items-center gap-2.5" aria-label={user ? "All projects" : "Overview"}>
+        <Link to={user ? "/projects" : p("/")} className="flex min-w-0 items-center gap-2.5" aria-label={collapsed ? (user ? "All projects" : "Overview") : `Model & Cost Memory, ${user ? "all projects" : "overview"}`}>
           <IconLogo size={28} />
           {!collapsed && <span className="truncate text-[15px] font-semibold tracking-tight">Model &amp; Cost Memory</span>}
         </Link>
@@ -424,6 +493,73 @@ function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle
         </nav>
 
         <div className="my-3 h-px shrink-0 bg-rule" />
+        {!collapsed && <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-accent">Smart tools</p>}
+        <nav aria-label="Smart tools" className="flex flex-col gap-1">
+          {smart.map(({ to, label, hint, icon: Icon }) => (
+            <NavLink key={to} to={to} data-tour={TOUR_TARGET[label]} title={collapsed ? label : hint} className={({ isActive }) => cx(item(isActive), "border border-accent/25 bg-accent-soft/40", isActive && "border-accent/60")}>
+              {({ isActive }) => (
+                <>
+                  {isActive && <ActiveMark />}
+                  <Icon size={18} className="relative shrink-0 text-accent" />
+                  {!collapsed && (
+                    <span className="relative flex min-w-0 flex-col leading-tight">
+                      <span>{label}</span>
+                      <span className="truncate text-[11px] font-normal text-muted">{hint}</span>
+                    </span>
+                  )}
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="my-3 h-px shrink-0 bg-rule" />
+        {!collapsed && <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Analysis</p>}
+        <nav aria-label="Analysis" className="flex flex-col gap-1">
+          {analysis.map(({ to, label, hint, icon: Icon }) => (
+            <NavLink key={to} to={to} title={collapsed ? label : hint} className={({ isActive }) => item(isActive)}>
+              {({ isActive }) => (
+                <>
+                  {isActive && <ActiveMark />}
+                  <Icon size={18} className="relative shrink-0" />
+                  {!collapsed && (
+                    <span className="relative flex min-w-0 flex-col leading-tight">
+                      <span>{label}</span>
+                      <span className="truncate text-[11px] font-normal text-muted">{hint}</span>
+                    </span>
+                  )}
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        {companies.length > 0 && (
+          <>
+            <div className="my-3 h-px shrink-0 bg-rule" />
+            {!collapsed && <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Your company</p>}
+            <nav aria-label="Company" className="flex flex-col gap-1">
+              {companies.slice(0, 3).map((c) => (
+                <NavLink key={c.org_id} to={`/company/${c.org_id}`} title={collapsed ? `Company portal: ${c.name}` : undefined} className={({ isActive }) => cx(item(isActive), "border border-rule bg-surface-2/60")}>
+                  {({ isActive }) => (
+                    <>
+                      {isActive && <ActiveMark />}
+                      <IconShield size={18} className="relative shrink-0 text-accent" />
+                      {!collapsed && (
+                        <span className="relative flex min-w-0 flex-col leading-tight">
+                          <span>Company portal</span>
+                          <span className="truncate text-[11px] font-normal text-muted">{c.name}</span>
+                        </span>
+                      )}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </nav>
+          </>
+        )}
+
+        <div className="my-3 h-px shrink-0 bg-rule" />
         {!collapsed && <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">This project</p>}
         <nav aria-label="Project" className="flex flex-col gap-1">
           {project.map(({ to, label, icon: Icon, match }) => (
@@ -448,10 +584,10 @@ function Sidebar({ collapsed, onToggle, alerts }: { collapsed: boolean; onToggle
           >
             <div aria-hidden className="pointer-events-none absolute inset-0 opacity-30" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.35) 1px, transparent 1px)", backgroundSize: "10px 10px" }} />
             <span className="relative grid h-8 w-8 place-items-center rounded-[9px] bg-white/20"><IconFlask size={16} /></span>
-            <p className="relative mt-3 text-sm font-semibold">Try a cheaper model</p>
-            <p className="relative mt-1 text-xs text-white/80">We replay your past prompts on another model to see if it does as well, within a budget you set.</p>
+            <p className="relative mt-2.5 text-sm font-semibold">{billing === "subscription" ? "Try a smaller model" : "Try a cheaper model"}</p>
+            <p className="relative mt-1 text-xs text-white/80">Replays your past prompts, within a budget you set.</p>
             <Link to={p("/retest")} className="relative mt-3 block rounded-[10px] bg-white/95 px-3 py-2 text-center text-xs font-semibold text-[var(--promo-ink)] transition-colors hover:bg-white">
-              Start a trial on a new model
+              Start a trial
             </Link>
           </motion.div>
         )}
@@ -472,6 +608,10 @@ function ActiveMark() {
 export function Frame() {
   const p = useP();
   const nav = useNav();
+  const smart = useSmart();
+  const analysis = useAnalysis();
+  /** Phone bottom bar: every main place, in a row that scrolls sideways. Settings and usage limits are in the account menu. */
+  const phone = [nav[0], nav[1], ...smart, ...analysis, nav[2], nav[3]];
   const { pathname, search } = useLocation();
   const { count: alerts } = useAlertsCount();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -504,6 +644,7 @@ export function Frame() {
 
   return (
     <MotionConfig reducedMotion="user">
+      <ToastProvider>
       <div className="min-h-screen md:flex">
         <Sidebar collapsed={collapsed} onToggle={toggle} alerts={alerts} />
 
@@ -570,14 +711,14 @@ export function Frame() {
           </main>
         </div>
 
-        {/* Phone: the four destinations as a bottom bar */}
+        {/* Phone: the main destinations as a bottom bar */}
         <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-bg/90 backdrop-blur-xl md:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-          <ul className="grid grid-cols-5">
-            {nav.map(({ to, label, icon: Icon, end }) => (
-              <li key={to}>
+          <ul className="flex overflow-x-auto">
+            {phone.map(({ to, label, icon: Icon, ...rest }) => (
+              <li key={to} className="min-w-[4.75rem] flex-1 shrink-0">
                 <NavLink
                   to={to}
-                  end={end}
+                  end={"end" in rest ? rest.end : undefined}
                   data-tour={TOUR_TARGET[label]}
                   className={({ isActive }) => cx("flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium", isActive ? "text-accent" : "text-muted")}
                 >
@@ -595,6 +736,7 @@ export function Frame() {
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         <TourHost replay={tour} onReplayDone={() => setTour(false)} />
       </div>
+      </ToastProvider>
     </MotionConfig>
   );
 }

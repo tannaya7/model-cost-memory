@@ -1,6 +1,7 @@
 /** Compare: which model could do a job for less, and which are only worth testing. Filters live in the
  * address, so a link reproduces the view. Measured figures come from checked runs; anything about a model
  * the job has not run is an estimate and says so. */
+import { daysWord, isRoughMonth, MIN_DAYS_FOR_MONTH } from "../forecastText";
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -15,11 +16,15 @@ import { count, pct, usd } from "../../ui/format";
 import { ButtonLink, cx, EmptyState, Panel, Pill, Skeleton } from "../../ui/primitives";
 import { useProject as useAccountProject } from "../../features/projects/hooks/useProjects";
 import { CompareChart } from "./CompareChart";
+import { DifferenceChart } from "./DifferenceChart";
+import { UntestedList } from "./UntestedList";
 import { SuggestionDisclaimer } from "./profile/Disclaimer";
 import { MIN_CHECKED_ANSWERS, TOO_FEW_LABEL, UNTESTED_LABEL } from "./wilson";
 import { Help } from "../../ui/Help";
 import { NotEnoughData } from "../../ui/NotEnoughData";
 import { modelLink } from "./profile/modelLinks";
+import { tokensAre } from "../../features/projects/moneyWording";
+import { useBillingMode } from "../../features/projects/hooks/useBillingMode";
 import { ProfileSuggestPanel } from "./profile/ProfileSuggestPanel";
 import type { ProfileUsage } from "./profile/types";
 import { suggestForCheckedJob, type Suggestion } from "./suggest";
@@ -68,8 +73,9 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
   );
 }
 
-function SuggestionCard({ s, job }: { s: Suggestion; job: string }) {
+function SuggestionCard({ s, job, rough }: { s: Suggestion; job: string; rough: boolean }) {
   const p = useP();
+  const { mode: billing } = useBillingMode();
   const link = modelLink(s.model);
   return (
     <li className="panel flex flex-col gap-2 p-4">
@@ -81,7 +87,7 @@ function SuggestionCard({ s, job }: { s: Suggestion; job: string }) {
       <p className="text-sm text-dim">{s.reason}</p>
       <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-dim">
         <div>
-          <dt className="inline text-muted">{s.evidence === "estimate" ? "Estimated a month: " : "A month: "}</dt>
+          <dt className="inline text-muted">{billing === "subscription" ? (s.evidence === "estimate" ? "Estimated worth at list prices a month (not your bill): " : "Worth at list prices a month (not your bill): ") : rough ? "Rough guess for a month (under 7 days of use): " : s.evidence === "estimate" ? "Estimated a month: " : "A month: "}</dt>
           <dd className="inline font-semibold text-ink tabular">{usd(s.monthlyCostUsd)}</dd>
         </div>
         {s.passRate !== null && (
@@ -125,6 +131,7 @@ export default function Compare() {
   const { id: project } = useProject();
   const accountProject = useAccountProject(project === "key" || project === "demo" ? undefined : project);
   const p = useP();
+  const { mode: billing } = useBillingMode();
   const [params, setParams] = useSearchParams();
   const set = (patch: Record<string, string | null>) =>
     setParams(
@@ -156,16 +163,19 @@ export default function Compare() {
   const preset = PRESETS.find((x) => String(x) === params.get("x")) ?? 1;
   const volumeTokens = customTokens ?? Math.round(actualTokens * preset);
   const factor = customTokens && actualTokens > 0 ? customTokens / actualTokens : customTokens ? 1 : preset;
-  const budget = num(params.get("budget")) ?? accountProject.data?.monthly_budget_usd ?? null;
+  // A flat fee has no dollar budget to fit, so a subscription project never plans against one.
+  const budget = billing === "subscription" ? null : num(params.get("budget")) ?? accountProject.data?.monthly_budget_usd ?? null;
 
   const rec0 = rec.data ?? null;
   const checkedRuns = rec0?.evidence.n_runs ?? 0;
   const unchecked = !!job && !rec.isPending && job.check_kind === "LATE_LABEL" && checkedRuns === 0;
+  const rough = isRoughMonth(account.span);
   const early = account.span < 14 || checkedRuns < 100;
   const jobRuns = jobUse.runs;
   const avgTokens = jobRuns > 0 && jobUse.monthlyIn + jobUse.monthlyOut > 0 ? { in: (jobUse.monthlyIn / jobUse.monthlyRuns) || 0, out: (jobUse.monthlyOut / jobUse.monthlyRuns) || 0 } : null;
   const runsPerMonth = jobUse.monthlyRuns * factor;
-  const suggestions = rec0 && !unchecked ? suggestForCheckedJob({ rec: rec0, catalog, avgTokens, runsPerMonth, budgetUsd: budget, providers }) : [];
+  // Models that were not tried under the same conditions are never ranked: no suggestions from them.
+  const suggestions = rec0 && !unchecked && rec0.evidence?.state !== "not_comparable" ? suggestForCheckedJob({ rec: rec0, catalog, avgTokens, runsPerMonth, budgetUsd: budget, providers }) : [];
   const from = account.from || new Date().toISOString().slice(0, 10);
   const to = account.to || from;
 
@@ -183,10 +193,10 @@ export default function Compare() {
   };
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-5">
+    <div className="flex min-w-0 flex-col gap-5">
       <header>
-        <h1 className="text-3xl font-semibold tracking-tight">Compare models</h1>
-        <p className="mt-1 max-w-2xl text-sm text-dim">Pick an AI task (one kind of work your app asks an AI to do) to see what each model would cost for it, how many answers each got right, and which cheaper ones are worth a trial.</p>
+        <h1 className="text-3xl font-semibold tracking-tight">Smart compare</h1>
+        <p className="mt-1 max-w-2xl text-sm text-dim">Compare cost and correct answers for each model on one AI task.</p>
       </header>
 
       <Panel className="p-4 md:p-5">
@@ -222,9 +232,9 @@ export default function Compare() {
                 onChange={(e) => set({ tokens: e.target.value.replace(/[^\d]/g, "") })}
               />
             </div>
-            <span className="font-normal text-muted">{actualTokens ? `${count(volumeTokens)} tokens a month (you use about ${count(actualTokens)} now)` : "No token counts recorded yet. Tokens are the small pieces of text AI models are billed by."}</span>
+            <span className="font-normal text-muted">{actualTokens ? (rough ? `Still learning: ${count(volumeTokens)} tokens a month is a rough guess from ${daysWord(account.span)} of use` : `${count(volumeTokens)} tokens a month (you use about ${count(actualTokens)} now)`) : "No token counts recorded yet."}</span>
           </div>
-          <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
+          {billing !== "subscription" && <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
             Monthly budget (US dollars)
             <input
               inputMode="decimal"
@@ -236,7 +246,7 @@ export default function Compare() {
                 set({ budget: v === null ? null : String(v) });
               }}
             />
-          </label>
+          </label>}
         </div>
         {providerNames.length > 0 && (
           <div className="mt-4 flex flex-wrap items-center gap-1.5" role="group" aria-label="Provider">
@@ -259,15 +269,20 @@ export default function Compare() {
       ) : (
         <p className="flex flex-wrap items-center gap-2 text-sm text-dim" data-testid="evidence-line">
           <span>
-            Based on {account.span} days of use: {count(account.runs)} AI calls, about {count(actualTokens)} tokens a month (tokens are the small pieces of text AI is billed by).
+            {rough
+              ? `Based on ${daysWord(account.span)} of use: ${count(account.runs)} AI calls. Still learning: we need ${MIN_DAYS_FOR_MONTH} days before we say what a month looks like. ${count(actualTokens)} tokens a month is a rough guess.`
+              : `Based on ${daysWord(account.span)} of use: ${count(account.runs)} AI calls, about ${count(actualTokens)} tokens a month.`}
           </span>
           <Pill tone={early ? "warn" : "good"}>{early ? "Not enough history yet" : "Enough history to compare"}</Pill>
-          <Help label="How to read the numbers on this page">Costs are what each model would charge for the same amount of text you use now. Correct answers come from answers we checked: we need at least {MIN_CHECKED_ANSWERS} per model before we show a range. Models you have not used are estimates.</Help>
+          <Help label="How to read the numbers on this page">Costs are what each model would charge for the same amount of text you use now. Correct answers come from answers we checked: we need at least {MIN_CHECKED_ANSWERS} per model before we show a range. Models you have not used are estimates. {tokensAre(billing)}</Help>
         </p>
       )}
 
       {!jobName ? (
-        <EmptyState title="No AI tasks yet" hint="Create an AI task and send some AI calls through our SDK. Then you can compare what different models would cost for it." />
+        <>
+          <EmptyState title="No AI tasks yet" hint="Create an AI task and send some AI calls. Then you can compare models, measured on your own work." />
+          <ProfileSuggestPanel job={null} usage={usage} />
+        </>
       ) : unchecked ? (
         <>
           <Panel className="p-5">
@@ -283,26 +298,34 @@ export default function Compare() {
       ) : rec.isPending ? (
         <Skeleton className="h-72" />
       ) : !rec0 ? (
-        <EmptyState title="Not enough checked answers yet" hint={`We need at least ${MIN_CHECKED_ANSWERS} checked answers from a model to compare quality. Until then, the costs on this page are only estimates. Check more of this task's answers to see the real comparison.`} />
+        <EmptyState title="Not enough checked answers yet" hint={`We need at least ${MIN_CHECKED_ANSWERS} checked answers from a model to compare quality. Until then, costs here are estimates.`} />
       ) : (
         <>
           {checkedRuns < rec0.rules.evidence_floor && (
             <NotEnoughData n={checkedRuns} min={rec0.rules.evidence_floor}>
-              Next step: check more of this task's answers. The costs below are still real or estimated prices.
+              Next step: check more of this task's answers.
             </NotEnoughData>
           )}
           <Panel className="p-5">
-            <CompareChart rec={rec0} catalog={catalog} avgTokens={avgTokens} providers={providers} />
-            {!avgTokens && <p className="mt-2 text-xs text-muted">Token counts are not recorded for this AI task yet, so models it has not used cannot be priced.</p>}
+            <CompareChart rec={rec0} job={jobName} providers={providers} providerOf={(m) => catalog.find((c) => c.model === m || c.model.startsWith(m))?.provider} listPrice={billing !== "per_use"} />
+          </Panel>
+          {rec0.evidence?.state !== "not_comparable" && (
+            <Panel className="p-5">
+              <DifferenceChart rec={rec0} allowed={(m) => providers.length === 0 || providers.includes(catalog.find((c) => c.model === m || c.model.startsWith(m))?.provider ?? "")} />
+            </Panel>
+          )}
+          <Panel className="p-5">
+            <UntestedList rec={rec0} catalog={catalog} avgTokens={avgTokens} providers={providers} job={jobName} />
+            {!avgTokens && <p className="mt-2 text-xs text-muted">No token counts yet, so untested models cannot be priced.</p>}
           </Panel>
           <section aria-label="Suggestions" className="flex flex-col gap-3">
             <h2 className="text-lg font-semibold">Suggestions</h2>
             {suggestions.length === 0 ? (
-              <p className="text-sm text-dim">Nothing to suggest for these filters.</p>
+              <p className="text-sm text-dim">{rec0.evidence?.state === "not_comparable" ? "Not compared: these models were not tried on the same prompt version, so nothing is suggested." : "Nothing to suggest for these filters."}</p>
             ) : (
-              <ul className="grid gap-3 md:grid-cols-3">
+              <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {suggestions.map((s) => (
-                  <SuggestionCard key={s.label} s={s} job={jobName} />
+                  <SuggestionCard key={s.label} s={s} job={jobName} rough={isRoughMonth(account.span)} />
                 ))}
               </ul>
             )}

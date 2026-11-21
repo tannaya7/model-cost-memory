@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from agent_memory.alerts import notifier
 from agent_memory.alerts.notifier import deliver_pending, sign, sign_v2
 from agent_memory.alerts.service import catalog_alerts
 from agent_memory.models import Alert, CatalogEntry, Job, Project, ProviderPrice, Recommendation, Run
@@ -184,7 +185,8 @@ async def test_alerts_are_listed_and_resolved_through_the_api(client, session, w
     assert (await client.post(f"/v1/alerts/{uuid.uuid4()}/resolve", headers=headers)).status_code == 404
 
 
-async def test_webhook_delivery_is_signed_and_retried_with_backoff(session, world, caplog):
+async def test_webhook_delivery_is_signed_and_retried_with_backoff(session, world, caplog, monkeypatch):
+    monkeypatch.setattr(notifier, "LEGACY_SIGNATURE_UNTIL", date(2999, 1, 1))  # this test is about the legacy header being sent, whatever today is
     _, job, add = world
     await add(200, version="big-2026-08", passes=190, start=T0)
     await add(100, version="big-2026-09", passes=80, start=T0 + timedelta(days=3))
@@ -277,3 +279,28 @@ async def test_the_detection_evaluation_reports_rates(engine):
     control, injected = await detection(sessions, drops=(0.0, 0.15), trials=2)
     assert (control.drop, control.flagged) == (0.0, 0)
     assert injected.rate == 1.0
+
+
+async def test_after_the_sunset_date_only_the_replay_protected_signature_is_sent(session, world, monkeypatch):
+    monkeypatch.setattr(notifier, "LEGACY_SIGNATURE_UNTIL", date(2020, 1, 1))  # the date has passed
+    _, job, add = world
+    await add(200, version="big-2026-08", passes=190, start=T0)
+    await add(100, version="big-2026-09", passes=80, start=T0 + timedelta(days=3))
+    now = T0 + timedelta(days=5)
+    await sweep_job(session, job, now=now)
+    received = []
+
+    def up(request):
+        received.append(request)
+        return httpx.Response(204)
+
+    assert await deliver_pending(session, now=now, transport=httpx.MockTransport(up)) == (1, 0)
+    [request] = received
+    assert "X-MCM-Signature" not in request.headers
+    stamp = request.headers["X-MCM-Timestamp"]
+    assert request.headers["X-MCM-Signature-V2"] == sign_v2("whsec_test", stamp, request.content)
+
+
+def test_the_legacy_signature_date_is_a_real_future_date_and_switches_on_the_day():
+    assert notifier.LEGACY_SIGNATURE_UNTIL == date(2027, 3, 1)
+    assert notifier.legacy_signature_active(date(2027, 2, 28)) and not notifier.legacy_signature_active(date(2027, 3, 1))

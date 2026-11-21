@@ -66,7 +66,7 @@ async def test_a_run_is_accepted_and_stored_with_its_outbox_row(client, project,
     stored = (await session.execute(select(Run))).scalar_one()
     assert str(stored.run_id) == body["run_id"]
     assert stored.outcome == "UNKNOWN" and stored.state == "CAPTURED"  # outcomes arrive in Week 4
-    assert stored.prompt_hash == prompt_hash("Extract the total.")
+    assert stored.prompt_hash == prompt_hash("Extract the total.", "demo")
     outbox = (await session.execute(select(OutboxRow))).scalar_one()
     assert outbox.run_id == stored.run_id and outbox.status == "PENDING" and outbox.op == "UPSERT"
 
@@ -164,3 +164,60 @@ async def test_a_hand_entered_catalog_price_beats_the_providers_price(client, pr
     body = run_body(model_version="mini", tokens_in=1_000_000, tokens_out=0, provider="groq")
     await client.post("/v1/runs", json=body, headers=project)
     assert (await session.execute(select(Run.cost_usd))).scalar_one() == Decimal("1.000000")
+
+
+# --- the canonical token ledger on a stored run (usage_ledger.py, migration 0023) ---
+
+async def _priced(session):
+    session.add(CatalogEntry(model="mini", model_version="2026-09", provider="acme",
+                             price_in_per_mtok=Decimal("3"), price_out_per_mtok=Decimal("15")))
+    await session.commit()
+
+
+async def test_a_response_with_no_usage_block_is_never_stored_as_free(client, project, session):
+    await _priced(session)
+    await client.post("/v1/jobs", json=JOB, headers=project)
+    body = run_body(tokens_in=0, tokens_out=0, usage_shape="none")
+    assert (await client.post("/v1/runs", json=body, headers=project)).status_code == 202
+    row = (await session.execute(select(Run.cost_usd, Run.usage_shape, Run.tokens_in))).one()
+    assert row.cost_usd is None and row.usage_shape == "none" and row.tokens_in == 0  # unknown cost, not $0
+
+
+async def test_a_reported_zero_usage_is_still_priced_at_zero(client, project, session):
+    await _priced(session)
+    await client.post("/v1/jobs", json=JOB, headers=project)
+    body = run_body(tokens_in=0, tokens_out=0, usage_shape="openai_chat")  # the provider said 0: a real zero
+    await client.post("/v1/runs", json=body, headers=project)
+    assert (await session.execute(select(Run.cost_usd))).scalar_one() == Decimal("0.000000")
+
+
+async def test_runs_without_the_ledger_fields_behave_exactly_as_before(client, project, session):
+    await _priced(session)
+    await client.post("/v1/jobs", json=JOB, headers=project)
+    await client.post("/v1/runs", json=run_body(tokens_in=2000, tokens_out=500), headers=project)
+    row = (await session.execute(select(Run.cost_usd, Run.usage_shape, Run.usage_raw, Run.reasoning_tokens,
+                                        Run.tool_use_input_tokens))).one()
+    assert row.cost_usd == Decimal("0.013500") and row == (Decimal("0.013500"), None, None, None, None)
+
+
+async def test_the_ledger_fields_are_stored_and_the_raw_block_is_cleaned_again_on_the_server(client, project, session):
+    await _priced(session)
+    await client.post("/v1/jobs", json=JOB, headers=project)
+    raw = {"prompt_tokens": 10, "completion_tokens": 2, "note": "customer SSN 123-45-6789",
+           "completion_tokens_details": {"reasoning_tokens": 1, "text": "SECRET"}}
+    body = run_body(tokens_in=10, tokens_out=2, usage_shape="openai_chat", usage_raw=raw, reasoning_tokens=1,
+                    tool_use_input_tokens=7)
+    assert (await client.post("/v1/runs", json=body, headers=project)).status_code == 202
+    row = (await session.execute(select(Run))).scalar_one()
+    assert row.usage_raw == {"prompt_tokens": 10, "completion_tokens": 2,
+                             "completion_tokens_details": {"reasoning_tokens": 1}}
+    assert (row.reasoning_tokens, row.tool_use_input_tokens) == (1, 7)
+    assert "SECRET" not in str(row.usage_raw) and "SSN" not in str(row.usage_raw)
+
+
+@pytest.mark.parametrize("bad", [{"usage_shape": "claude"}, {"reasoning_tokens": -1},
+                                 {"usage_raw": {"k": "x" * 5000}}, {"tool_use_input_tokens": 10**12}])
+async def test_bad_ledger_fields_are_rejected_before_any_write(client, project, session, bad):
+    await client.post("/v1/jobs", json=JOB, headers=project)
+    assert (await client.post("/v1/runs", json=run_body(**bad), headers=project)).status_code == 422
+    assert (await session.execute(text("SELECT count(*) FROM runs"))).scalar_one() == 0

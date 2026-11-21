@@ -103,12 +103,17 @@ class Settings:
     retest_concurrency: int = 2
     retest_default_sample: int = 50
     retest_auto_budget_usd: float = 1.0  # budget of a re-test the system starts on its own
+    # Automatic replays (a new model appears, the engine is unsure, a provider key is first added) start a paid replay with no
+    # confirmation for that replay. They are OFF on every server unless the operator sets AUTO_REPLAYS=true: while off, a project
+    # cannot be switched to them and the scheduler starts nothing by itself. Replays a person previews and confirms always work.
+    auto_replays: bool = False
     # Secret for encrypting stored provider keys and signing session cookies. Required in production.
     secret_key: str = ""
     # Google sign-in (Week 11). Without a client id, sign-in is off and the project key is used.
     google_client_id: str = ""
     google_client_secret: str = ""
     public_url: str = "http://localhost:5174"  # where the web app is served; the OAuth redirect comes back here
+    domain: str = ""  # the server's domain name (Caddy's); set means a real server, never a laptop
     dev_login: bool = False  # local development only: sign in as any email without Google
     # A project anyone may read without a key (the public demo); empty means none.
     demo_project_id: str = ""
@@ -124,6 +129,9 @@ class Settings:
     operator_webhook_url: str = ""
     # Outbound URLs (webhooks, re-test endpoints) must be public addresses unless this is on (urls.py).
     allow_private_urls: bool = False
+    # Read the providers' own deprecation pages once a day for model notices (notices/service.py). Public pages only;
+    # nothing about any project is sent. Off with MODEL_NOTICES_ENABLED=false.
+    model_notices_enabled: bool = True
     # Abuse limits (ratelimit.py). Requests per minute per project key, and per IP for requests without
     # one; runs a project may record per UTC day; live-stream connections per IP and in all.
     rate_limit_key_per_minute: int = 1200
@@ -165,13 +173,16 @@ class Settings:
             google_client_id=os.environ.get("GOOGLE_CLIENT_ID", ""),
             google_client_secret=os.environ.get("GOOGLE_CLIENT_SECRET", ""),
             public_url=os.environ.get("PUBLIC_URL", cls.public_url).rstrip("/"),
+            domain=os.environ.get("DOMAIN", "").strip(),
             dev_login=_bool("DEV_LOGIN"),
+            auto_replays=_bool("AUTO_REPLAYS"),
             demo_project_id=os.environ.get("DEMO_PROJECT_ID", ""),
             summary_model=os.environ.get("SUMMARY_MODEL", cls.summary_model),
             summary_base_url=os.environ.get("SUMMARY_BASE_URL", cls.summary_base_url),
             summary_effort=os.environ.get("SUMMARY_EFFORT", cls.summary_effort),
             summary_daily_limit=_int("SUMMARY_DAILY_LIMIT", 200),
             allow_private_urls=_bool("ALLOW_PRIVATE_URLS"),
+            model_notices_enabled=os.environ.get("MODEL_NOTICES_ENABLED", "true").strip().lower() not in ("0", "false", "no"),
             operator_webhook_url=os.environ.get("OPERATOR_WEBHOOK_URL", ""),
             rate_limit_key_per_minute=_int("RATE_LIMIT_KEY_PER_MINUTE", 1200),
             rate_limit_ip_per_minute=_int("RATE_LIMIT_IP_PER_MINUTE", 120),
@@ -183,7 +194,13 @@ class Settings:
     @property
     def is_public(self) -> bool:
         """Served over https: a real deployment, not a laptop."""
-        return self.public_url.startswith("https://")
+        return self.public_url.strip().lower().startswith("https://")
+
+    @property
+    def is_local(self) -> bool:
+        """PUBLIC_URL points at this machine (and no DOMAIN is set): a laptop, not a server."""
+        host = (urlsplit(self.public_url.strip()).hostname or "").lower()
+        return not self.domain and host in ("localhost", "127.0.0.1", "::1")
 
 
 MIN_SECRET_KEY_LENGTH = 32
@@ -206,11 +223,12 @@ def startup_problems(settings: Settings) -> list[str]:
     if settings.is_public:
         if not settings.secret_key:
             problems.append("SECRET_KEY is required on a server whose PUBLIC_URL is https")
-        if settings.dev_login:
-            problems.append("DEV_LOGIN lets anyone sign in as any email; it is refused when PUBLIC_URL is https")
         if settings.allow_private_urls:
             problems.append("ALLOW_PRIVATE_URLS lets projects make this server call its own network; "
                             "it is refused when PUBLIC_URL is https")
+    if settings.dev_login and (settings.is_public or not settings.is_local):
+        problems.append("DEV_LOGIN lets anyone sign in as any email; it is refused when PUBLIC_URL is https, "
+                        "when DOMAIN is set, or when PUBLIC_URL is not localhost")
     return problems
 
 

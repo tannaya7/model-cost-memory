@@ -5,21 +5,25 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { useDaily } from "../features/insights/api/dailyApi";
 import { useSpendInsights } from "../features/insights/hooks/useSpendInsights";
-import { jobTitle, TASK_EXPLAINER } from "../features/jobs/jobTitle";
+import { jobTitle, TASK_EXPLAINER, TASK_SHORT } from "../features/jobs/jobTitle";
 import { CHECK_KIND_LABELS } from "../features/jobs/checkKinds";
 import { JobCreatePanel } from "../features/jobs/components/JobCreatePanel";
+import { ConnectGuide } from "../features/jobs/components/ConnectGuide";
 import { useJobs } from "../features/jobs/hooks/useJobs";
 import { Sparkline } from "../ui/charts/charts";
 import { pivot } from "../ui/charts/data";
 import { count, pct, usd, type Verdict } from "../ui/format";
+import { passRateInUse, volumeWords } from "./forecastText";
 import { IconArrowRight, IconJobs, IconPlus, IconSearch } from "../ui/icons";
 import { Button, EmptyState, ErrorState, ModelName, Pill, Reveal, Segmented, Skeleton } from "../ui/primitives";
 import { monthlySaving, useAllRecommendations, VerdictPill } from "./shared";
+import { useBillingMode } from "../features/projects/hooks/useBillingMode";
 
 type Filter = "all" | "save" | "attention" | "learning";
 
 export default function Jobs() {
   const p = useP();
+  const { mode: billing } = useBillingMode();
   const jobsQuery = useJobs();
   const jobs = jobsQuery.data;
   const { byJob } = useAllRecommendations(jobs);
@@ -31,6 +35,7 @@ export default function Jobs() {
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [connect, setConnect] = useState<string[] | null>(null); // the connection guide, for these task names
 
   const runsByJob = useMemo(() => {
     const { rows, names } = pivot(daily.data ?? [], "job", "runs", days);
@@ -40,7 +45,8 @@ export default function Jobs() {
 
   const counts = { all: 0, save: 0, attention: 0, learning: 0 };
   const rows = (jobs ?? []).map((job) => {
-    const rec = byJob.get(job.name) ?? null;
+    // A task with no AI calls has no evidence, so it never shows a percentage or a verdict.
+    const rec = job.run_count > 0 ? (byJob.get(job.name) ?? null) : null;
     const kind: Filter = !rec || rec.verdict === "INSUFFICIENT_EVIDENCE" ? "learning" : rec.verdict === "DOWNGRADE" ? "save" : rec.verdict === "SWITCH" ? "attention" : "all";
     counts.all += 1;
     if (kind !== "all") counts[kind] += 1;
@@ -56,17 +62,30 @@ export default function Jobs() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">AI tasks</h1>
-          <p className="mt-1 max-w-2xl text-sm text-dim">{TASK_EXPLAINER}</p>
+          <p className="mt-1 max-w-2xl text-sm text-dim">{TASK_SHORT}</p>
         </div>
-        <Button variant="primary" onClick={() => setCreating(true)}>
-          <IconPlus size={16} /> New AI task
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setConnect((jobs ?? []).map((j) => j.name))}>How to connect your app</Button>
+          <Button variant="primary" onClick={() => setCreating(true)}>
+            <IconPlus size={16} /> New AI task
+          </Button>
+        </div>
       </header>
 
       {notice && (
         <p role="status" className="rounded-[12px] border border-ok/30 bg-ok-soft px-4 py-2.5 text-sm text-ok">
           {notice}
         </p>
+      )}
+
+      {connect && (
+        <section aria-label="Connect your app" className="panel p-5">
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="text-lg font-semibold">Connect your app</h2>
+            <Button size="sm" variant="ghost" onClick={() => setConnect(null)}>Close</Button>
+          </div>
+          <div className="mt-3"><ConnectGuide tasks={connect} /></div>
+        </section>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -76,7 +95,7 @@ export default function Jobs() {
           onChange={setFilter}
           options={[
             { value: "all", label: "All", count: counts.all },
-            { value: "save", label: "Can save", count: counts.save },
+            { value: "save", label: billing === "subscription" ? "Smaller model may help" : "Can save", count: counts.save },
             { value: "attention", label: "Needs a better model", count: counts.attention },
             { value: "learning", label: "Still learning", count: counts.learning },
           ]}
@@ -98,44 +117,48 @@ export default function Jobs() {
       {jobsQuery.isError && !jobs ? (
         <ErrorState error={jobsQuery.error} onRetry={() => jobsQuery.refetch()} />
       ) : jobsQuery.isPending ? (
-        <div className="flex flex-col gap-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-24" />)}</div>
+        <div role="status" aria-label="Loading your AI tasks" className="flex flex-col gap-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-24" />)}</div>
       ) : shown.length === 0 ? (
         <EmptyState
           icon={<IconJobs size={18} />}
           title={jobs?.length ? "No AI task matches" : "No AI tasks yet"}
-          hint={jobs?.length ? "Try another filter or search." : `${TASK_EXPLAINER} You create a task here first, then send calls for it from your code. Example: name "invoice-extract", what it does: "Pull the total amount out of an invoice".`}
+          hint={jobs?.length ? "Try another filter or search." : `${TASK_EXPLAINER} Add the tasks your app does, in your own words, for example "Read invoices". Then we show you how to connect your app, with a ready message you can send to whoever built it.`}
           action={!jobs?.length && <Button variant="primary" onClick={() => setCreating(true)}>Create your first AI task</Button>}
         />
       ) : (
         <ul className="flex flex-col gap-3">
           {shown.map(({ job, rec }, i) => {
             const saving = monthlySaving(rec);
-            const current = rec?.models.find((m) => m.model === rec.current?.model);
-            const target = rec?.models.find((m) => m.model === rec.recommended?.model);
             const moving = rec?.recommended && rec.current && rec.recommended.model !== rec.current.model;
             return (
               <motion.li key={job.job_id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
                 <Link
                   to={p(`/jobs/${encodeURIComponent(job.name)}`)}
-                  className="panel group grid grid-cols-1 items-center gap-4 p-4 transition-all hover:border-rule-strong md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_repeat(3,minmax(0,0.8fr))_120px_24px] md:p-5"
+                  className="panel group grid grid-cols-2 items-center gap-x-4 gap-y-3 p-4 transition-all hover:border-rule-strong sm:grid-cols-3 md:p-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_repeat(3,minmax(0,0.8fr))_120px_24px] xl:gap-4"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate text-[15px] font-semibold text-ink">{jobTitle(job.name)}</p>
+                  <div className="col-span-full min-w-0 xl:col-auto">
+                    <p className="truncate text-[15px] font-semibold text-ink" title={jobTitle(job.name)}>{jobTitle(job.name)}</p>
                     <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
-                      <span title="name in your code" className="rounded-md border border-rule bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-dim">{job.name}</span>
+                      <span title="name in your code" className="max-w-full break-all rounded-md border border-rule bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-dim">{job.name}</span>
                       <span>{count(job.run_count)} AI calls</span>
                     </p>
                     {job.description ? (
-                      <p className="mt-1.5 line-clamp-2 text-xs text-dim">{job.description}</p>
+                      <p className="mt-1.5 line-clamp-2 text-xs text-dim [overflow-wrap:anywhere]">{job.description}</p>
                     ) : (
                       <p className="mt-1.5 text-xs text-muted">
                         No description yet. <span className="text-accent underline">Add one</span> so your team knows what this does.
                       </p>
                     )}
                     <p className="mt-1 text-[11px] text-muted">{CHECK_KIND_LABELS[job.check_kind]}</p>
+                    {job.run_count === 0 && (
+                      <p className="mt-1.5 rounded-[8px] bg-surface-2 px-2.5 py-1.5 text-xs text-dim" data-testid="waiting-for-first-call">
+                        <strong className="font-semibold text-ink">Waiting for its first AI call.</strong> Your app needs to send a call under the name{" "}
+                        <code className="font-mono text-ink">{job.name}</code>; until then there is nothing to measure or recommend. Use &ldquo;How to connect your app&rdquo; above.
+                      </p>
+                    )}
                   </div>
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    {rec ? <VerdictPill verdict={rec.verdict as Verdict} rec={rec} /> : <Pill tone="neutral">No recommendation yet</Pill>}
+                  <div className="col-span-full flex min-w-0 flex-wrap items-center gap-2 xl:col-auto">
+                    {rec ? <VerdictPill verdict={rec.verdict as Verdict} rec={rec} /> : <Pill tone="neutral">{job.run_count === 0 ? "No AI calls yet" : "No recommendation yet"}</Pill>}
                     {rec?.current && (
                       <span className="flex min-w-0 items-center gap-1.5 text-sm">
                         <ModelName className="truncate text-dim">{rec.current.model}</ModelName>
@@ -148,13 +171,17 @@ export default function Jobs() {
                       </span>
                     )}
                   </div>
-                  <Metric label="Correct answers" value={pct((moving ? target : current)?.weighted_pass_rate)} />
-                  <Metric label={`Spend ${period} d`} value={usd(spendByJob.get(job.name) ?? 0)} />
-                  <Metric label="Saving" value={saving > 0 ? `${usd(saving)}/mo` : "–"} good={saving > 0} />
-                  <div className="hidden md:block">
+                  <Metric label="Correct answers, model in use" value={rec ? pct(passRateInUse(rec)) : "–"} />
+                  <Metric label={billing === "subscription" ? `List price ${period} d` : `Spend ${period} d`} value={usd(spendByJob.get(job.name) ?? 0)} />
+                  {billing === "subscription" ? (
+                    <Metric label="Allowance" value={saving > 0 ? "Smaller model may help" : "–"} good={saving > 0} />
+                  ) : (
+                    <Metric label="Saving" value={saving > 0 ? `${usd(saving)}/mo` : "–"} good={saving > 0} note={saving > 0 && rec?.forecast ? volumeWords(rec.forecast, rec.current?.model) : undefined} />
+                  )}
+                  <div className="hidden xl:block">
                     <Sparkline values={runsByJob.get(job.name) ?? []} color="var(--series-7)" height={34} />
                   </div>
-                  <IconArrowRight size={17} className="hidden text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-accent md:block" />
+                  <IconArrowRight size={17} className="hidden text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-accent xl:block" />
                 </Link>
               </motion.li>
             );
@@ -163,19 +190,20 @@ export default function Jobs() {
       )}
 
       <Reveal delay={0.1}>
-        <p className="text-center text-xs text-muted">The line on the right is AI calls per day over the last {period} days.</p>
+        <p className="text-center text-xs text-muted">Line: AI calls per day, last {period} days.</p>
       </Reveal>
 
-      <JobCreatePanel isOpen={creating} onClose={() => setCreating(false)} onSuccess={(message) => { setCreating(false); setNotice(message); }} />
+      <JobCreatePanel isOpen={creating} onClose={() => setCreating(false)} onSuccess={(message) => { setCreating(false); setNotice(message); }} onCreated={(name) => setConnect([name])} />
     </div>
   );
 }
 
-function Metric({ label, value, good = false }: { label: string; value: string; good?: boolean }) {
+function Metric({ label, value, good = false, note }: { label: string; value: string; good?: boolean; note?: string }) {
   return (
     <div>
       <p className="text-[11px] uppercase tracking-wider text-muted">{label}</p>
       <p className={`tabular text-sm font-semibold ${good ? "text-ok" : "text-ink"}`}>{value}</p>
+      {note && <p className="text-[10px] leading-snug text-muted">{note}</p>}
     </div>
   );
 }

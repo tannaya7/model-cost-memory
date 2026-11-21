@@ -20,7 +20,7 @@ describe("Tour", () => {
   it("opens on sending the first call, with the exact line of code and a link to the key", () => {
     setup();
     expect(screen.getByRole("heading", { name: "Send your first call" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Example code").textContent).toContain("RunRecorder(job=");
+    expect(screen.getByLabelText("Example code").textContent).toContain('record_ai_call("invoice-extract"');
     expect(screen.getByRole("link", { name: "Find your project key" })).toHaveAttribute("href", "/p/p1/settings#keys");
   });
   it("walks through all six steps and finishes", async () => {

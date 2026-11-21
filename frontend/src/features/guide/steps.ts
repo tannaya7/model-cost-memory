@@ -32,13 +32,13 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: "tasks",
     title: "AI tasks",
-    body: "An AI task is one kind of work your code asks an AI to do, such as reading invoices. Each job name in your code becomes one task.",
+    body: "An AI task is one kind of work your code asks an AI to do, such as reading invoices. The task name you put in your code decides which AI task a call belongs to.",
     later: "Once calls arrive, each task is listed here with its own cost and results.",
     target: "tasks",
   },
   {
     id: "compare",
-    title: "Compare",
+    title: "Smart compare",
     body: "Here you can see which AI model costs the least and still gives answers that are good enough.",
     later: "Once enough of your answers are checked, we show how each model did on your own work.",
     target: "compare",
@@ -53,8 +53,8 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: "settings",
     title: "Settings",
-    body: "Set a monthly spending limit here, so a mistake in your code cannot run up a big bill. You can also change your alerts and keys.",
-    later: "Nothing is limited until you set one.",
+    body: "Set your limits here and we warn you before you reach them. We never stop your app. You can also change your alerts and keys.",
+    later: "Nothing is watched until you set a limit.",
     target: "settings",
   },
 ];
@@ -62,6 +62,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
 export interface GuideFlags {
   tour_seen?: boolean;
   first_results_seen?: boolean;
+  welcome_seen?: boolean;
 }
 
 /** The tour opens by itself once: for a signed-in owner, on a project with no calls yet, who has not seen it. */

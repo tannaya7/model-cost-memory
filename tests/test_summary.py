@@ -28,7 +28,7 @@ def result(mini_rate=0.99):
 
 @pytest.fixture
 async def job(session):
-    session.add(Project(project_id="sum", api_key_hash=hash_key(generate_key())))
+    session.add(Project(project_id="sum", api_key_hash=hash_key(generate_key()), ai_summary_consent=True))
     await session.flush()
     row = Job(project_id="sum", name="invoice", check_kind="ANSWER_KEY", check_config={"fields": ["total"]})
     session.add(row)
@@ -235,3 +235,63 @@ async def test_an_overloaded_free_tier_gives_no_summary_and_no_error(session, jo
     assert await summary.summarize(session, job, result(), SETTINGS) == (None, None)
     stored = (await session.execute(select(RecommendationSummary))).scalar_one()
     assert stored.summary is None and stored.attempts == 1  # tried again for this verdict after an hour
+
+
+# --- the project's billing mode reaches the summary writer (flat subscription: no money wording at the source) ---
+
+async def set_mode(session, mode):
+    await session.execute(Project.__table__.update().where(Project.project_id == "sum").values(billing_mode=mode))
+    await session.commit()
+
+
+def with_money_facts(res):
+    from types import SimpleNamespace
+    res.forecast = SimpleNamespace(monthly_saving_usd=412.5, extra_failures_per_month=3.0)
+    res.decision.warnings.append("Switching would save about $412 a month")
+    res.decision.warnings.append("Only 40 answers were checked")
+    return res
+
+
+async def test_a_subscription_project_gets_no_money_figures_and_is_told_so(session, job, calls):
+    await set_mode(session, "subscription")
+    await summary.summarize(session, job, with_money_facts(result()), SETTINGS)
+    instructions, figures = calls[0]
+    assert "flat subscription fee" in instructions and "Never mention dollars" in instructions
+    assert figures["billing"] == "flat subscription"
+    assert all("cost_per_success_usd" not in m for m in figures["models"])
+    assert "monthly_saving_usd" not in figures and figures["extra_failures_per_month"] == 3.0  # quality facts stay
+    assert figures["warnings"] == ["Only 40 answers were checked"]
+    assert "$" not in json.dumps(figures)
+
+
+async def test_a_mixed_project_keeps_the_figures_but_must_call_them_list_prices(session, job, calls):
+    await set_mode(session, "both")
+    await summary.summarize(session, job, with_money_facts(result()), SETTINGS)
+    instructions, figures = calls[0]
+    assert "at list prices" in instructions and "never call it a bill" in instructions
+    assert figures["billing"] == "per use and subscription"
+    assert figures["monthly_saving_usd"] == 412.5 and any("cost_per_success_usd" in m for m in figures["models"])
+
+
+async def test_a_per_use_project_is_written_exactly_as_before(session, job, calls):
+    await summary.summarize(session, job, with_money_facts(result()), SETTINGS)
+    instructions, figures = calls[0]
+    assert "flat subscription" not in instructions and "list prices" not in instructions
+    assert "billing" not in figures and figures["monthly_saving_usd"] == 412.5
+    assert len(figures["warnings"]) >= 2
+
+
+async def test_each_billing_mode_has_its_own_stored_summary_and_per_use_keeps_its_old_key(session, job, calls):
+    import hashlib
+
+    res = result()
+    _, version = summary._prompt()
+    old_style = hashlib.sha256(json.dumps(
+        [str(job.job_id), SETTINGS.summary_model, version, summary.verdict_identity(res)], sort_keys=True).encode()).hexdigest()
+    assert summary.summary_key(job, res, SETTINGS, version) == old_style  # no stored per-use summary is lost
+    keys = {summary.summary_key(job, res, SETTINGS, version, m) for m in ("per_use", "both", "subscription")}
+    assert len(keys) == 3
+    await summary.summarize(session, job, res, SETTINGS)
+    await set_mode(session, "subscription")
+    await summary.summarize(session, job, res, SETTINGS)
+    assert len(calls) == 2  # a changed mode is written afresh, never served from the other mode's text

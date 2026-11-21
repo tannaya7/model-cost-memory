@@ -1,11 +1,5 @@
-import type { Answers, Need, People, Priority, Task } from "./types";
+import type { Answers, Need, Priority, Profile, Task } from "./types";
 
-export const PEOPLE: { value: People; label: string }[] = [
-  { value: "1", label: "Just me" },
-  { value: "2-10", label: "2 to 10" },
-  { value: "11-50", label: "11 to 50" },
-  { value: "50+", label: "More than 50" },
-];
 export const TASKS: { value: Task; label: string }[] = [
   { value: "coding", label: "Heavy coding" },
   { value: "extraction", label: "Extracting data from documents" },
@@ -29,38 +23,66 @@ export const NEEDS: { value: Need; label: string }[] = [
   { value: "privacy", label: "Privacy or data location" },
 ];
 
-export const profileKey = (project: string, job: string) => `mcm_profile_${project}_${job}`;
+/** Where the answers live in this browser. `job` is null before the project has a task to attach them to. */
+export const profileKey = (project: string, job: string | null) => (job === null ? `mcm_profile_${project}` : `mcm_profile_${project}_${job}`);
+
+/** No task, no priority, no need and no budget: nothing was actually answered. */
+export const isEmpty = (a: Answers) => a.tasks.length === 0 && a.priority === null && a.needs.length === 0 && a.budgetUsd === null;
+
+export const NO_ANSWERS: Answers = { tasks: [], priority: null, needs: [], budgetUsd: null };
 
 const has = <T extends string>(list: { value: T }[], v: unknown): v is T => list.some((x) => x.value === v);
 
-function valid(a: unknown): a is Answers {
-  if (!a || typeof a !== "object") return false;
+/** Older saves also held a team-size answer and always a priority; both are read, and the team size is dropped. */
+function answers(a: unknown): Answers | null {
+  if (!a || typeof a !== "object") return null;
   const o = a as Record<string, unknown>;
-  return (
-    has(PEOPLE, o.people) &&
-    has(PRIORITIES, o.priority) &&
+  const ok =
+    (o.priority === null || o.priority === undefined || has(PRIORITIES, o.priority)) &&
     Array.isArray(o.tasks) && o.tasks.every((t) => has(TASKS, t)) &&
     Array.isArray(o.needs) && o.needs.every((n) => has(NEEDS, n)) &&
-    (o.budgetUsd === null || (typeof o.budgetUsd === "number" && Number.isFinite(o.budgetUsd) && o.budgetUsd >= 0))
-  );
+    (o.budgetUsd === null || o.budgetUsd === undefined || (typeof o.budgetUsd === "number" && Number.isFinite(o.budgetUsd) && o.budgetUsd >= 0));
+  if (!ok) return null;
+  return { tasks: o.tasks as Task[], priority: (o.priority ?? null) as Priority | null, needs: o.needs as Need[], budgetUsd: (o.budgetUsd ?? null) as number | null };
 }
 
-/** The saved answers for a job, or null (nothing saved, damaged, or storage blocked). */
-export function readAnswers(project: string, job: string): Answers | null {
+/** What is saved: nothing, a skip, or answers. Damaged or blocked storage reads as nothing, never as an error. */
+export function readProfile(project: string, job: string | null): Profile {
   try {
     const raw = localStorage.getItem(profileKey(project, job));
-    if (!raw) return null;
+    if (!raw) return { state: "none" };
     const parsed: unknown = JSON.parse(raw);
-    return valid(parsed) ? parsed : null;
+    if (parsed && typeof parsed === "object" && (parsed as Record<string, unknown>).skipped === true) return { state: "skipped" };
+    const a = answers(parsed);
+    return a && !isEmpty(a) ? { state: "answered", answers: a } : { state: "none" };
   } catch {
-    return null;
+    return { state: "none" };
   }
 }
 
-/** Saves the answers; returns false when storage is blocked (the answers still work for this visit). */
-export function writeAnswers(project: string, job: string, answers: Answers): boolean {
+/** Saves the answers, or a skip when nothing was answered. Returns false when storage is blocked (it still works for this visit). */
+export function saveProfile(project: string, job: string | null, a: Answers): boolean {
   try {
-    localStorage.setItem(profileKey(project, job), JSON.stringify(answers));
+    localStorage.setItem(profileKey(project, job), JSON.stringify(isEmpty(a) ? { skipped: true } : a));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function skipProfile(project: string, job: string | null): boolean {
+  try {
+    localStorage.setItem(profileKey(project, job), JSON.stringify({ skipped: true }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Forgets the answers and the skip: the next visit asks again. */
+export function clearProfile(project: string, job: string | null): boolean {
+  try {
+    localStorage.removeItem(profileKey(project, job));
     return true;
   } catch {
     return false;

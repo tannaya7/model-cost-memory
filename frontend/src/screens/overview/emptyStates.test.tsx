@@ -17,6 +17,11 @@ describe("Overview gauge empty states", () => {
     renderWithProviders(<PassGauge ctx={ctx([pt(10, 0, 0)])} shell={shell} />);
     expect(screen.getByText(/none are checked yet/)).toBeInTheDocument();
   });
+  it("with nothing checked the hint is calm and has no 'about ... were right (0 checked' wording", () => {
+    renderWithProviders(<PassGauge ctx={ctx([pt(10, 0, 0)])} shell={shell} />);
+    expect(screen.queryByText(/0 checked/)).toBeNull();
+    expect(screen.getAllByText(/No checked answers yet/).length).toBeGreaterThan(0);
+  });
   it("under the floor shows progress 10 of 25", () => {
     renderWithProviders(<PassGauge ctx={ctx([pt(20, 8, 2)])} shell={shell} />);
     const bar = screen.getByRole("progressbar");

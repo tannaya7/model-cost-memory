@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ProviderKeyInput, RetestCreateInput } from "../../../shared/api/types";
+import type { ProviderKeyInput, RetestCreateInput, RetestPreviewInput } from "../../../shared/api/types";
 import {
   deleteProviderKey,
   fetchJobRetests,
   fetchRetestLimits,
   fetchRetestStatus,
+  previewRetest,
   saveProviderKey,
   startRetest,
+  stopRetest,
 } from "../api/retestApi";
 
 export const retestLimitsKey = ["retest", "limits"] as const;
@@ -15,6 +17,12 @@ export function useRetestLimits() {
   return useQuery({
     queryKey: retestLimitsKey,
     queryFn: fetchRetestLimits,
+  });
+}
+
+export function usePreviewRetest() {
+  return useMutation({
+    mutationFn: ({ jobName, input }: { jobName: string; input: RetestPreviewInput }) => previewRetest(jobName, input),
   });
 }
 
@@ -49,6 +57,18 @@ export function useRetestStatus(jobName: string, retestId: string) {
         return 2000;
       }
       return false;
+    },
+  });
+}
+
+export function useStopRetest(jobName: string, retestId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => stopRetest(jobName, retestId),
+    onSuccess: (retest) => {
+      queryClient.setQueryData(retestStatusKey(jobName, retestId), retest);
+      void queryClient.invalidateQueries({ queryKey: ["retest", "list", jobName] });
+      void queryClient.invalidateQueries({ queryKey: retestLimitsKey });
     },
   });
 }

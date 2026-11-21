@@ -9,7 +9,7 @@ import modelsSample from "../../mocks/models.sample.json";
 import { WithProject } from "../../app/project";
 import Compare from "./Compare";
 
-vi.mock("./profile/ProfileSuggestPanel", () => ({ ProfileSuggestPanel: ({ job }: { job: string }) => <div>profile panel for {job}</div> }));
+vi.mock("./profile/ProfileSuggestPanel", () => ({ ProfileSuggestPanel: ({ job }: { job: string | null }) => <div>profile panel for {job}</div> }));
 vi.mock("./profile/Disclaimer", () => ({ SuggestionDisclaimer: ({ from, to }: { from: string; to: string }) => <p>disclaimer {from} to {to}</p> }));
 vi.mock("./profile/modelLinks", () => ({ modelLink: () => ({ url: "https://example.com/m", label: "Read about it" }) }));
 

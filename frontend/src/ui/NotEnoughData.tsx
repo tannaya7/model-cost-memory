@@ -35,6 +35,26 @@ export function ProgressBar({ n, min, label = "Checked answers collected" }: { n
   );
 }
 
+/** Two bars: 1) the checked answers needed to start seeing results, 2) about how many to be sure enough to
+ * recommend a switch. Stage 2 is an estimate from today's rates and moves as data arrives. */
+export function TwoStageBar({ stage1, stage2, text }: { stage1: { have: number; need: number }; stage2: { have: number; need: number | null }; text: string }) {
+  return (
+    <div className="flex max-w-md flex-col gap-3" data-testid="two-stage">
+      <p className="text-xs text-dim">{text}</p>
+      <div>
+        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">Stage 1</p>
+        <ProgressBar n={stage1.have} min={stage1.need} label="Stage 1: checked answers to start seeing results" />
+      </div>
+      {stage2.need !== null && (
+        <div>
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">Stage 2 (about)</p>
+          <ProgressBar n={stage2.have} min={stage2.need} label="Stage 2: checked answers to be sure enough to recommend a switch" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function NotEnoughData({ n, min, children, what = "checked answers" }: { n: number; min: number; children?: ReactNode; what?: string }) {
   return (
     <div className="flex flex-col gap-2 rounded-[12px] border border-rule bg-surface-2/50 p-4 text-sm text-dim">

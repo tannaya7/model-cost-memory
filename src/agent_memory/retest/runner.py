@@ -44,8 +44,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from urllib.parse import urlparse
 
-from sqlalchemy import func, select
+from sqlalchemy import Text, and_, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -77,6 +78,14 @@ def output_limit(source_tokens_out: int | None) -> int:
     return max(OUTPUT_LIMIT_FACTOR * int(source_tokens_out or 0), OUTPUT_LIMIT_FLOOR)
 INTERRUPTED_AFTER = timedelta(hours=1)
 
+# A replay sends the prompt only. Runs that used tools are left out: replaying them would need the tool definitions and the
+# tool results, and could not be checked the same way.
+TOOL_FREE = and_(
+    or_(Run.tool_call_count.is_(None), Run.tool_call_count == 0),
+    or_(Run.tools_tokens.is_(None), Run.tools_tokens == 0),
+    or_(Run.tool_calls.is_(None), cast(Run.tool_calls, Text).in_(("[]", "null"))),  # SQL NULL, JSON null or an empty list: no tool calls
+)
+
 
 class RetestRefused(ValueError):
     """A re-test cannot start. `code` lets the web app react (e.g. ask for the provider key)."""
@@ -102,31 +111,32 @@ async def spent_this_month(session: AsyncSession, project_id: str, now: datetime
     return Decimal(total)
 
 
-async def enqueue(
-    session: AsyncSession, project: Project, job: Job, candidate_model: str, budget_usd: float | Decimal, trigger: str,
+async def check_can_start(
+    session: AsyncSession, project: Project, job: Job, candidate_model: str, budget_usd: float | Decimal,
     *, now: datetime | None = None,
-) -> Retest:
-    """Check every precondition and queue a re-test. Raises RetestRefused with a reason."""
+) -> ProviderKey:
+    """Every precondition for a re-test, without queueing anything. Returns the provider key it would use, or raises
+    RetestRefused with a reason. Used by the preview and by enqueue, so they can never disagree."""
     now = now or datetime.now(UTC)
     if not job.retest_consent:
-        raise RetestRefused("consent_off", f"Re-tests are off for '{job.name}': turn on its re-test consent first")
+        raise RetestRefused("consent_off", f"Trials are off for '{job.name}': turn on trials for this AI task first")
     if not project.retest_allowed:
-        raise RetestRefused("project_off", "Re-tests are switched off for this project")
+        raise RetestRefused("project_off", "Trials are switched off for this project")
     if job.check_kind not in CHECKABLE:
         raise RetestRefused(
-            "not_checkable", "Only jobs checked automatically (answer key or schema) can be re-tested")
+            "not_checkable", "Only AI tasks that are checked automatically (answer key or schema) can have a trial")
     if Decimal(str(budget_usd)) <= 0:
-        raise RetestRefused("budget_required", "A re-test needs a budget above zero")
+        raise RetestRefused("budget_required", "A trial needs a budget above zero")
     key = await session.get(ProviderKey, project.project_id)
     if key is None:
-        raise RetestRefused("provider_key_required", "Add the provider key re-tests should use")
+        raise RetestRefused("provider_key_required", "Add the provider key trials should use")
     model = split_option(candidate_model)[0]  # "sonnet-5@low" is priced as sonnet-5
     if await find_price(session, model, model, key.provider) is None:
         raise RetestRefused(
             "no_price", f"No price is known for {candidate_model}, so the budget and the monthly cap could not "
             "hold: every call would count as free. Add its price to the catalog first")
     if Decimal(project.retest_monthly_cap_usd) - await spent_this_month(session, project.project_id, now) <= 0:
-        raise RetestRefused("cap_reached", "This month's re-test cap is used up")
+        raise RetestRefused("cap_reached", "This month's trial cap is used up")
     running = (
         await session.execute(
             select(Retest.retest_id).where(Retest.job_id == job.job_id, Retest.status.in_(ACTIVE),
@@ -134,12 +144,22 @@ async def enqueue(
         )
     ).first()
     if running:
-        raise RetestRefused("already_running", f"A re-test of {candidate_model} is already running for this job")
+        raise RetestRefused("already_running", f"A trial of {candidate_model} is already running for this AI task")
+    return key
+
+
+async def enqueue(
+    session: AsyncSession, project: Project, job: Job, candidate_model: str, budget_usd: float | Decimal, trigger: str,
+    *, now: datetime | None = None,
+) -> Retest:
+    """Check every precondition and queue a re-test. Raises RetestRefused with a reason."""
+    now = now or datetime.now(UTC)
+    await check_can_start(session, project, job, candidate_model, budget_usd, now=now)
     retest = Retest(job_id=job.job_id, project_id=project.project_id, candidate_model=candidate_model,
                     trigger=trigger, budget_usd=Decimal(str(budget_usd)), status="QUEUED", created_at=now)
     session.add(retest)
     await session.flush()
-    log.info("re-test queued", extra={"retest_id": str(retest.retest_id), "job_id": str(job.job_id),
+    log.info("trial queued", extra={"retest_id": str(retest.retest_id), "job_id": str(job.job_id),
                                       "project_id": project.project_id, "candidate": candidate_model,
                                       "trigger": trigger, "budget_usd": float(budget_usd)})
     return retest
@@ -148,17 +168,18 @@ async def enqueue(
 async def sample_sources(
     session: AsyncSession, job: Job, candidate_model: str, n: int, *, seed: int = 0
 ) -> list:
-    """Up to n past production runs to replay, one per prompt, chosen uniformly at random, skipping
-    prompts already replayed on this candidate."""
+    """Up to n past production runs to replay, one per prompt, chosen uniformly at random. A prompt is skipped when the candidate
+    has already answered it, whether in an earlier trial or in the app's own production calls: its result is already in the
+    evidence, so replaying it would spend the person's money to learn nothing new."""
     model, effort = split_option(candidate_model)
     already = select(Run.prompt_hash).where(
-        Run.job_id == job.job_id, Run.run_kind == "RETEST", func.lower(Run.model) == normalize(model),
+        Run.job_id == job.job_id, func.lower(Run.model) == normalize(model),
         Run.effort.is_(None) if effort is None else Run.effort == effort,
     )
     query = (
         select(Run.run_id, Run.prompt, Run.prompt_hash, Run.expected, Run.tokens_in, Run.tokens_out)
         .where(Run.job_id == job.job_id, Run.run_kind == "PRODUCTION", Run.outcome.in_(("PASS", "FAIL")),
-               Run.invalid_at.is_(None), Run.prompt.is_not(None), Run.prompt_hash.not_in(already))
+               Run.invalid_at.is_(None), Run.prompt.is_not(None), Run.prompt_hash.not_in(already), TOOL_FREE)
         .ext(distinct_on(Run.prompt_hash)).order_by(Run.prompt_hash, Run.created_at.desc())
     )
     if job.check_kind == "ANSWER_KEY":
@@ -186,6 +207,8 @@ async def run_retest(
     settings = settings or get_settings()
     async with sessions() as session:
         retest = await session.get(Retest, retest_id)
+        if retest.status == "STOPPED_USER":  # a person stopped it while it waited in the queue: it never starts
+            return retest
         job = await session.get(Job, retest.job_id)
         project = await session.get(Project, retest.project_id)
         key = await session.get(ProviderKey, retest.project_id)
@@ -194,6 +217,14 @@ async def run_retest(
         model, effort = split_option(retest.candidate_model)  # "sonnet-5@low": the model, at that effort
         price = await find_price(session, model, model, key.provider if key else None)
         retest.status, retest.started_at, retest.runs_planned = "RUNNING", datetime.now(UTC), len(sources)
+        retest.sample_run_ids = [str(s.run_id) for s in sources]  # which past runs were replayed (ids only, never text)
+        retest.evaluator = job.check_kind
+        if key is not None:
+            retest.provider_host = urlparse(key.base_url).hostname or key.base_url
+        if price is not None and retest.price_basis is None:
+            retest.price_basis = {"source": "catalog list price (not an invoice)", "model": model,
+                                  "provider": key.provider if key else None, "input_usd_per_mtok": float(price.input_per_mtok),
+                                  "output_usd_per_mtok": float(price.output_per_mtok), "recorded_at": datetime.now(UTC).isoformat()}
         await session.commit()
         budget, cap = Decimal(retest.budget_usd), Decimal(project.retest_monthly_cap_usd)
     if not sources:
@@ -208,7 +239,7 @@ async def run_retest(
     try:  # checked again now: the host may have been re-pointed at a private address since it was saved
         await check_outbound(key.base_url, allow_private=settings.allow_private_urls)
     except UnsafeUrl as exc:
-        return await _finish(sessions, retest_id, "FAILED", f"The re-test endpoint was refused: {exc}; nothing was replayed")
+        return await _finish(sessions, retest_id, "FAILED", f"The provider address was refused: {exc}; nothing was replayed")
     client = client_factory(key, settings)
     progress = _Progress()
     lock = asyncio.Condition()  # guards the reservations; notified whenever one is released
@@ -222,11 +253,11 @@ async def run_retest(
             try:
                 await replay(src)
             except Exception:  # anything unexpected ends the re-test; waiting calls must not wait forever
-                log.exception("re-test call broke", extra={"retest_id": str(retest_id)})
+                log.exception("trial call broke", extra={"retest_id": str(retest_id)})
                 async with lock:
                     if not progress.stop_status:
                         progress.stop_status = "FAILED"
-                        progress.stop_message = "An unexpected error stopped the re-test; partial results kept"
+                        progress.stop_message = "An unexpected error stopped the trial; partial results kept"
                     lock.notify_all()
 
     async def replay(src) -> None:
@@ -238,7 +269,12 @@ async def run_retest(
                     return
                 async with sessions() as s:
                     row = await s.get(Retest, retest_id)
+                    stop_requested = row.stop_requested_at is not None
                     spent, month = Decimal(row.spent_usd), await spent_this_month(s, row.project_id)
+                if stop_requested:  # a person pressed Stop: send nothing new; calls already in flight finish and are kept
+                    progress.stop_status, progress.stop_message = "STOPPED_USER", "Stopped by you. The calls already sent were kept."
+                    lock.notify_all()
+                    return
                 # Over even with nothing in flight: stop. Over only because calls in flight hold their
                 # worst case: wait for one to finish (it usually costs less) and look again.
                 if spent + cost > budget:
@@ -248,7 +284,7 @@ async def run_retest(
                     return
                 if month + cost > cap:
                     progress.stop_status, progress.stop_message = "STOPPED_CAP", (
-                        f"Stopped at this month's re-test cap of ${cap:.2f}")
+                        f"Stopped at this month's trial cap of ${cap:.2f}")
                     lock.notify_all()
                     return
                 if spent + progress.reserved + cost <= budget and month + progress.reserved + cost <= cap:
@@ -269,7 +305,7 @@ async def run_retest(
                     progress.stop_message = ("The provider kept refusing with 'too many requests'; partial results kept"
                                              if isinstance(exc, RateLimited)
                                              else "The provider returned an error; partial results kept")
-            log.warning("re-test call failed", extra={"retest_id": str(retest_id), "error": type(exc).__name__})
+            log.warning("trial call failed", extra={"retest_id": str(retest_id), "error": type(exc).__name__})
             return
 
         parsed = read_response(response)
@@ -278,6 +314,7 @@ async def run_retest(
             model_version=parsed.get("model_version") or model,
             tokens_in=parsed.get("tokens_in", 0), tokens_out=parsed.get("tokens_out", 0),
             cache_read_tokens=parsed.get("cache_read_tokens", 0), cache_write_tokens=parsed.get("cache_write_tokens", 0),
+            cache_write_1h_tokens=parsed.get("cache_write_1h_tokens", 0),
             latency_ms=latency, output=parsed.get("output"), expected=src.expected,
         )
         # Recording the run and releasing its reservation happen together, so the cap check never
@@ -285,7 +322,7 @@ async def run_retest(
         async with lock:
             async with sessions() as s:
                 owner = await s.get(Project, project.project_id)
-                cut = (f"cut off at the re-test's output limit of {limit} tokens, so not judged"
+                cut = (f"cut off at the trial's output limit of {limit} tokens, so not judged"
                        if was_cut_off(response) else None)
                 await record_run(s, owner, body, run_kind="RETEST", retest_id=retest_id, unknown_reason=cut)
                 await s.commit()
@@ -326,7 +363,7 @@ async def _finish(sessions, retest_id, status: str, message: str | None) -> Rete
         row.status, row.finished_at = status, datetime.now(UTC)
         row.message = message or (f"Replayed {row.runs_done} runs: {row.passed} passed, {row.failed} failed")
         await session.commit()
-        log.info("re-test finished", extra={"retest_id": str(retest_id), "status": status, "runs": row.runs_done,
+        log.info("trial finished", extra={"retest_id": str(retest_id), "status": status, "runs": row.runs_done,
                                             "spent_usd": float(row.spent_usd), "project_id": row.project_id})
         return row
 
@@ -378,7 +415,8 @@ async def _eligible_jobs(session: AsyncSession):
             select(Project, Job, ProviderKey)
             .join(Job, Job.project_id == Project.project_id)
             .join(ProviderKey, ProviderKey.project_id == Project.project_id)
-            .where(Project.retest_allowed.is_(True), Job.retest_consent.is_(True), Job.check_kind.in_(CHECKABLE))
+            .where(Project.retest_allowed.is_(True), Project.auto_retests.is_(True), Job.retest_consent.is_(True),
+                   Job.check_kind.in_(CHECKABLE))
         )
     ).all()
 
@@ -389,6 +427,8 @@ async def start_for_new_models(
     """A new model in the catalog gets evidence without anyone asking: for each eligible job, re-test
     the cheapest new models from the provider its key reaches that cost less than the current model."""
     settings = settings or get_settings()
+    if not settings.auto_replays:  # automatic replays are switched off on this server
+        return []
     started: list[Retest] = []
     for project, job, key in await _eligible_jobs(session):
         result = await recommend(session, job, settings=settings)
@@ -449,8 +489,10 @@ async def start_on_first_key(session: AsyncSession, project: Project, *, setting
     provider serves, once per job (removing and re-adding the key does not repeat it)."""
     settings = settings or get_settings()
     today = today or datetime.now(UTC).date()
+    if not settings.auto_replays:  # automatic replays are switched off on this server
+        return []
     key = await session.get(ProviderKey, project.project_id)
-    if key is None or not project.retest_allowed:
+    if key is None or not project.retest_allowed or not project.auto_retests:  # automatic replays are opt-in
         return []
     served = (
         await session.execute(
@@ -496,6 +538,8 @@ async def start_when_unsure(session: AsyncSession, *, settings: Settings | None 
     """The engine is unsure whether to switch: re-test the model that would settle it (a cheaper candidate,
     or the best model when the current one measures worse), at most once a week per model."""
     settings = settings or get_settings()
+    if not settings.auto_replays:  # automatic replays are switched off on this server
+        return []
     started: list[Retest] = []
     since = datetime.now(UTC) - timedelta(days=quiet_days)
     for project, job, _ in await _eligible_jobs(session):

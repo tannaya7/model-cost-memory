@@ -16,19 +16,36 @@ const DAY = 86_400_000;
 const utcMidnight = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 const dayStart = (day: string) => Date.parse(`${day}T00:00:00Z`);
 
-/** The last `days` days (today included) and the `days` before them. */
-export function periods(points: DayPoint[], days: number, today: Date = new Date()): { cur: DayPoint[]; prev: DayPoint[] } {
+export interface Periods {
+  /** The last `days` days, today included: what is shown as the period's total. */
+  cur: DayPoint[];
+  /** The `days` before `cur`. */
+  prev: DayPoint[];
+  /** The last `days` COMPLETED UTC days (today left out) and the `days` before them. Percent changes use these two, because
+   * today is still partial: comparing a part-day against full days shows a drop that is not real. */
+  curDone: DayPoint[];
+  prevDone: DayPoint[];
+}
+
+/** The last `days` days (today included) and the `days` before them, plus the same pair on completed days only. */
+export function periods(points: DayPoint[], days: number, today: Date = new Date()): Periods {
   const end = utcMidnight(today);
   const curFrom = end - (days - 1) * DAY;
   const prevFrom = curFrom - days * DAY;
+  const doneFrom = end - days * DAY; // first of the last `days` completed days
+  const prevDoneFrom = doneFrom - days * DAY;
   const cur: DayPoint[] = [];
   const prev: DayPoint[] = [];
+  const curDone: DayPoint[] = [];
+  const prevDone: DayPoint[] = [];
   for (const p of points) {
     const t = dayStart(p.day);
     if (t >= curFrom && t <= end) cur.push(p);
     else if (t >= prevFrom && t < curFrom) prev.push(p);
+    if (t >= doneFrom && t < end) curDone.push(p);
+    else if (t >= prevDoneFrom && t < doneFrom) prevDone.push(p);
   }
-  return { cur, prev };
+  return { cur, prev, curDone, prevDone };
 }
 
 export function sum(points: DayPoint[], metric: Metric): number {
@@ -85,20 +102,6 @@ export function splitBy(points: DayPoint[], by: "job" | "model", metric: Metric)
   return [...totals].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
 }
 
-/** The points as a CSV file's text, for Export. */
-export function toCsv(points: DayPoint[]): string {
-  const cols = ["day", "job", "model", "runs", "passed", "failed", "spend_usd"] as const;
-  const text = new Set<string>(["day", "job", "model"]);
-  // Text columns that start with = + - @ tab or CR are prefixed with ' so a spreadsheet never runs them
-  // as a formula (OWASP CSV injection). Numeric columns are left alone so negatives stay numbers.
-  const cell = (v: unknown, guard: boolean) => {
-    let s = String(v ?? "");
-    if (guard && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  return [cols.join(","), ...points.map((p) => cols.map((c) => cell(p[c], text.has(c))).join(","))].join("\n") + "\n";
-}
-
 /** "14 Oct – 13 Nov 2026" for the period ending today. */
 export function rangeLabel(days: number, today: Date = new Date()): string {
   const end = new Date(utcMidnight(today));
@@ -109,6 +112,9 @@ export function rangeLabel(days: number, today: Date = new Date()): string {
 
 /* ----------------------------------------------------------------------------------------------- */
 /* Month-end projection, wasted spend, and the cost of a good answer                                */
+
+/** The server warns at 85% and again at 95% of the monthly budget; "close" starts at the first of those. */
+export const BUDGET_FIRST_ALERT = 0.85;
 
 export type BudgetStatus = "none" | "ok" | "close" | "over";
 
@@ -145,13 +151,14 @@ export function monthProjection(points: DayPoint[], today: Date = new Date(), bu
   }
   const fullDays = Math.round((end - earliest) / DAY); // full days of history before today
   const dailyRate = recentRuns > 0 ? recent / 7 : mtd / day;
-  const projected = mtd + dailyRate * (daysInMonth - day);
+  // Days still to come include the rest of today (same rule as the server): fractional days until the month ends.
+  const left = Math.max(0, (Date.UTC(y, m + 1, 1) - today.getTime()) / DAY);
+  const projected = mtd + dailyRate * left;
   let status: BudgetStatus = "none";
   if (budget !== null && budget > 0) {
-    status = projected > budget ? "over" : mtd >= 0.8 * budget || projected >= 0.8 * budget ? "close" : "ok";
+    status = projected > budget ? "over" : mtd >= BUDGET_FIRST_ALERT * budget || projected >= BUDGET_FIRST_ALERT * budget ? "close" : "ok";
   }
   const last = new Date(Date.UTC(y, m, daysInMonth));
-  const left = daysInMonth - day;
   return {
     mtd,
     projected,
@@ -219,21 +226,33 @@ export interface UnitCost {
   change: number | null;
 }
 
-const per1k = (spend: number, passed: number) => (passed > 0 ? (spend / passed) * 1000 : null);
+/** Cost of 1,000 correct answers, the way the engine works it out: the average cost of a priced run divided by the pass rate
+ * of the checked runs. Spend only covers priced runs and passes only cover checked runs, so dividing one total by the other
+ * overstates it when most runs are unchecked and understates it when some runs are unpriced. */
+export function per1kOf(points: DayPoint[]): number | null {
+  const runs = sum(points, "runs");
+  const priced = runs - unpricedRuns(points);
+  const passed = sum(points, "passed");
+  const checked = passed + sum(points, "failed");
+  if (priced <= 0 || passed <= 0 || checked <= 0) return null;
+  return ((sum(points, "spend_usd") / priced) * (checked / passed)) * 1000;
+}
 
-/** What 1,000 successful answers cost: spend divided by answers that passed. A cheap model that fails
- * often is not cheap, and this is the figure that shows it. */
-export function unitCosts(cur: DayPoint[], prev: DayPoint[]): { all: UnitCost; jobs: UnitCost[] } {
+/** What 1,000 successful answers cost: the average cost of a priced run over the pass rate of the checked runs.
+ * A cheap model that fails often is not cheap, and this is the figure that shows it. */
+export function unitCosts(cur: DayPoint[], prev: DayPoint[], curDone: DayPoint[] = cur, prevDone: DayPoint[] = prev): { all: UnitCost; jobs: UnitCost[] } {
+  // The figure shown uses `cur`; its change against the period before uses completed days on both sides.
   const make = (job: string, c: DayPoint[], p: DayPoint[]): UnitCost => {
     const spend = sum(c, "spend_usd");
     const passed = sum(c, "passed");
-    const now = per1k(spend, passed);
-    const before = per1k(sum(p, "spend_usd"), sum(p, "passed"));
-    return { job, spend, passed, unpriced: unpricedRuns(c), per1k: now, prevPer1k: before, change: delta(now, before) };
+    const now = per1kOf(c);
+    const before = per1kOf(p);
+    const sameJob = (x: DayPoint) => job === "All AI tasks" || x.job === job;
+    return { job, spend, passed, unpriced: unpricedRuns(c), per1k: now, prevPer1k: before, change: delta(per1kOf(curDone.filter(sameJob)), per1kOf(prevDone.filter(sameJob))) };
   };
   const names = [...new Set(cur.map((x) => x.job))];
   const jobs = names
     .map((name) => make(name, cur.filter((x) => x.job === name), prev.filter((x) => x.job === name)))
     .sort((a, b) => (b.per1k ?? Infinity) - (a.per1k ?? Infinity) || b.spend - a.spend);
-  return { all: make("All jobs", cur, prev), jobs };
+  return { all: make("All AI tasks", cur, prev), jobs };
 }

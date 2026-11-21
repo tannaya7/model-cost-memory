@@ -6,10 +6,11 @@ import { Card } from "../../../shared/components/Card";
 import { Badge } from "../../../shared/components/Badge";
 import { useJobs } from "../../jobs/hooks/useJobs";
 import { fetchModels } from "../../models/api/modelsApi";
-import { useRetestLimits, useStartRetest } from "../hooks/useRetest";
+import { usePreviewRetest, useRetestLimits, useStartRetest } from "../hooks/useRetest";
 import { ApiError, errorCode } from "../../../shared/api/apiFetch";
+import { InlineConfirm } from "../../../ui/InlineConfirm";
 import { ProviderKeyForm } from "./ProviderKeyForm";
-import type { Model } from "../../../shared/api/types";
+import type { Model, RetestPreview } from "../../../shared/api/types";
 
 function formatPrice(price: number | null | undefined): string {
   return price != null ? `$${price.toFixed(2)}` : "—";
@@ -19,7 +20,7 @@ export function RetestStartPanel() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialJobParam = searchParams.get("job") || "";
-  // The model the engine named for a re-test ("Re-test X to settle it"), passed from the job page.
+  // The model the engine named for a trial ("Start a trial on X to settle it"), passed from the job page.
   const suggestedModel = searchParams.get("model") || "";
 
   const jobsQuery = useJobs();
@@ -30,6 +31,8 @@ export function RetestStartPanel() {
   });
 
   const startMutation = useStartRetest();
+  const previewMutation = usePreviewRetest();
+  const [preview, setPreview] = useState<RetestPreview | null>(null);
 
   const [selectedJob, setSelectedJob] = useState<string>(initialJobParam);
   const [selectedModel, setSelectedModel] = useState<string>(suggestedModel);
@@ -38,6 +41,7 @@ export function RetestStartPanel() {
   const p = useP();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [askForKey, setAskForKey] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const jobs = jobsQuery.data || [];
   const limits = limitsQuery.data;
@@ -114,9 +118,36 @@ export function RetestStartPanel() {
     !isCapExhausted &&
     !startMutation.isPending;
 
+  // Changing anything closes the review, so it always describes what is on screen.
+  useEffect(() => {
+    setConfirming(false);
+    setPreview(null);
+  }, [selectedJob, selectedModel, budgetUsd, sampleSize]);
+
+  /** The button asks for a preview (no provider call, nothing changes) and opens the review. Nothing is sent to a provider
+   *  until "Start trial", which uses the single-use confirmation that preview returned. */
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
+    setSubmitError(null);
+    try {
+      const shown = await previewMutation.mutateAsync({
+        jobName: selectedJob,
+        input: { candidate_model: selectedModel, budget_usd: Number(budgetNum.toFixed(2)), sample_size: sampleNum },
+      });
+      if (!shown.can_start && shown.blocked?.code === "provider_key_required") {
+        setAskForKey(true);
+        return;
+      }
+      setPreview(shown);
+      setConfirming(true);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Could not prepare the preview. Check your connection and try again.");
+    }
+  };
+
+  const startTrial = async () => {
+    if (!canSubmit || !preview?.can_start || !preview.confirmation) return;
     setSubmitError(null);
 
     try {
@@ -126,6 +157,7 @@ export function RetestStartPanel() {
           candidate_model: selectedModel,
           budget_usd: Number(budgetNum.toFixed(2)),
           sample_size: sampleNum,
+          confirmation: preview.confirmation,
         },
       });
 
@@ -133,6 +165,7 @@ export function RetestStartPanel() {
         p(`/retest/${encodeURIComponent(result.retest_id)}?job=${encodeURIComponent(result.job)}`),
       );
     } catch (err) {
+      setConfirming(false);
       if (errorCode(err) === "provider_key_required") {
         setAskForKey(true);
       } else if (err instanceof ApiError) {
@@ -155,9 +188,9 @@ export function RetestStartPanel() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-semibold text-ink">
+              <h2 className="text-base font-semibold text-ink">
                 Monthly budget for trials on new models
-              </h3>
+              </h2>
               {isCapExhausted ? (
                 <Badge tone="bad">Budget used up</Badge>
               ) : (
@@ -226,9 +259,9 @@ export function RetestStartPanel() {
       <Card className="p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="border-b border-rule pb-4">
-            <h3 className="text-base font-semibold text-ink">
+            <h2 className="text-base font-semibold text-ink">
               Set up a trial on a new model
-            </h3>
+            </h2>
             <p className="mt-1 text-xs text-dim">
               Choose the AI task and the model to try. We replay past prompts on that model, so your live app is not affected.
             </p>
@@ -416,15 +449,58 @@ export function RetestStartPanel() {
           </div>
 
           {/* Submit Action */}
+          {confirming && canSubmit && preview && (
+            preview.can_start ? (
+              <InlineConfirm
+                label="Start this trial"
+                confirmLabel="Confirm and start (spends up to this)"
+                cancelLabel="Not now"
+                busy={startMutation.isPending}
+                busyLabel="Starting the trial..."
+                onConfirm={() => void startTrial()}
+                onCancel={() => setConfirming(false)}
+              >
+                <div className="flex flex-col gap-2 text-left">
+                  <p>
+                    Replay <b className="text-ink">{preview.examples?.planned ?? 0}</b> past prompts of <b className="text-ink">{selectedJob}</b> on{" "}
+                    <b className="text-ink">{selectedModel}</b> ({preview.provider}), using your own provider key.
+                  </p>
+                  <ul className="flex flex-col gap-1">
+                    {(preview.data ?? []).map((d) => (
+                      <li key={d.kind}><span className="text-ink">{d.what}</span> {d.where}</li>
+                    ))}
+                  </ul>
+                  {preview.cost && (
+                    <p>
+                      Expected cost: <b className="text-ink">${preview.cost.low_usd.toFixed(4)} to ${preview.cost.high_usd.toFixed(4)}</b>, never more than your budget of ${preview.cost.budget_usd.toFixed(2)}.{" "}
+                      {preview.cost.note} Prices are this product&apos;s list prices, not your invoice.
+                    </p>
+                  )}
+                  {preview.examples && preview.examples.left_out_for_tool_use > 0 && (
+                    <p>{preview.examples.left_out_for_tool_use} prompts are left out because their runs used tools.</p>
+                  )}
+                  <p>How answers are checked: {preview.evaluator}</p>
+                  <p>{preview.retention_note}</p>
+                  <ul className="list-disc pl-5">{preview.statements.map((t) => <li key={t}>{t}</li>)}</ul>
+                  <p className="text-xs text-muted">This confirmation works once and expires in {preview.confirm_minutes} minutes.</p>
+                </div>
+              </InlineConfirm>
+            ) : (
+              <div role="group" aria-label="This trial cannot start" className="mt-3 rounded-[10px] border border-rule bg-surface-2 p-3 text-[13px] text-dim">
+                <p className="font-semibold text-ink">This trial cannot start yet.</p>
+                <p className="mt-1">{preview.blocked?.message}</p>
+              </div>
+            )
+          )}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-rule">
             <button
               type="submit"
-              disabled={!canSubmit}
+              disabled={!canSubmit || confirming}
               className="rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-on-accent shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 transition-opacity"
             >
-              {startMutation.isPending
-                ? "Starting the trial..."
-                : "Start a trial on a new model"}
+              {startMutation.isPending || previewMutation.isPending
+                ? "Preparing the review..."
+                : "Review and start a trial"}
             </button>
           </div>
         </form>

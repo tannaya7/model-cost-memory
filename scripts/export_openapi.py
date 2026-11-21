@@ -62,17 +62,43 @@ def build() -> dict[str, str]:
     )
 
     seen_at = datetime(2026, 9, 1, tzinfo=UTC)
+    from agent_memory.catalog.official import BASIS, CATALOG_SOURCE
+    from agent_memory.schemas import CatalogInfoOut, ModelReferenceOut, PriceSourceOut
+
+    def reference(check: str, note: str, *, maker=None, checked=None, official=None) -> ModelReferenceOut:
+        return ModelReferenceOut(
+            kind="api_model", maker=maker, docs_url="https://platform.claude.com/docs/en/models/overview" if maker else None,
+            pricing_url="https://platform.claude.com/docs/en/about-claude/pricing" if maker else None,
+            deprecations_url="https://platform.claude.com/docs/en/about-claude/model-deprecations" if maker else None,
+            price_check=check, price_check_note=note, price_checked_at=checked, price_check_stale=False,
+            official_input_per_mtok=official[0] if official else None, official_output_per_mtok=official[1] if official else None,
+            price_basis=BASIS, catalog_source="Entered by hand" if check == "not_checked" and maker is None else CATALOG_SOURCE,
+            catalog_synced_at=seen_at)
+
+    read_at = datetime(2026, 11, 18, 5, 15, tzinfo=UTC)
     models = ModelPage(
+        catalog=CatalogInfoOut(source=CATALOG_SOURCE, last_synced_at=read_at,
+                               note="Prices come from a community-maintained list and refresh daily. Where a maker's own pricing "
+                                    "page can be read, it is compared with this and shown beside it."),
+        official_sources=[PriceSourceOut(source_id="anthropic", name="Anthropic: Pricing", provider="anthropic",
+                                         url="https://platform.claude.com/docs/en/about-claude/pricing", status="OK",
+                                         last_checked_at=read_at, last_ok_at=read_at, detail=None, model_count=18, stale=False)],
+        kind_note="This is a list of API models you can call. Coding tools and subscription apps, such as Cursor or Copilot, are "
+                  "not API endpoints, so they are not listed or ranked here.",
         items=[
             ModelOut(model="acme-large-2026-06-01", model_version="acme-large-2026-06-01", provider="acme",
                      status="ACTIVE", shutdown_date=None, price_in_per_mtok=3.0, price_out_per_mtok=15.0,
-                     source="SYNC", first_seen_at=seen_at, used_by_project=True),
+                     source="SYNC", first_seen_at=seen_at, used_by_project=True,
+                     reference=reference("not_checked", "We do not read this provider's own pages yet, so this price is not confirmed against them.")),
             ModelOut(model="acme-old-2025-01-01", model_version="acme-old-2025-01-01", provider="acme",
                      status="DEPRECATED", shutdown_date=date(2026, 12, 1), price_in_per_mtok=10.0,
-                     price_out_per_mtok=30.0, source="SYNC", first_seen_at=seen_at, used_by_project=True),
+                     price_out_per_mtok=30.0, source="SYNC", first_seen_at=seen_at, used_by_project=True,
+                     reference=reference("confirmed", "The maker's pricing page states the same price.", maker="Anthropic",
+                                         checked=read_at, official=(10.0, 30.0))),
             ModelOut(model="local-llm:3b", model_version="local-llm:3b", provider="ollama", status="ACTIVE",
                      shutdown_date=None, price_in_per_mtok=0.0, price_out_per_mtok=0.0, source="MANUAL",
-                     first_seen_at=seen_at, used_by_project=False),
+                     first_seen_at=seen_at, used_by_project=False,
+                     reference=reference("not_checked", "We do not read this provider's own pages yet, so this price is not confirmed against them.")),
         ],
         next_cursor=None,
     )

@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import type { Alert } from "../../shared/api/types";
 import { IconAlert, IconBolt, IconClock, IconDollar } from "../../ui/icons";
 
-/** The four alert kinds that are about use and spending, not answer quality. */
-export const NEW_KINDS = ["TOKEN_BURST", "BUDGET", "TRIAL_BUDGET", "MODEL_RETIRING"] as const;
+/** The alert kinds that are about use, spending and models, not answer quality. */
+export const NEW_KINDS = ["TOKEN_BURST", "BUDGET", "TRIAL_BUDGET", "MODEL_RETIRING", "MODEL_NOTICE"] as const;
 export type NewKind = (typeof NEW_KINDS)[number];
 
 export function isNewKind(kind: string): kind is NewKind {
@@ -19,6 +19,11 @@ export interface NewKindView {
   /** Where to go next, as a path inside the project. */
   to: string;
   linkLabel: string;
+  /** An address outside the app, such as the provider's own notice. Opened in a new tab. */
+  href?: string;
+  hrefLabel?: string;
+  /** A short tag beside the title, such as "Information only". */
+  tag?: string;
 }
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -47,11 +52,14 @@ export function newKindView(alert: Alert): NewKindView | null {
       const job = str(d.top_job) ?? (alert.job || null);
       const now = tokens(d.tokens_last_hour);
       const usual = tokens(d.usual_tokens_per_hour);
+      const window = num(d.window_minutes);
+      const floor = num(d.floor_tokens);
+      const rule = window && floor ? ` Compared over ${window}-minute windows with the average of the 24 hours before. Not reported under ${floor.toLocaleString("en-US")} tokens. A usage heads-up, not a prediction that your provider will limit you.` : "";
       return {
-        title: "Unusually high AI use",
+        title: "Usage heads-up",
         tone: "warn",
         icon: <IconBolt size={16} />,
-        numbers: now && usual ? `Last hour: ${now}. Usual hour: ${usual}.` : "",
+        numbers: now && usual ? `Last hour: ${now}. Usual hour: ${usual}.${rule}` : "",
         to: job ? `/jobs/${encodeURIComponent(job)}?tab=tokens` : "/jobs",
         linkLabel: job ? `See the tokens of ${job} →` : "See your AI tasks →",
       };
@@ -85,6 +93,30 @@ export function newKindView(alert: Alert): NewKindView | null {
         numbers: `${model ? `${model}: ` : ""}${when ? `Shutdown not before ${when}.` : "No shutdown date published."}`,
         to: "/models",
         linkLabel: "See the models →",
+      };
+    }
+    case "MODEL_NOTICE": {
+      const model = str(d.model);
+      const when = dateText(d.date);
+      const checked = dateText(d.checked_at);
+      const wording: Record<string, string> = {
+        not_sooner_than: "not sooner than",
+        tentative: "tentative date",
+        earliest_possible: "earliest possible date",
+        scheduled: "listed date",
+      };
+      const how = wording[str(d.date_wording) ?? ""] ?? "date";
+      const url = str(d.notice_url);
+      return {
+        title: "Provider notice about a model you use",
+        tone: "warn",
+        icon: <IconClock size={16} />,
+        tag: "Information only",
+        numbers: `${model ? `${model}: ` : ""}${str(d.status) ?? "listed"}${when ? `, ${how} ${when}` : ", no date listed"}.${checked ? ` Checked ${checked}.` : ""} Nothing is changed or switched for you.`,
+        to: "/models",
+        linkLabel: "See the models →",
+        href: url ?? undefined,
+        hrefLabel: url ? "Open the provider's notice ↗" : undefined,
       };
     }
     default:

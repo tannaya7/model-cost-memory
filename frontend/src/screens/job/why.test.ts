@@ -12,7 +12,7 @@ describe("buildWhy", () => {
     expect(out).toMatch(/What we looked at: 1,?084 checked answers/);
     expect(out).toMatch(/acme-mini got .* of answers correct.* per correct answer instead of/);
     expect(out).toMatch(/save about \$300/);
-    expect(out).toMatch(/between 1\.0 and 9\.0/);
+    expect(out).toMatch(/could be 1 to 9 more/);
     expect(out).toMatch(/Nothing changes until you decide/);
   });
 
@@ -27,15 +27,24 @@ describe("buildWhy", () => {
   });
 
   it("says too few answers instead of a confident range under the floor of checked answers", () => {
-    const thin = { ...rec, models: rec.models.map((m) => ({ ...m, n_runs: 12 })) };
+    const thin = { ...rec, models: rec.models.map((m) => ({ ...m, n_runs: 12, evidence_weight: 12 })) };
     const out = text(thin);
     expect(out).toMatch(/Not enough checked answers yet/);
     expect(out).not.toMatch(/95% range/);
   });
 
+  it("judges thin evidence on the freshness-weighted evidence, not the raw count, and shows the engine's range (F29)", () => {
+    // many raw runs but mostly old: weight under the floor, so still "not enough" although n_runs is 400
+    const old = { ...rec, models: rec.models.map((m) => ({ ...m, n_runs: 400, evidence_weight: 9 })) };
+    expect(text(old)).toMatch(/Not enough checked answers yet/);
+    // plenty of weight: the range printed is the API's, not one recomputed from the raw count
+    const strong = { ...rec, models: rec.models.map((m) => ({ ...m, n_runs: 4000, evidence_weight: 300, weighted_pass_rate: 0.9, pass_rate_low: 0.81, pass_rate_high: 0.96 })) };
+    expect(text(strong)).toMatch(/between 81% and 96%/);
+  });
+
   it("says what is missing instead of advising when evidence is thin", () => {
     const out = text({ ...rec, verdict: "INSUFFICIENT_EVIDENCE", recommended: null, forecast: null, progress: 0.4 });
-    expect(out).toMatch(/What is missing: We need at least 25 recent checked answers/);
+    expect(out).toMatch(/What is missing: We need about 25 recent checked answers/);
     expect(out).toMatch(/40% of the way/);
     expect(out).not.toMatch(/Why this model/);
   });

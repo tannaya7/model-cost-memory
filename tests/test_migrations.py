@@ -135,3 +135,30 @@ async def test_migration_0003_adds_the_embedding_model_and_the_tool_privacy_sett
     assert default == "false"  # privacy by default: arguments are not kept unless a project opts in
     index = (await session.execute(text("SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_runs_embedding_cache'"))).scalar_one()
     assert "WHERE (embedding IS NOT NULL)" in index
+
+
+async def test_migration_0021_billing_mode_defaults_to_per_use_and_is_checked(session):
+    default = (await session.execute(text(
+        "SELECT column_default FROM information_schema.columns WHERE table_name = 'projects' "
+        "AND column_name = 'billing_mode'"))).scalar_one()
+    assert default == "'per_use'::text"
+    session.add(Project(project_id="plain", api_key_hash="h"))
+    await session.commit()
+    assert (await session.execute(text("SELECT billing_mode FROM projects WHERE project_id = 'plain'"))).scalar_one() == "per_use"
+    with pytest.raises(IntegrityError):
+        await session.execute(text("UPDATE projects SET billing_mode = 'free' WHERE project_id = 'plain'"))
+    await session.rollback()
+
+
+async def test_migration_0023_ledger_columns_are_null_by_default_and_the_shape_is_checked(session):
+    cols = {r[0] for r in (await session.execute(text(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'runs' AND column_name IN "
+        "('usage_shape','usage_raw','reasoning_tokens','tool_use_input_tokens')"))).all()}
+    assert cols == {"usage_shape", "usage_raw", "reasoning_tokens", "tool_use_input_tokens"}
+    defaults = (await session.execute(text(
+        "SELECT count(*) FROM information_schema.columns WHERE table_name = 'runs' AND column_name IN "
+        "('usage_shape','usage_raw','reasoning_tokens','tool_use_input_tokens') AND column_default IS NOT NULL"))).scalar_one()
+    assert defaults == 0  # NULL = not reported; a default would turn "unknown" into a value
+    checks = (await session.execute(text(
+        "SELECT count(*) FROM pg_constraint WHERE conname = 'runs_usage_shape_check'"))).scalar_one()
+    assert checks == 1

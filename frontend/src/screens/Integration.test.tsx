@@ -22,8 +22,8 @@ afterEach(() => {
 const rec = recSample as unknown as Recommendation;
 const emptyPage = { items: [], next_cursor: null };
 
-describe("runs of a job", () => {
-  it("asks for the runs one verdict rests on when opened from its history", async () => {
+describe("AI calls of an AI task", () => {
+  it("asks for the AI calls one verdict rests on when opened from its history", async () => {
     const calls = stubApi({ "/v1/runs": emptyPage });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
@@ -33,7 +33,7 @@ describe("runs of a job", () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    expect(await screen.findByText(/only the runs one verdict rests on/)).toBeInTheDocument();
+    expect(await screen.findByText(/only the AI calls one verdict rests on/)).toBeInTheDocument();
     await vi.waitFor(() => expect(calls.some((c) => c.includes("/v1/runs?") && c.includes("recommendation=rec-42") && c.includes("job=invoice-extract"))).toBe(true));
   });
 

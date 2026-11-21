@@ -115,6 +115,19 @@ async def test_spend_jumping_past_95_raises_only_the_95_alert(session):
     assert [a.detail["level"] for a in await check_budgets(session, now=NOW)] == ["95"]
 
 
+async def test_a_subscription_project_gets_no_spending_limit_alerts_but_keeps_the_limit(session):
+    job = await make_job(session, budget=Decimal("100"))
+    await spend(session, job, [0], cost="99")
+    project = await session.get(Project, "acme")
+    project.billing_mode = "subscription"
+    await session.commit()
+    assert await check_budgets(session, now=NOW) == []
+    assert project.monthly_budget_usd == Decimal("100.00")  # kept, just not fired
+    project.billing_mode = "both"
+    await session.commit()
+    assert [a.detail["level"] for a in await check_budgets(session, now=NOW)] == ["95"]
+
+
 async def test_no_budget_no_alert(session):
     job = await make_job(session)
     await spend(session, job, [0], cost="9999")
@@ -134,11 +147,12 @@ async def test_projected_over_budget_needs_seven_days_of_data(session):
     # 5 days of data at $10 a day: on pace to pass $100 but too little history to say so
     await spend(session, job, [1, 2, 3, 4, 5], cost="10")
     assert await check_budgets(session, now=NOW) == []
-    # a run 8 days ago gives 7 full days of history
-    await spend(session, job, [8], cost="10")
+    # days 6 to 8 give 8 full days of history and spend on every one of the last 7 days: now there is a forecast, and
+    # even its low end ($80 so far + $10 a day for the rest of the month) is over the $100 budget
+    await spend(session, job, [6, 7, 8], cost="10")
     [a] = await check_budgets(session, now=NOW)
-    assert a.detail["level"] == "PROJECTED" and a.detail["projected_usd"] > 100
-    assert "over your $100.00 budget" in a.detail["summary"]
+    assert a.detail["level"] == "PROJECTED" and a.detail["projected_usd"] > 100 and a.detail["projected_low_usd"] > 100
+    assert "over your $100.00 budget" in a.detail["summary"] and "forecast, not spend that has happened" in a.detail["summary"]
     assert await check_budgets(session, now=NOW + timedelta(hours=2)) == []  # once per month
 
 
@@ -205,7 +219,8 @@ async def test_a_model_shutting_down_within_60_days_is_flagged_once_with_not_bef
     await add_catalog(session)
     [a] = await check_retirements(session, now=NOW)
     assert a.kind == "MODEL_RETIRING" and a.detail["shutdown_date"] == "2026-12-15"
-    assert "not before 15 Dec 2026" in a.detail["summary"] and "provider's notice" in a.detail["summary"]
+    assert "not before 15 Dec 2026" in a.detail["summary"] and "provider's own page" in a.detail["summary"]
+    assert "a third-party list, not the provider's own notice" in a.detail["summary"]  # said where the date comes from
     assert await check_retirements(session, now=NOW + timedelta(days=1)) == []  # once per model and date
 
 
@@ -248,3 +263,70 @@ async def test_the_monthly_budget_can_be_set_validated_and_cleared(client, dev_l
     for bad in (0, -5, 10_000_001):
         assert (await client.patch(url, json={"monthly_budget_usd": bad})).status_code == 422
     assert (await client.patch(url, json={"monthly_budget_usd": None})).json()["monthly_budget_usd"] is None
+
+
+async def test_f16_replay_runs_do_not_count_towards_the_budget(session):
+    job = await make_job(session, budget=Decimal("100"))
+    await spend(session, job, [0], cost="90", kind="RETEST")
+    assert await check_budgets(session, now=NOW) == []
+
+
+async def test_f17_the_text_never_rounds_up_to_a_level_not_reached(session):
+    job = await make_job(session, budget=Decimal("100"))
+    await spend(session, job, [0], cost="94.6")
+    assert [a.detail["level"] for a in await check_budgets(session, now=NOW)] == ["85"]
+    a = (await alerts(session, "BUDGET"))[0]
+    assert "94%" in a.detail["summary"] and "95%" not in a.detail["summary"]
+
+
+async def test_f15_a_first_run_on_the_day_seven_days_ago_is_enough_like_the_web_app(session):
+    job = await make_job(session, budget=Decimal("100"))
+    first = NOW.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=7) + timedelta(hours=12)
+    session.add(run(job, first, cost=Decimal("40")))
+    session.add_all(run(job, NOW - timedelta(days=d), cost=Decimal("10")) for d in [1, 2, 3, 4, 5, 6])
+    await session.commit()
+    levels = [a.detail["level"] for a in await check_budgets(session, now=NOW)]
+    assert "PROJECTED" in levels
+
+
+async def test_a_budget_alert_says_it_is_an_estimate_and_counts_the_calls_it_could_not_price(session):
+    job = await make_job(session, budget=Decimal("100"))
+    await spend(session, job, [0], cost="86")
+    session.add_all([run(job, NOW - timedelta(hours=1), cost=None), run(job, NOW - timedelta(hours=2), cost=None)])
+    await session.commit()
+    [a] = await check_budgets(session, now=NOW)
+    summary = a.detail["summary"]
+    assert "estimate from recorded calls at public list prices, not your bill" in summary
+    assert "2 calls with no known price are not counted" in summary
+
+
+async def test_a_budget_alert_with_nothing_unpriced_does_not_mention_a_gap(session):
+    job = await make_job(session, budget=Decimal("100"))
+    await spend(session, job, [0], cost="86")
+    [a] = await check_budgets(session, now=NOW)
+    assert "not your bill" in a.detail["summary"] and "no known price" not in a.detail["summary"]
+
+
+async def test_a_mixed_billing_budget_alert_says_it_includes_calls_a_subscription_may_cover(session):
+    job = await make_job(session, budget=Decimal("100"))
+    from agent_memory.models import Project
+    await session.execute(Project.__table__.update().where(Project.project_id == "acme").values(billing_mode="both"))
+    await spend(session, job, [0], cost="86")
+    [a] = await check_budgets(session, now=NOW)
+    assert "a subscription may cover" in a.detail["summary"] and "not your bill" in a.detail["summary"]
+
+
+async def test_a_subscription_project_never_gets_a_budget_alert(session):
+    job = await make_job(session, budget=Decimal("100"))
+    from agent_memory.models import Project
+    await session.execute(Project.__table__.update().where(Project.project_id == "acme").values(billing_mode="subscription"))
+    await spend(session, job, [0], cost="96")
+    assert await check_budgets(session, now=NOW) == []
+    assert await alerts(session, "BUDGET") == []
+
+
+async def test_a_per_use_budget_alert_has_no_subscription_wording(session):
+    job = await make_job(session, budget=Decimal("100"))
+    await spend(session, job, [0], cost="86")
+    [a] = await check_budgets(session, now=NOW)
+    assert "subscription" not in a.detail["summary"]

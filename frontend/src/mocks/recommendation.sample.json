@@ -23,7 +23,19 @@
       }
     ],
     "floor": 25.0,
-    "n_runs": 1084
+    "n_runs": 1084,
+    "state": "enough",
+    "state_note": "",
+    "check": {
+      "kind": "human_label",
+      "label": "Reported by your app",
+      "text": "Pass or fail was reported by your app. We cannot see how it was decided."
+    },
+    "window_from": null,
+    "window_to": null,
+    "comparison": "unpaired",
+    "paired": null,
+    "limitations": []
   },
   "forecast": null,
   "job": "invoice-extract",
@@ -44,7 +56,13 @@
       "shutdown_date": null,
       "status": "GOOD_ENOUGH",
       "weighted_pass_rate": 0.990625,
-      "why": "Highest pass rate we can be sure of"
+      "why": "Highest pass rate we can be sure of",
+      "vs_current": null,
+      "priced_runs": null,
+      "unpriced_runs": null,
+      "retest_runs": null,
+      "cost_p50_usd": null,
+      "cost_p90_usd": null
     },
     {
       "catalog_status": "ACTIVE",
@@ -62,7 +80,22 @@
       "shutdown_date": null,
       "status": "GOOD_ENOUGH",
       "weighted_pass_rate": 0.9904761904761905,
-      "why": "At most 3 points worse than acme-large, 95% sure"
+      "why": "At most 3 points worse than acme-large, with high confidence (about 97.5%, one-sided)",
+      "vs_current": {
+        "against": "acme-large",
+        "confidence": 0.99,
+        "gap_points": -0.014880952380946777,
+        "high_points": 1.8780289607058,
+        "low_points": -2.4609511471311016,
+        "margin_points": 3.0,
+        "method": "unpaired",
+        "status": "GOOD_ENOUGH"
+      },
+      "priced_runs": null,
+      "unpriced_runs": null,
+      "retest_runs": null,
+      "cost_p50_usd": null,
+      "cost_p90_usd": null
     },
     {
       "catalog_status": "ACTIVE",
@@ -80,10 +113,25 @@
       "shutdown_date": null,
       "status": "BELOW_FLOOR",
       "weighted_pass_rate": 0.9583333333333334,
-      "why": "Evidence 22.5 of the 25 needed to judge it"
+      "why": "Evidence 22.5 of the 25 needed to judge it",
+      "vs_current": {
+        "against": "acme-large",
+        "confidence": 0.99,
+        "gap_points": -3.2291666666666607,
+        "high_points": 0.89325830420647,
+        "low_points": -28.97034517131204,
+        "margin_points": 3.0,
+        "method": "unpaired",
+        "status": "UNSURE"
+      },
+      "priced_runs": null,
+      "unpriced_runs": null,
+      "retest_runs": null,
+      "cost_p50_usd": null,
+      "cost_p90_usd": null
     }
   ],
-  "next_step": "Re-test acme-nano: cheaper, but not enough evidence yet",
+  "next_step": "Try acme-nano in a trial: not enough evidence yet",
   "progress": 1.0,
   "recommended": {
     "model": "acme-mini",
@@ -97,7 +145,7 @@
     "confidence": 0.95,
     "evidence_floor": 25.0,
     "margin": 0.03,
-        "switch_confidence": 0.99
+    "switch_confidence": 0.99
   },
   "verdict": "DOWNGRADE",
   "warnings": []

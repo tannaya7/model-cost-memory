@@ -1,4 +1,9 @@
 {
+  "catalog": {
+    "last_synced_at": "2026-11-18T05:15:00Z",
+    "note": "Prices come from a community-maintained list and refresh daily. Where a maker's own pricing page can be read, it is compared with this and shown beside it.",
+    "source": "LiteLLM community price list (not the provider)"
+  },
   "items": [
     {
       "first_seen_at": "2026-09-01T00:00:00Z",
@@ -7,6 +12,22 @@
       "price_in_per_mtok": 3.0,
       "price_out_per_mtok": 15.0,
       "provider": "acme",
+      "reference": {
+        "catalog_source": "Entered by hand",
+        "catalog_synced_at": "2026-09-01T00:00:00Z",
+        "deprecations_url": null,
+        "docs_url": null,
+        "kind": "api_model",
+        "maker": null,
+        "official_input_per_mtok": null,
+        "official_output_per_mtok": null,
+        "price_basis": "List price in US dollars per million tokens, standard rate for text. Batch discounts, cached-input rates, long-context tiers and a price that changes on a date are not shown, so your bill can differ.",
+        "price_check": "not_checked",
+        "price_check_note": "We do not read this provider's own pages yet, so this price is not confirmed against them.",
+        "price_check_stale": false,
+        "price_checked_at": null,
+        "pricing_url": null
+      },
       "shutdown_date": null,
       "source": "SYNC",
       "status": "ACTIVE",
@@ -19,6 +40,22 @@
       "price_in_per_mtok": 10.0,
       "price_out_per_mtok": 30.0,
       "provider": "acme",
+      "reference": {
+        "catalog_source": "LiteLLM community price list (not the provider)",
+        "catalog_synced_at": "2026-09-01T00:00:00Z",
+        "deprecations_url": "https://platform.claude.com/docs/en/about-claude/model-deprecations",
+        "docs_url": "https://platform.claude.com/docs/en/models/overview",
+        "kind": "api_model",
+        "maker": "Anthropic",
+        "official_input_per_mtok": 10.0,
+        "official_output_per_mtok": 30.0,
+        "price_basis": "List price in US dollars per million tokens, standard rate for text. Batch discounts, cached-input rates, long-context tiers and a price that changes on a date are not shown, so your bill can differ.",
+        "price_check": "confirmed",
+        "price_check_note": "The maker's pricing page states the same price.",
+        "price_check_stale": false,
+        "price_checked_at": "2026-11-18T05:15:00Z",
+        "pricing_url": "https://platform.claude.com/docs/en/about-claude/pricing"
+      },
       "shutdown_date": "2026-12-01",
       "source": "SYNC",
       "status": "DEPRECATED",
@@ -31,11 +68,42 @@
       "price_in_per_mtok": 0.0,
       "price_out_per_mtok": 0.0,
       "provider": "ollama",
+      "reference": {
+        "catalog_source": "Entered by hand",
+        "catalog_synced_at": "2026-09-01T00:00:00Z",
+        "deprecations_url": null,
+        "docs_url": null,
+        "kind": "api_model",
+        "maker": null,
+        "official_input_per_mtok": null,
+        "official_output_per_mtok": null,
+        "price_basis": "List price in US dollars per million tokens, standard rate for text. Batch discounts, cached-input rates, long-context tiers and a price that changes on a date are not shown, so your bill can differ.",
+        "price_check": "not_checked",
+        "price_check_note": "We do not read this provider's own pages yet, so this price is not confirmed against them.",
+        "price_check_stale": false,
+        "price_checked_at": null,
+        "pricing_url": null
+      },
       "shutdown_date": null,
       "source": "MANUAL",
       "status": "ACTIVE",
       "used_by_project": false
     }
   ],
-  "next_cursor": null
+  "kind_note": "This is a list of API models you can call. Coding tools and subscription apps, such as Cursor or Copilot, are not API endpoints, so they are not listed or ranked here.",
+  "next_cursor": null,
+  "official_sources": [
+    {
+      "detail": null,
+      "last_checked_at": "2026-11-18T05:15:00Z",
+      "last_ok_at": "2026-11-18T05:15:00Z",
+      "model_count": 18,
+      "name": "Anthropic: Pricing",
+      "provider": "anthropic",
+      "source_id": "anthropic",
+      "stale": false,
+      "status": "OK",
+      "url": "https://platform.claude.com/docs/en/about-claude/pricing"
+    }
+  ]
 }

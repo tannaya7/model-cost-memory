@@ -41,6 +41,7 @@ from .models import Job, Run, UsageLimit
 from .options import option_name
 from .pipeline.decay import family_key
 from .recommend.engine import recommend
+from .recommend.stats import confidence_words
 from .versions import normalize
 
 LOOKBACK_SHARE = 1 / 7
@@ -176,12 +177,12 @@ async def _suggest(session: AsyncSession, limit: UsageLimit, now: datetime, sinc
             now_use, new_use = per_run.get(current.model), per_run.get(decision.recommended.model)
             reduction = max(1 - new_use / now_use, 0.0) if now_use and new_use is not None else 0.0
             note = (f"Shown within {settings.tolerance_points * 100:g} points of {current.model} at "
-                    f"{max(settings.switch_confidence, settings.confidence_level):.0%} confidence; it uses "
+                    f"{confidence_words(max(settings.switch_confidence, settings.confidence_level))}; it uses "
                     f"{reduction:.0%} less of this limit per run")
             suggestions.append(Suggestion(job.name, current.model, decision.recommended.model, share, reduction, note))
         else:
             cheaper = [m for m in decision.retest_candidates if m != current.model]
-            note = (f"No cheaper option is proven for this job yet; a re-test of {', '.join(cheaper)} would tell"
+            note = (f"No cheaper option is proven for this AI task yet; a trial of {', '.join(cheaper)} would tell"
                     if cheaper else "No cheaper option does this job well enough")
             suggestions.append(Suggestion(job.name, current.model, None, share, 0.0, note))
     return suggestions, use_by_job

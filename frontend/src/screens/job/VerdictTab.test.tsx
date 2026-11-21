@@ -21,7 +21,7 @@ describe("VerdictTab", () => {
   it("asks to keep the model in use on HOLD", () => {
     renderWithProviders(<VerdictTab rec={{ ...downgrade, verdict: "HOLD", recommended: downgrade.current, forecast: null }} />);
     expect(screen.getByRole("heading", { level: 2, name: "Keep using acme-large" })).toBeInTheDocument();
-    expect(screen.getByText(/No cheaper model is proven/)).toBeInTheDocument();
+    expect(screen.getByText(/No cheaper model is shown/)).toBeInTheDocument();
   });
 
   it("shows progress instead of a verdict while evidence is thin", () => {
@@ -29,7 +29,9 @@ describe("VerdictTab", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Still learning" })).toBeInTheDocument();
     const bar = screen.getByRole("progressbar");
     expect(bar).toHaveAttribute("aria-valuemax", String(downgrade.rules.evidence_floor));
-    expect(bar).toHaveAttribute("aria-valuenow", String(Math.min(downgrade.evidence.n_runs, downgrade.rules.evidence_floor)));
+    expect(bar).toHaveAttribute("aria-valuenow", String(Math.round(0.4 * downgrade.rules.evidence_floor)));
+    // The floor is per model: the count is the best-covered model's (0.4 x 25 = 10), not the total over models.
+    expect(screen.getByText(/You have 10 so far on your best-covered model/)).toBeInTheDocument();
     expect(screen.getByText(/Not enough checked answers yet. We need at least/)).toBeInTheDocument();
   });
 
@@ -38,13 +40,13 @@ describe("VerdictTab", () => {
     expect(screen.getAllByText(/Out of every 100 answers we checked, about/).length).toBeGreaterThan(0);
     const help = screen.getByRole("button", { name: "How we reach this recommendation" });
     await userEvent.setup().click(help);
-    expect(screen.getByRole("status")).toHaveTextContent(/within 3 points of the best model/);
+    expect(screen.getByRole("status")).toHaveTextContent(/within 3 points of both the best model and your current one/);
     expect(screen.getByRole("status")).toHaveTextContent(/we need at least 25/);
   });
 
-  it("offers the re-tests that would settle an open question", () => {
+  it("offers the trials that would settle an open question", () => {
     renderWithProviders(<WithProject id="acme"><VerdictTab rec={downgrade} /></WithProject>);
-    expect(screen.getByRole("link", { name: /Trial acme-nano on past prompts/ })).toHaveAttribute("href", "/p/acme/retest?job=invoice-extract&model=acme-nano");
+    expect(screen.getByRole("link", { name: /Start a trial on acme-nano/ })).toHaveAttribute("href", "/p/acme/retest?job=invoice-extract&model=acme-nano");
   });
 
   it("gives the chart's numbers as a table on request", async () => {

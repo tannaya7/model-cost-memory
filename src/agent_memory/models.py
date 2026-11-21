@@ -23,10 +23,12 @@ from sqlalchemy import (
     Integer,
     Numeric,
     REAL,
+    SmallInteger,
     Text,
     UniqueConstraint,
     text,
 )
+from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -53,19 +55,47 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
     # Which first-visit guides this person has seen: only tour_seen and first_results_seen, as booleans.
     ui_flags: Mapped[dict[str, bool]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    # Carried in the sign-in cookie; logout raises it, so a cookie copied earlier stops working (0034).
+    session_epoch: Mapped[int] = mapped_column(Integer, server_default=text("0"))
 
 
 class Project(Base):
     __tablename__ = "projects"
     __table_args__ = (
         Index("idx_projects_owner", "owner_user_id"),
+        Index("idx_projects_key_hash", "api_key_hash"),
+        Index("uq_projects_owner_slug", "owner_user_id", "slug", unique=True,
+              postgresql_where=text("owner_user_id IS NOT NULL AND organisation_id IS NULL")),
+        Index("uq_projects_ownerless_slug", "slug", unique=True,
+              postgresql_where=text("owner_user_id IS NULL AND organisation_id IS NULL")),
+        Index("uq_projects_org_slug", "organisation_id", "slug", unique=True, postgresql_where=text("organisation_id IS NOT NULL")),
+        Index("idx_projects_org", "organisation_id", postgresql_where=text("organisation_id IS NOT NULL")),
+        CheckConstraint("slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND length(slug) BETWEEN 1 AND 40",
+                        name="projects_slug_check"),
         CheckConstraint("content_retention_days BETWEEN 1 AND 3650", name="projects_retention_check"),
+        CheckConstraint("billing_mode IN ('per_use','subscription','both')", name="projects_billing_mode_check"),
+        CheckConstraint("cardinality(budget_alert_levels) <= 6 AND 0 < ALL (budget_alert_levels) AND 100 >= ALL (budget_alert_levels)",
+                        name="projects_budget_levels_check"),
         CheckConstraint("monthly_budget_usd IS NULL OR monthly_budget_usd > 0", name="projects_budget_check"),
     )
 
     project_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    # The short readable name in the web address (/p/production). Stable; the API keeps using project_id.
+    # Unique per owner (0022). Rows built without one (tests, the operator script) take their own id.
+    slug: Mapped[str] = mapped_column(Text, default=lambda ctx: ctx.get_current_parameters()["project_id"])
     api_key_hash: Mapped[str] = mapped_column(Text)  # the key itself is shown once, never stored
     webhook_url: Mapped[str | None] = mapped_column(Text)
+    billing_mode: Mapped[str] = mapped_column(Text, server_default=text("'per_use'"))  # (0021)
+    # Off unless an admin turns it on: automatic paid replays (a new model appears, the engine is unsure, a key is first added) (0032)
+    auto_retests: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    # Budget alerts (0025). Always shown in the app; sent to the webhook only when budget_alert_webhook is on.
+    budget_timezone: Mapped[str] = mapped_column(Text, server_default=text("'UTC'"))
+    budget_alert_levels: Mapped[list[int]] = mapped_column(ARRAY(Integer), server_default=text("'{85,95}'"))
+    budget_alert_projected: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+    budget_alert_webhook: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    notice_alert_webhook: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))  # model notices to the webhook (0026): opt in
+    # Opt-in (0027): may the computed figures of a recommendation be sent to an outside AI to write its summary.
+    ai_summary_consent: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     store_tool_arguments: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))  # opt-in
     retest_monthly_cap_usd: Mapped[Decimal] = mapped_column(
         Numeric(8, 2), server_default=text("10")
@@ -73,7 +103,10 @@ class Project(Base):
     webhook_secret: Mapped[str | None] = mapped_column(Text)  # signs webhook payloads (HMAC-SHA256)
     retest_allowed: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))  # project-wide switch
     created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+    # The person who made a personal project (organisation_id NULL), or who created a company project: for a company
+    # project this is history only and grants nothing; membership decides access (0030).
     owner_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.user_id"))
+    organisation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("organisations.org_id"))
     name: Mapped[str | None] = mapped_column(Text)  # display name chosen in the web app
     key_prefix: Mapped[str | None] = mapped_column(Text)  # first characters of the live key, for display
     # Days a run keeps its prompt, answer, tool calls and answer key (retention.py; 0015).
@@ -119,7 +152,14 @@ class Run(Base):
     __tablename__ = "runs"
     __table_args__ = (
         CheckConstraint("outcome IN ('PASS','FAIL','UNKNOWN')", name="runs_outcome_check"),
-        CheckConstraint("run_kind IN ('PRODUCTION','SHADOW','RETEST')", name="runs_run_kind_check"),
+        CheckConstraint("run_kind IN ('PRODUCTION','RETEST')", name="runs_run_kind_check"),
+        CheckConstraint(
+            "price_status IS NULL OR price_status IN ('PRICED','PARTLY_PRICED','CALLER_COST','NO_USAGE',"
+            "'UNPRICED_UNKNOWN_MODEL','UNPRICED_NOT_YET_EFFECTIVE','UNPRICED_EXPIRED')",
+            name="runs_price_status_check"),
+        CheckConstraint(
+            "usage_shape IS NULL OR usage_shape IN ('anthropic_messages','openai_responses','openai_chat',"
+            "'deepseek_chat','gemini','none')", name="runs_usage_shape_check"),
         CheckConstraint("memory_type IN ('EPISODIC','SEMANTIC')", name="runs_memory_type_check"),
         CheckConstraint(
             "state IN ('CAPTURED','CHECKED','INDEXED','CONSOLIDATED','ARCHIVED','INGESTION_FAILED')",
@@ -138,6 +178,8 @@ class Run(Base):
             postgresql_where=text("embedding IS NOT NULL"),
         ),
         Index("idx_runs_project_trace", "project_id", "trace_id", postgresql_where=text("trace_id IS NOT NULL")),
+        Index("idx_runs_project_feature", "project_id", "feature", postgresql_where=text("feature IS NOT NULL")),
+        Index("idx_runs_span", "project_id", "trace_id", "span_id", postgresql_where=text("span_id IS NOT NULL")),
         Index("idx_runs_content_kept", "created_at", postgresql_where=text("content_removed_at IS NULL")),
     )
 
@@ -147,6 +189,8 @@ class Run(Base):
     project_id: Mapped[str] = mapped_column(Text, ForeignKey("projects.project_id"))
     prompt: Mapped[str | None] = mapped_column(Text)  # NULL once cleared by retention (content_removed_at)
     prompt_hash: Mapped[str] = mapped_column(Text)
+    # 1 = the plain SHA-256 of the prompt (rows from before 0037, until it ran), 2 = keyed per project (see security.keyed_prompt_hash).
+    hash_version: Mapped[int] = mapped_column(SmallInteger, server_default=text("2"))
     model: Mapped[str] = mapped_column(Text)
     model_version: Mapped[str] = mapped_column(Text)
     prompt_version: Mapped[str | None] = mapped_column(Text)
@@ -174,9 +218,25 @@ class Run(Base):
     expected: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # kept only for jobs with re-test consent
     provider: Mapped[str | None] = mapped_column(Text)  # who served the call; picks the price
     agent: Mapped[str | None] = mapped_column(Text)  # which agent or role made the call (0017)
+    # The customer's own feature or workflow label, sent by their app (0038). Optional, not verified, never inferred from text.
+    feature: Mapped[str | None] = mapped_column(Text)
+    # Quality flags found when the call was recorded (data_quality.py, 0039). NULL = none found (and, for older calls, not checked).
+    data_flags: Mapped[list[str] | None] = mapped_column(PG_ARRAY(Text))
     trace_id: Mapped[str | None] = mapped_column(Text)  # shared by every call serving one user task (0017)
+    span_id: Mapped[str | None] = mapped_column(Text)  # this call's own id, chosen by the app (0029)
+    parent_span_id: Mapped[str | None] = mapped_column(Text)  # the span_id of the call that started this one (0029)
     tools_tokens: Mapped[int | None] = mapped_column(Integer)  # estimate: size of the tool definitions sent (0017)
     tool_call_count: Mapped[int | None] = mapped_column(Integer)  # tool calls in the response (0017)
+    # The canonical token ledger (0023). NULL = not reported / unknown, which is different from 0.
+    usage_shape: Mapped[str | None] = mapped_column(Text)  # which provider layout was read; 'none' = no usage block
+    usage_raw: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # the usage block as numbers only
+    reasoning_tokens: Mapped[int | None] = mapped_column(Integer)
+    tool_use_input_tokens: Mapped[int | None] = mapped_column(Integer)  # Gemini; not priced
+    # Which price priced this run (0024). NULL = recorded before price versions existed.
+    price_version_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("price_versions.version_id"))
+    price_status: Mapped[str | None] = mapped_column(Text)
+    price_factor: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))  # verified modifier, e.g. 0.5 for batch
+    cache_write_1h_tokens: Mapped[int | None] = mapped_column(Integer)  # part of cache_write_tokens kept 1 hour
     # When retention cleared prompt, output, tool_calls, expected and embedding (retention.py; 0015).
     content_removed_at: Mapped[datetime | None] = mapped_column(Timestamp)
 
@@ -188,7 +248,7 @@ class Retest(Base):
     __table_args__ = (
         CheckConstraint("trigger IN ('MANUAL','NEW_MODEL','UNSURE','FIRST_KEY')", name="retests_trigger_check"),
         CheckConstraint(
-            "status IN ('QUEUED','RUNNING','DONE','STOPPED_BUDGET','STOPPED_CAP','FAILED')",
+            "status IN ('QUEUED','RUNNING','DONE','STOPPED_BUDGET','STOPPED_CAP','STOPPED_USER','FAILED')",
             name="retests_status_check",
         ),
         CheckConstraint("budget_usd > 0", name="retests_budget_usd_check"),
@@ -209,6 +269,16 @@ class Retest(Base):
     passed: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     failed: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     message: Mapped[str | None] = mapped_column(Text)
+    stop_requested_at: Mapped[datetime | None] = mapped_column(Timestamp)  # a person pressed Stop (0036)
+    # What the person confirmed and what was recorded (0032). Never prompt text.
+    confirmation_hash: Mapped[str | None] = mapped_column(Text, unique=True)
+    confirmed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="SET NULL"))
+    confirmed_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    preview: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    price_basis: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    evaluator: Mapped[str | None] = mapped_column(Text)
+    provider_host: Mapped[str | None] = mapped_column(Text)
+    sample_run_ids: Mapped[list[str] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
     started_at: Mapped[datetime | None] = mapped_column(Timestamp)
     finished_at: Mapped[datetime | None] = mapped_column(Timestamp)
@@ -309,7 +379,7 @@ class Alert(Base):
     __table_args__ = (
         CheckConstraint(
             "kind IN ('VERSION_REGRESSION','SILENT_DROP','MODEL_DEPRECATED','TOKEN_BURST','BUDGET',"
-            "'TRIAL_BUDGET','MODEL_RETIRING')", name="alerts_kind_check"
+            "'TRIAL_BUDGET','MODEL_RETIRING','MODEL_NOTICE')", name="alerts_kind_check"
         ),
         Index("idx_alerts_open", "job_id", "dedupe_key", unique=True, postgresql_where=text("resolved_at IS NULL")),
         Index("idx_alerts_undelivered", "next_attempt_at", postgresql_where=text("delivered_at IS NULL")),
@@ -433,3 +503,208 @@ class NewsItem(Base):
     summary: Mapped[str] = mapped_column(Text, server_default=text("''"))  # plain text, never HTML
     published_at: Mapped[datetime] = mapped_column(Timestamp)
     fetched_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+
+
+class PriceVersion(Base):
+    """One price a model had for a period. Written by a database trigger, never edited by the app.
+
+    A run keeps the version that priced it (runs.price_version_id), so its cost can be recomputed exactly later
+    even after the catalog moves on. These are public list prices, not anyone's negotiated or invoice price."""
+
+    __tablename__ = "price_versions"
+    __table_args__ = (
+        CheckConstraint("scope IN ('catalog','provider')", name="price_versions_scope_check"),
+        CheckConstraint("cache_basis IN ('FAMILY_FACTOR','EXPLICIT')", name="price_versions_cache_basis_check"),
+        CheckConstraint("source_kind IN ('SYNC','MANUAL','BACKFILL')", name="price_versions_source_kind_check"),
+        Index("uq_price_versions_open", "scope", "model", "model_version", "provider", unique=True,
+              postgresql_where=text("effective_to IS NULL")),
+    )
+
+    version_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=NEW_UUID)
+    scope: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(Text)
+    model_version: Mapped[str] = mapped_column(Text, server_default=text("''"))
+    provider: Mapped[str] = mapped_column(Text)
+    input_per_mtok: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    output_per_mtok: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    cache_read_per_mtok: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    cache_write_5m_per_mtok: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    cache_write_1h_per_mtok: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    cache_basis: Mapped[str] = mapped_column(Text, server_default=text("'FAMILY_FACTOR'"))
+    modifiers: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    effective_from: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+    effective_to: Mapped[datetime | None] = mapped_column(Timestamp)
+    source_kind: Mapped[str] = mapped_column(Text)
+    source_url: Mapped[str | None] = mapped_column(Text)
+    checked_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    applicability: Mapped[str | None] = mapped_column(Text)
+
+
+class NoticeSource(Base):
+    """One provider page we read for deprecation and shutdown notices, and how the last reading went."""
+
+    __tablename__ = "notice_sources"
+    __table_args__ = (
+        CheckConstraint("status IN ('NEVER','OK','UNREADABLE','FETCH_FAILED')", name="notice_sources_status_check"),
+    )
+
+    source_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text)
+    provider: Mapped[str] = mapped_column(Text)
+    url: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, server_default=text("'NEVER'"))
+    last_checked_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    last_ok_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    detail: Mapped[str | None] = mapped_column(Text)
+    notice_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+
+
+class ModelNotice(Base):
+    """What a provider's own page says about one model: its status, the date it lists and how it words that date.
+    Informational: nothing is ever changed because of a notice."""
+
+    __tablename__ = "model_notices"
+    __table_args__ = (
+        CheckConstraint("wording IN ('not_sooner_than','tentative','earliest_possible','scheduled')",
+                        name="model_notices_wording_check"),
+        Index("idx_model_notices_model", "model", postgresql_where=text("listed")),
+    )
+
+    notice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=NEW_UUID)
+    source_id: Mapped[str] = mapped_column(Text, ForeignKey("notice_sources.source_id", ondelete="CASCADE"))
+    provider: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text)
+    notice_date: Mapped[date | None] = mapped_column(Date)
+    wording: Mapped[str] = mapped_column(Text)
+    deprecated_on: Mapped[date | None] = mapped_column(Date)
+    replacement: Mapped[str | None] = mapped_column(Text)
+    section: Mapped[str | None] = mapped_column(Text)
+    notice_url: Mapped[str] = mapped_column(Text)
+    listed: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+    first_seen_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+    last_seen_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+    checked_at: Mapped[datetime] = mapped_column(Timestamp)
+
+
+class PriceSource(Base):
+    """One maker's own pricing page we read: when, and whether it could be read (0028)."""
+
+    __tablename__ = "price_sources"
+    __table_args__ = (
+        CheckConstraint("status IN ('NEVER','OK','UNREADABLE','FETCH_FAILED')", name="price_sources_status_check"),
+    )
+
+    source_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text)
+    provider: Mapped[str] = mapped_column(Text)
+    url: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, server_default=text("'NEVER'"))
+    last_checked_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    last_ok_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    detail: Mapped[str | None] = mapped_column(Text)
+    model_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+
+
+class OfficialPrice(Base):
+    """The standard price a maker's own page states for a model, as last read. NULL = the page does not state one number."""
+
+    __tablename__ = "official_prices"
+
+    provider: Mapped[str] = mapped_column(Text, primary_key=True)
+    model: Mapped[str] = mapped_column(Text, primary_key=True)
+    input_per_mtok: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    output_per_mtok: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    note: Mapped[str | None] = mapped_column(Text)
+    read_at: Mapped[datetime] = mapped_column(Timestamp)
+
+
+class Organisation(Base):
+    """A company workspace. A person's personal workspace is implicit: their projects with no organisation (0030)."""
+
+    __tablename__ = "organisations"
+
+    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=NEW_UUID)
+    name: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+    deleted_at: Mapped[datetime | None] = mapped_column(Timestamp)
+
+
+class Membership(Base):
+    """A person in a company, with a role. Leaving or removal ends the row (status 'ended'); it is never reused silently."""
+
+    __tablename__ = "memberships"
+    __table_args__ = (
+        CheckConstraint("role IN ('owner','admin','member','viewer')", name="memberships_role_check"),
+        CheckConstraint("status IN ('active','ended')", name="memberships_status_check"),
+        CheckConstraint("ended_reason IN ('left','removed')", name="memberships_ended_reason_check"),
+        CheckConstraint("job_role IN ('engineering','product','data_science','operations','support','finance','legal','other')",
+                        name="memberships_job_role_check"),
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organisations.org_id"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), primary_key=True)
+    role: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, server_default=text("'active'"))
+    ended_reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+    joined_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+    ended_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    # Optional, chosen by the person themselves from a fixed list (0031). Never inferred; never used for access.
+    job_role: Mapped[str | None] = mapped_column(Text)
+
+
+class OrgNoticeAck(Base):
+    """A person was shown a version of a company's privacy notice. Proof of showing, not a legal consent."""
+
+    __tablename__ = "org_notice_acks"
+
+    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organisations.org_id"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), primary_key=True)
+    version: Mapped[str] = mapped_column(Text, primary_key=True)
+    acknowledged_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+
+
+class OrgInvite(Base):
+    """A single-use, expiring invite for one email address. Only a hash of the token is stored."""
+
+    __tablename__ = "org_invites"
+    __table_args__ = (CheckConstraint("role IN ('admin','member','viewer')", name="org_invites_role_check"),)
+
+    invite_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=NEW_UUID)
+    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organisations.org_id"))
+    email: Mapped[str] = mapped_column(Text)
+    role: Mapped[str] = mapped_column(Text)
+    token_hash: Mapped[str] = mapped_column(Text, unique=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+    expires_at: Mapped[datetime] = mapped_column(Timestamp)
+    used_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    used_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="SET NULL"))
+    revoked_at: Mapped[datetime | None] = mapped_column(Timestamp)
+
+
+class OrgEvent(Base):
+    """Who did what in a company. Labels and ids only: never prompt or run text."""
+
+    __tablename__ = "org_events"
+
+    event_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=NEW_UUID)
+    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organisations.org_id"))
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="SET NULL"))
+    action: Mapped[str] = mapped_column(Text)
+    target_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="SET NULL"))
+    detail: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    at: Mapped[datetime] = mapped_column(Timestamp, server_default=NOW)
+
+
+class IngestDuplicate(Base):
+    """How many times an already-recorded call was sent again, per project and UTC day (0039). The extra copy is ignored; this only counts it."""
+
+    __tablename__ = "ingest_duplicates"
+
+    project_id: Mapped[str] = mapped_column(Text, ForeignKey("projects.project_id", ondelete="CASCADE"), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    duplicates: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    __table_args__ = (CheckConstraint("duplicates >= 0", name="ingest_duplicates_duplicates_check"),)

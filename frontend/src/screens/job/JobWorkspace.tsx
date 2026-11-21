@@ -15,6 +15,7 @@ import { ExamplesCard } from "./ExamplesCard";
 import { EvidenceTab, HistoryTab, QualityTab, RetestsTab, RunsTab, SpendTab } from "./Tabs";
 import { TokensTab } from "./TokensTab";
 import { VerdictTab } from "./VerdictTab";
+import { useBillingMode } from "../../features/projects/hooks/useBillingMode";
 
 const TABS = [
   { value: "verdict", label: "Recommendation" },
@@ -36,6 +37,9 @@ export default function JobWorkspace() {
   const jobs = useJobs();
   const job = jobs.data?.find((j) => j.name === jobName);
   const rec = useRecommendation(jobName);
+  const { mode: billing } = useBillingMode();
+  // No AI calls means no evidence: no percentage, no verdict, no "Promising" tag.
+  const noCalls = job?.run_count === 0;
 
   if (jobs.data && !job) {
     return (
@@ -58,30 +62,34 @@ export default function JobWorkspace() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
             <h1 className="truncate text-[28px] font-semibold tracking-tight md:text-[34px]">{jobTitle(jobName)}</h1>
-            <p className="mt-1">
+            <p className="mt-1 text-sm text-dim">Cost, quality and our advice for this one AI task.</p>
+            <p className="mt-1.5">
               <span title="name in your code" className="rounded-md border border-rule bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-dim">{jobName}</span>
               <span className="ml-2 text-xs text-muted">name in your code</span>
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-dim">
-              {rec.data ? <VerdictPill verdict={rec.data.verdict as Verdict} /> : rec.isPending ? <Skeleton className="h-6 w-28" /> : <Pill>No recommendation yet</Pill>}
+              {noCalls ? <Pill>No AI calls yet</Pill> : rec.data ? <VerdictPill verdict={rec.data.verdict as Verdict} /> : rec.isPending ? <Skeleton className="h-6 w-28" /> : <Pill>No recommendation yet</Pill>}
               {job && <span>{count(job.run_count)} AI calls</span>}
-              {job && <span className="text-muted">· {CHECK_KIND_LABELS[job.check_kind]}</span>}
+              {job && <span className="text-muted"><span aria-hidden className="mr-2 hidden sm:inline">·</span>{CHECK_KIND_LABELS[job.check_kind]}</span>}
             </div>
             
           </div>
         </div>
         {job && <AboutTask job={job} />}
-        <div className="-mx-1 overflow-x-auto px-1 pb-1">
+        <div className="-mx-1 overflow-x-auto px-1 pb-1 [&_button]:whitespace-nowrap">
           <Segmented<Tab>
             label="AI task views"
             value={tab}
             onChange={(t) => setParams(t === "verdict" ? {} : { tab: t }, { replace: true })}
-            options={TABS.map((t) => ({ value: t.value, label: t.label }))}
+            options={TABS.map((t) => ({ value: t.value, label: t.value === "spend" && billing === "subscription" ? "Usage" : t.label }))}
           />
         </div>
       </header>
 
-      {tab === "verdict" &&
+      {tab === "verdict" && noCalls && (
+        <EmptyState title="No AI calls yet" hint="Once your app sends calls for this AI task, our recommendation appears here." />
+      )}
+      {tab === "verdict" && !noCalls &&
         (rec.isPending ? (
           <div className="flex flex-col gap-4">
             <Skeleton className="h-64" />
@@ -92,7 +100,7 @@ export default function JobWorkspace() {
         ) : rec.data ? (
           <VerdictTab rec={rec.data} />
         ) : null)}
-      {tab === "verdict" && <ExamplesCard job={jobName} />}
+      {tab === "verdict" && !noCalls && <ExamplesCard job={jobName} />}
       {tab === "quality" && <QualityTab job={jobName} rec={rec.data ?? null} />}
       {tab === "spend" && <SpendTab job={jobName} />}
       {tab === "tokens" && <TokensTab job={jobName} />}

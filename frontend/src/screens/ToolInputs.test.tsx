@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/render";
 import { WithProject } from "../app/project";
 import type { Project } from "../shared/api/types";
-import { ToolInputsSection } from "./Settings";
+import { KeysSection, ToolInputsSection } from "./Settings";
 import { AgentsView } from "./overview/AgentsView";
 import type { Ctx, ShellProps } from "./overview/widgets";
 
@@ -44,30 +44,50 @@ describe("Settings: keep the inputs of tool calls", () => {
     expect(calls.filter((c) => c.method !== "GET")).toHaveLength(0);
   });
 
-  it("turns on with only that field and shows the on state", async () => {
+  it("turning it on is a draft: nothing is sent until Apply, then one PATCH and a toast", async () => {
     const { project, calls } = account(false);
     const user = userEvent.setup();
     mount(project);
     await user.click(screen.getByRole("switch"));
-    await waitFor(() => expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ store_tool_arguments: true }));
+    expect(screen.getByText(/stores the tool inputs your app sends, and they may contain private data/)).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Turn on" }));
+    await waitFor(() => expect(calls.filter((c) => c.method === "PATCH").map((c) => c.body)).toEqual([{ store_tool_arguments: true }]));
+    expect((await screen.findByText("Tool inputs are now kept")).closest("[role=status]")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
   });
 
-  it("shows the on state and turns off", async () => {
+  it("Discard puts the switch back and sends nothing", async () => {
+    const { project, calls } = account(false);
+    const user = userEvent.setup();
+    mount(project);
+    await user.click(screen.getByRole("switch"));
+    await user.click(screen.getByRole("button", { name: "Keep it off" }));
+    expect(screen.getByRole("switch")).not.toBeChecked();
+    expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(0);
+  });
+
+  it("shows the on state and turns off only after Apply", async () => {
     const { project, calls } = account(true);
     const user = userEvent.setup();
     mount(project);
     expect(screen.getByRole("switch")).toBeChecked();
     expect(screen.getByText(/stops storing new inputs/)).toBeInTheDocument();
     await user.click(screen.getByRole("switch"));
+    expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Turn off" }));
     await waitFor(() => expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ store_tool_arguments: false }));
   });
 
-  it("shows Saving while the change is in flight and an error if it fails", async () => {
+  it("keeps the choice and shows an alert if applying fails", async () => {
     const { project } = account(false, { failPatch: true });
     const user = userEvent.setup();
     mount(project);
     await user.click(screen.getByRole("switch"));
+    await user.click(screen.getByRole("button", { name: "Turn on" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not save that");
+    expect(screen.getByRole("switch")).toBeChecked();
+    expect(screen.getByRole("button", { name: "Turn on" })).toBeEnabled();
   });
 
   it("asks before deleting stored inputs, then says how many calls were cleaned", async () => {
@@ -91,7 +111,7 @@ describe("Settings: keep the inputs of tool calls", () => {
   });
 });
 
-describe("possible-loop hint", () => {
+describe("possible-repeated-call hint", () => {
   const shell = { id: "agents", first: false, last: false, onMove: () => {}, onRemove: () => {} } as unknown as ShellProps;
   const ctx = { days: 30 } as unknown as Ctx;
   const insights = (uses: boolean) => ({
@@ -115,12 +135,28 @@ describe("possible-loop hint", () => {
   it("stays quiet when the switch is on or the loop already used inputs", async () => {
     api(true, false);
     const { unmount } = show();
-    await screen.findByText(/Possible loop:/);
+    await screen.findByText(/Possible repeated call:/);
     await waitFor(() => expect(screen.queryByRole("link", { name: /turn on keeping/ })).toBeNull());
     unmount();
     api(false, true);
     show();
-    await screen.findByText(/Possible loop:/);
+    await screen.findByText(/Possible repeated call:/);
     expect(screen.queryByRole("link", { name: /turn on keeping/ })).toBeNull();
+  });
+});
+
+describe("Settings: API keys box", () => {
+  const proj = { project_id: "acme", name: "Acme", key_prefix: "mcm_live_ab" } as unknown as Project;
+  it("hides the paste-a-key box for a signed-in owner", () => {
+    renderWithProviders(<WithProject id="acme"><KeysSection project={proj} mode="owned" /></WithProject>);
+    expect(screen.getByText(/Live key/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reset to demo key" })).not.toBeInTheDocument();
+  });
+  it("keeps it for a project-key visitor and the public demo", () => {
+    for (const mode of ["key", "demo"] as const) {
+      const { unmount } = renderWithProviders(<WithProject id={mode}><KeysSection project={null} mode={mode} /></WithProject>);
+      expect(screen.getByRole("button", { name: "Reset to demo key" })).toBeInTheDocument();
+      unmount();
+    }
   });
 });

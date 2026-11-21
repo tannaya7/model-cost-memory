@@ -4,6 +4,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Alert, Model } from "../../../shared/api/types";
 import { resolveAlert } from "../api/alertsApi";
 import { newKindView } from "../newKinds";
+import { useBillingMode } from "../../projects/hooks/useBillingMode";
+import { MONEY_ALERT_FALLBACK, serverText } from "../../projects/moneyWording";
 import { deprecated, formatPValue, silentDrop, versionRegression } from "../details";
 import { Badge } from "../../../shared/components/Badge";
 import { Card } from "../../../shared/components/Card";
@@ -64,13 +66,13 @@ export function AlertItemCard({ item }: { item: AlertListItem }) {
     return (
       <Card className="space-y-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Badge tone="warn">Shutting down</Badge>
-            <span className="font-mono text-base font-bold text-ink">
+            <span className="min-w-0 break-all font-mono text-base font-bold text-ink">
               {model.model}
             </span>
             {model.model_version && (
-              <span className="font-mono text-xs text-dim">
+              <span className="break-all font-mono text-xs text-dim">
                 v: {model.model_version}
               </span>
             )}
@@ -126,6 +128,9 @@ function Rates({ before, after, note }: { before: number; after: number; note: s
 
 function AlertCard({ alert }: { alert: Alert }) {
   const p = useP();
+  const { mode } = useBillingMode();
+  // A flat-fee plan has no bill: the server's dollar wording is replaced, never shown.
+  const summary = serverText(alert.summary, mode, MONEY_ALERT_FALLBACK);
   const queryClient = useQueryClient();
   const resolve = useMutation({
     mutationFn: () => resolveAlert(alert.alert_id),
@@ -148,14 +153,18 @@ function AlertCard({ alert }: { alert: Alert }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className={nk.tone === "bad" ? "text-bad" : "text-warn"}>{nk.icon}</span>
             <Badge tone={nk.tone}>{nk.title}</Badge>
+            {nk.tag && <Badge tone="neutral">{nk.tag}</Badge>}
             {isResolved && <Badge tone="ok">Resolved {formatLocalDate(alert.resolved_at!)}</Badge>}
           </div>
           <span className="font-mono text-xs text-dim">{formatLocalTimestamp(alert.created_at)}</span>
         </div>
-        <p className="text-sm text-ink">{alert.summary}</p>
-        {nk.numbers && <p className="text-xs text-dim">{nk.numbers}</p>}
+        <p className="text-sm text-ink">{summary}</p>
+        {nk.numbers && serverText(nk.numbers, mode, null) && <p className="text-xs text-dim">{nk.numbers}</p>}
         <div className="flex shrink-0 items-center gap-3">
           <Link to={p(nk.to)} className="text-xs font-semibold text-accent hover:underline">{nk.linkLabel}</Link>
+          {nk.href && (
+            <a href={nk.href} target="_blank" rel="noreferrer noopener" className="text-xs font-semibold text-accent hover:underline">{nk.hrefLabel}</a>
+          )}
           {!isResolved && (
             <button
               type="button"
@@ -175,7 +184,7 @@ function AlertCard({ alert }: { alert: Alert }) {
     <Card className={`space-y-4 ${isResolved ? "opacity-70" : ""}`}>
       {/* Header: Badge, Job name, Timestamp */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {regression && <Badge tone="bad">Quality drop</Badge>}
           {silent && <Badge tone="bad">Quiet quality drop</Badge>}
           {retired && <Badge tone="warn">{retired.status === "RETIRED" ? "Retired" : "Deprecated"}</Badge>}
@@ -184,7 +193,8 @@ function AlertCard({ alert }: { alert: Alert }) {
           )}
           <Link
             to={p(`/jobs/${encodeURIComponent(alert.job)}?tab=quality`)}
-            className="text-base font-bold text-accent hover:underline"
+            title={alert.job}
+            className="min-w-0 break-all text-base font-bold text-accent hover:underline"
           >
             {alert.job}
           </Link>
@@ -196,7 +206,7 @@ function AlertCard({ alert }: { alert: Alert }) {
 
       {regression && (
         <>
-          <div className="font-mono text-sm text-dim">
+          <div className="break-all font-mono text-sm text-dim">
             <span className="font-semibold text-ink">{regression.model}</span>{" "}
             <span>{regression.old_version}</span> <span className="text-dim">→</span>{" "}
             <span className="font-semibold text-ink">{regression.new_version}</span>
@@ -233,7 +243,7 @@ function AlertCard({ alert }: { alert: Alert }) {
       {/* Footer: summary, delivery, actions */}
       <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-0.5">
-          <p className="text-xs text-ink">{alert.summary}</p>
+          <p className="text-xs text-ink">{summary}</p>
           <p className="text-[11px] text-dim">
             {alert.delivered_at
               ? `Sent to the webhook ${formatLocalTimestamp(alert.delivered_at)}`

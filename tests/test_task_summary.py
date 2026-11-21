@@ -36,6 +36,17 @@ async def _world(session, n=30, text_kept=True):
     return {"X-API-Key": key}
 
 
+async def _sign_in_as_owner(client, session, monkeypatch, project_id="acme"):
+    """Sign in (dev login) and make that user the project's owner; returns the owner headers."""
+    from sqlalchemy import update
+
+    monkeypatch.setenv("DEV_LOGIN", "true")
+    me = (await client.post("/auth/dev/login", json={"email": "owner@example.com"})).json()
+    await session.execute(update(Project).where(Project.project_id == project_id).values(owner_user_id=uuid.UUID(me["user_id"])))
+    await session.commit()
+    return {"X-Project-Id": project_id}
+
+
 async def test_profile_needs_25_calls(client, session):
     headers = await _world(session, n=10)
     body = (await client.get("/v1/jobs/invoice-extract/profile", headers=headers)).json()
@@ -62,9 +73,10 @@ async def test_summary_is_off_until_the_project_opts_in_and_sends_only_clean_tex
 
     monkeypatch.setattr(task_summary, "_call", fake)
     headers = await _world(session)
+    owner = await _sign_in_as_owner(client, session, monkeypatch)
     url = "/v1/jobs/invoice-extract/profile"
     assert (await client.get(url, headers=headers)).json()["summary"]["state"] == "off" and sent == []
-    on = await client.put("/v1/task-summary-consent", json={"enabled": True}, headers=headers)
+    on = await client.put("/v1/task-summary-consent", json={"enabled": True}, headers=owner)
     assert on.json()["consent"] is True
     summary = (await client.get(url, headers=headers)).json()["summary"]
     assert summary["state"] == "ready" and "invoices" in summary["text"]
@@ -73,14 +85,15 @@ async def test_summary_is_off_until_the_project_opts_in_and_sends_only_clean_tex
     assert len(sent) == 1  # same samples: not written again
     assert (await client.delete("/v1/jobs/invoice-extract/summary", headers=headers)).status_code == 204
     assert (await client.get(url, headers=headers)).json()["summary"]["state"] == "deleted" and len(sent) == 1
-    await client.put("/v1/task-summary-consent", json={"enabled": False}, headers=headers)
+    await client.put("/v1/task-summary-consent", json={"enabled": False}, headers=owner)
     assert (await client.get(url, headers=headers)).json()["summary"]["state"] == "off"
 
 
 async def test_no_stored_text_means_no_summary(client, session, monkeypatch):
     monkeypatch.setenv("SUMMARY_API_KEY", "k")
     headers = await _world(session, text_kept=False)
-    await client.put("/v1/task-summary-consent", json={"enabled": True}, headers=headers)
+    owner = await _sign_in_as_owner(client, session, monkeypatch)
+    await client.put("/v1/task-summary-consent", json={"enabled": True}, headers=owner)
     assert (await client.get("/v1/jobs/invoice-extract/profile", headers=headers)).json()["summary"]["state"] == "no_samples"
 
 

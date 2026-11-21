@@ -26,14 +26,14 @@ describe("suggestForCheckedJob", () => {
     expect(s[0].interval!.low).toBeLessThan(0.98);
     expect(s[0].reason).toMatch(/80 checked answers/);
     expect(s[2]).toMatchObject({ nChecked: null, interval: null });
-    const thin = suggestForCheckedJob({ ...run, rec: { ...rec, models: rec.models.map((m) => ({ ...m, n_runs: 10 })) } as typeof rec });
+    const thin = suggestForCheckedJob({ ...run, rec: { ...rec, models: rec.models.map((m) => ({ ...m, n_runs: 10, evidence_weight: 10 })) } as typeof rec });
     expect(thin[0].tooFew).toBe(true);
     expect(thin[0].reason).toMatch(/Not enough checked answers yet/);
   });
 
   it("names the cheapest proven, the best quality and a model worth testing", () => {
     const s = suggestForCheckedJob(run);
-    expect(s.map((x) => x.label)).toEqual(["Cheapest proven", "Best quality", "Worth testing"]);
+    expect(s.map((x) => x.label)).toEqual(["Cheapest good enough", "Best quality", "Worth testing"]);
     expect(s[0]).toMatchObject({ model: "small", evidence: "measured", monthlyCostUsd: 5 });
     expect(s[1].model).toBe("big");
     expect(s[2]).toMatchObject({ model: "tiny", evidence: "estimate", passRate: null });
@@ -47,7 +47,7 @@ describe("suggestForCheckedJob", () => {
   });
   it("skips untested suggestions when tokens are unknown, and retired models always", () => {
     const s = suggestForCheckedJob({ ...run, avgTokens: null });
-    expect(s.map((x) => x.label)).toEqual(["Cheapest proven", "Best quality"]);
+    expect(s.map((x) => x.label)).toEqual(["Cheapest good enough", "Best quality"]);
     expect(untestedModels(rec, catalog).map((m) => m.model)).toEqual(["tiny"]);
   });
   it("respects the provider filter", () => {

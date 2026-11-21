@@ -33,6 +33,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from .privacy import sanitize_tool_calls
+from .usage_ledger import legacy_columns, read_usage
 
 log = logging.getLogger("agent_memory.recorder")
 
@@ -204,15 +205,22 @@ def _get(obj: Any, *path: str) -> Any:
     return obj
 
 
-def _int(value: Any) -> int:
-    return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0
-
-
 def read_response(response: Any, *, include_arguments: bool = False) -> dict[str, Any]:
-    """Pull model, usage and output out of an Anthropic- or OpenAI-shaped response (object or dict).
+    """Pull model, usage and output out of an Anthropic-, OpenAI- (Chat or Responses), DeepSeek- or
+    Gemini-shaped response (object or dict).
 
-    `tokens_in` is uncached input only: OpenAI counts cached tokens inside `prompt_tokens`, so they
-    are subtracted here to keep cost exact (docs/ARCHITECTURE.md, cost calculation).
+    `tokens_in` is uncached input only, so cost is never billed twice. Verified against the providers' docs
+    and SDKs (2026-11-17): OpenAI counts cached and cache-write tokens INSIDE prompt_tokens / input_tokens
+    (https://developers.openai.com/api/docs/guides/prompt-caching); Anthropic's input_tokens EXCLUDES cache
+    reads and writes (https://platform.claude.com/docs/en/build-with-claude/prompt-caching); DeepSeek
+    prompt_tokens = prompt_cache_hit_tokens + prompt_cache_miss_tokens
+    (https://api-docs.deepseek.com/api/create-chat-completion); Gemini prompt_token_count includes cached
+    content (python-genai types.py). Thinking and reasoning tokens are already inside the output total for
+    Anthropic, OpenAI and DeepSeek; Gemini reports thoughts separately, so they are added to output.
+
+    Not modelled (needs a price or a field the run does not carry): OpenAI 12-hour cache writes (2.5x; all
+    writes are priced at the 30-minute 1.25x), Anthropic data-residency 1.1x, Batch 50%, fast mode, web
+    search $10 per 1,000 and the Haiku 5.5 over-100K price, DeepSeek peak pricing, Gemini storage fees.
 
     Tool calls are reduced to their names and ids; arguments are included only when `include_arguments`.
     """
@@ -221,29 +229,18 @@ def read_response(response: Any, *, include_arguments: bool = False) -> dict[str
     usage = _get(response, "usage")
     if usage is None:  # Gemini keeps usage under usage_metadata (SDK) or usageMetadata (REST)
         usage = _get(response, "usage_metadata") or _get(response, "usageMetadata")
-    if _get(usage, "input_tokens") is not None:  # Anthropic
-        out["tokens_in"] = _int(_get(usage, "input_tokens"))
-        out["tokens_out"] = _int(_get(usage, "output_tokens"))
-        out["cache_read_tokens"] = _int(_get(usage, "cache_read_input_tokens"))
-        out["cache_write_tokens"] = _int(_get(usage, "cache_creation_input_tokens"))
-    elif _get(usage, "prompt_tokens") is not None:  # OpenAI and compatible servers (incl. Ollama)
-        cached = _int(_get(usage, "prompt_tokens_details", "cached_tokens"))
-        out["tokens_in"] = max(_int(_get(usage, "prompt_tokens")) - cached, 0)
-        out["tokens_out"] = _int(_get(usage, "completion_tokens"))
-        out["cache_read_tokens"] = cached
-    elif _get(usage, "prompt_token_count") is not None or _get(usage, "promptTokenCount") is not None:
-        # Gemini usageMetadata (SDK snake_case or REST camelCase). promptTokenCount already includes the
-        # cached tokens; thoughts are billed as output. Tool-use prompt tokens are added to input
-        # (assumption: billed as input; the docs do not state a rate).
-        def g(snake: str, camel: str) -> int:
-            return _int(_get(usage, snake)) or _int(_get(usage, camel))
-
-        cached = g("cached_content_token_count", "cachedContentTokenCount")
-        prompt = g("prompt_token_count", "promptTokenCount")
-        out["tokens_in"] = max(prompt - cached, 0) + g("tool_use_prompt_token_count", "toolUsePromptTokenCount")
-        out["tokens_out"] = g("candidates_token_count", "candidatesTokenCount") + g(
-            "thoughts_token_count", "thoughtsTokenCount")
-        out["cache_read_tokens"] = cached
+    # One read of the provider's usage block into the canonical ledger (usage_ledger.py documents which fields
+    # are inside or additional to which). The four old columns are derived from it; the ledger's own fields
+    # keep "not reported" apart from zero.
+    ledger = read_usage(usage)
+    out.update(legacy_columns(ledger))
+    out["usage_shape"] = ledger["shape"]
+    if ledger["raw"]:
+        out["usage_raw"] = ledger["raw"]
+    if ledger["fields"]["reasoning"] is not None:
+        out["reasoning_tokens"] = ledger["fields"]["reasoning"]
+    if ledger["fields"]["tool_use_input"] is not None:
+        out["tool_use_input_tokens"] = ledger["fields"]["tool_use_input"]
 
     content = _get(response, "content")  # Anthropic: a list of blocks
     choices = _get(response, "choices")  # OpenAI: a list of choices
@@ -264,20 +261,95 @@ def read_response(response: Any, *, include_arguments: bool = False) -> dict[str
             if texts:
                 out["output"] = "".join(texts)
 
-    calls: list[dict[str, Any]] = []
-    if isinstance(content, list):  # Anthropic: tool_use blocks
-        calls += [
-            {"id": _get(b, "id"), "name": _get(b, "name"), "arguments": _get(b, "input")}
-            for b in content if _get(b, "type") == "tool_use"
-        ]
-    if isinstance(choices, list) and choices:  # OpenAI: message.tool_calls
-        calls += [
-            {"id": _get(c, "id"), "name": _get(c, "function", "name"), "arguments": _get(c, "function", "arguments")}
-            for c in (_get(choices[0], "message", "tool_calls") or [])
-        ]
+    calls = _read_tool_calls(content, choices, candidates, _get(response, "output"))
     if calls:
         out["tool_calls"] = sanitize_tool_calls(calls, keep_arguments=include_arguments)
     return out
+
+
+# OpenAI Responses `output[]` item types that are a tool call, exactly as the SDK spells them
+# (openai-python types/responses/response_output_item.py). Hosted tools carry no `name`: the type is the tool.
+# `mcp_list_tools` and `mcp_approval_request` are not calls, so they are left out.
+_RESPONSES_CALL_TYPES = frozenset({
+    "function_call", "custom_tool_call", "mcp_call", "web_search_call", "file_search_call", "computer_call",
+    "code_interpreter_call", "local_shell_call", "shell_call", "apply_patch_call", "tool_search_call",
+    "image_generation_call",
+})
+
+
+def _mcp_name(server: Any, name: Any) -> Any:
+    """`mcp__server__tool`, the spelling insights/agent_kinds.MCP_NAME recognises as a tool server."""
+    if not name or not server or str(name).startswith("mcp__"):
+        return name
+    return f"mcp__{server}__{name}"
+
+
+def _read_tool_calls(content: Any, choices: Any, candidates: Any, output: Any) -> list[dict[str, Any]]:
+    """Tool calls as {id, name, arguments}; the caller drops the arguments unless the project opted in.
+
+    Sources (anthropic-sdk-python and openai-python types, python-genai types.py):
+    - Anthropic content blocks `tool_use`, `server_tool_use` {id, name, input} and the beta `mcp_tool_use`
+      {id, name, server_name, input} (its name gets the server so MCP detection works).
+    - OpenAI Chat message.tool_calls: {type: "function", function: {name, arguments}} or
+      {type: "custom", custom: {name, input}}.
+    - OpenAI Responses output[] items (see _RESPONSES_CALL_TYPES); `mcp_call` has `server_label`.
+    - Gemini candidates[].content.parts[].functionCall {name, args, id?} (REST) / function_call (SDK).
+    """
+    calls: list[dict[str, Any]] = []
+    failed: dict[Any, bool] = {}  # MCP results by the call they answer: a result is never a call of its own
+    if isinstance(content, list):
+        for b in content:
+            kind = _get(b, "type")
+            if kind in ("tool_use", "server_tool_use"):
+                calls.append({"id": _get(b, "id"), "name": _get(b, "name"), "arguments": _get(b, "input")})
+            elif kind == "mcp_tool_use":
+                call = {"id": _get(b, "id"), "name": _mcp_name(_get(b, "server_name"), _get(b, "name")), "arguments": _get(b, "input")}
+                if _get(b, "server_name"):  # provider-reported only when the response itself names the server
+                    call.update(server=_get(b, "server_name"), source="provider")
+                calls.append(call)
+            elif kind == "mcp_tool_result":
+                failed[_get(b, "tool_use_id")] = bool(_get(b, "is_error"))
+        for call in calls:
+            if call.get("source") == "provider" and call.get("id") in failed:
+                call["failed"] = failed[call["id"]]
+    if isinstance(choices, list) and choices:
+        for c in _get(choices[0], "message", "tool_calls") or []:
+            if _get(c, "function", "name") is not None or _get(c, "custom") is None:
+                calls.append({"id": _get(c, "id"), "name": _get(c, "function", "name"),
+                              "arguments": _get(c, "function", "arguments")})
+            else:
+                calls.append({"id": _get(c, "id"), "name": _get(c, "custom", "name"),
+                              "arguments": _get(c, "custom", "input")})
+    if isinstance(output, list):
+        for item in output:
+            kind = _get(item, "type")
+            if kind not in _RESPONSES_CALL_TYPES:
+                continue
+            name = _get(item, "name") or kind
+            call = {"id": _get(item, "call_id") or _get(item, "id"), "name": name,
+                    "arguments": _get(item, "arguments") if _get(item, "arguments") is not None else _get(item, "input")}
+            if kind == "mcp_call":
+                call["name"] = _mcp_name(_get(item, "server_label"), name)
+                if _get(item, "server_label"):
+                    call.update(server=_get(item, "server_label"), source="provider", failed=_get(item, "error") is not None)
+            calls.append(call)
+    if isinstance(candidates, list) and candidates:
+        parts = _get(candidates[0], "content", "parts")
+        for part in parts if isinstance(parts, list) else []:
+            call = _get(part, "functionCall") or _get(part, "function_call")
+            if call is not None and _get(call, "name"):
+                calls.append({"id": _get(call, "id"), "name": _get(call, "name"), "arguments": _get(call, "args")})
+    return calls
+
+
+def clean_feature(value: Any) -> str | None:
+    """The optional feature label a call is sent with, made safe for the server's rules (letters, digits, spaces and . _ - only, at most
+    100 characters, starting with a letter or digit). Anything else becomes an underscore. None when nothing usable is left, so a
+    strange label never makes the whole call be refused."""
+    if value is None:
+        return None
+    text = "".join(c if (c.isascii() and (c.isalnum() or c in "._ -")) else "_" for c in str(value).strip())[:100].strip(" ._-")
+    return text or None
 
 
 def estimate_tools_tokens(tools: Any) -> int | None:
@@ -331,7 +403,10 @@ class RunRecorder:
         model: str | None = None,
         model_version: str | None = None,
         agent: str | None = None,
+        feature: str | None = None,
         trace_id: str | None = None,
+        span_id: str | None = None,
+        parent_span_id: str | None = None,
         tools: list[Any] | None = None,
         **explicit: Any,
     ) -> None:
@@ -343,9 +418,14 @@ class RunRecorder:
         tokens_out, cache_read_tokens, cache_write_tokens, cost_usd, output, tool_calls, latency_ms, provider,
         effort (the reasoning effort the call asked for, e.g. "low", so it is compared as its own option).
 
+        `feature` is optional: your own name for the feature or workflow this call serves (for example "support_summary"), so the cost
+        can be shown per feature. It is your label, not a verified identity, and nothing is ever inferred from the prompt to fill it.
+        Letters, digits, spaces and . _ - only, at most 100 characters; anything else becomes an underscore.
+
         For multi-agent and tool-heavy apps, all optional: `agent` (which agent or role made the call,
         at most 100 characters), `trace_id` (one id shared by every call that serves the same user
-        task, at most 200) and `tools` (the tool or function definitions sent with the request).
+        task, at most 200), `span_id` (this call's own id) with `parent_span_id` (the span_id of the call that
+        started it, so a task can be shown as a tree; each at most 200) and `tools` (the tool or function definitions sent with the request).
         From `tools` the recorder sends `tools_tokens`, an ESTIMATE: len(json.dumps(tools,
         sort_keys=True)) // 4, because providers do not report the size of tool definitions
         separately (they are inside tokens_in).
@@ -357,8 +437,15 @@ class RunRecorder:
                 data["tool_calls"] = sanitize_tool_calls(data["tool_calls"], keep_arguments=self.send_tool_arguments)
             if agent:
                 data["agent"] = str(agent)[:100]
+            cleaned = clean_feature(feature)
+            if cleaned:
+                data["feature"] = cleaned
             if trace_id:
                 data["trace_id"] = str(trace_id)[:200]
+            if span_id:
+                data["span_id"] = str(span_id)[:200]
+            if parent_span_id:
+                data["parent_span_id"] = str(parent_span_id)[:200]
             if tools:
                 data["tools_tokens"] = estimate_tools_tokens(tools)
             resolved = model_version or data.pop("model_version", None) or model or "unknown"

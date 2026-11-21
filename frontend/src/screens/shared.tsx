@@ -1,4 +1,5 @@
 /** Data and pieces shared by several screens. */
+import { useBillingMode } from "../features/projects/hooks/useBillingMode";
 import { useQueries } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { fetchRecommendation } from "../features/recommendations/api/recommendationsApi";
@@ -7,6 +8,7 @@ import { CountUp } from "../shared/motion/CountUp";
 import { Sparkline } from "../ui/charts/charts";
 import { cx, Pill } from "../ui/primitives";
 import { VERDICT, type Verdict } from "../ui/format";
+import { PROMISING_LABEL } from "./promising";
 
 /** Every job's recommendation, fetched side by side. Jobs without enough runs answer 404 or a thin
  * verdict; those come back as null rather than failing the whole screen. */
@@ -26,16 +28,29 @@ export function useAllRecommendations(jobs: Job[] | undefined) {
 
 /** The money a recommendation would save each month, when it advises a move that saves money. */
 export function monthlySaving(rec: Recommendation | null | undefined): number {
-  if (!rec || (rec.verdict !== "DOWNGRADE" && rec.verdict !== "SWITCH")) return 0;
+  // DOWNGRADE only: a SWITCH to a better model can raise the bill, and a negative number is never shown as a saving.
+  if (!rec || rec.verdict !== "DOWNGRADE") return 0;
   return Math.max(0, rec.forecast?.monthly_saving_usd ?? 0);
 }
 
-export function VerdictPill({ verdict, rec }: { verdict: Verdict; rec?: { evidence: { n_runs: number }; rules: { evidence_floor: number } } | null }) {
+/** Checked answers "so far" toward the floor. The floor applies to ONE model, so this is the best-covered
+ * model's share (progress x floor), not the total across models: two models with 12 each is 12 of 25, not 24. */
+export function evidenceSoFar(rec: { progress?: number | null; evidence: { n_runs: number }; rules: { evidence_floor: number } }): number {
+  const raw = typeof rec.progress === "number" ? rec.progress * rec.rules.evidence_floor : rec.evidence.n_runs;
+  return Math.min(Math.round(raw), rec.rules.evidence_floor);
+}
+
+export function VerdictPill({ verdict, rec }: { verdict: Verdict; rec?: { progress?: number | null; evidence: { n_runs: number }; rules: { evidence_floor: number }; promising?: unknown } | null }) {
+  const { mode: billing } = useBillingMode();
   const v = VERDICT[verdict];
-  if (verdict === "INSUFFICIENT_EVIDENCE" && rec) {
-    return <Pill tone={v.tone}>Still learning: {Math.min(Math.round(rec.evidence.n_runs), rec.rules.evidence_floor)} of {rec.rules.evidence_floor}</Pill>;
+  if (verdict === "HOLD" && rec?.promising) {
+    // Muted on purpose: it is a lead worth trying, never the green "switch" colour.
+    return <Pill tone="neutral">{PROMISING_LABEL}</Pill>;
   }
-  return <Pill tone={v.tone}>{v.label}</Pill>;
+  if (verdict === "INSUFFICIENT_EVIDENCE" && rec) {
+    return <Pill tone={v.tone}>Still learning: {evidenceSoFar(rec)} of {rec.rules.evidence_floor}</Pill>;
+  }
+  return <Pill tone={v.tone}>{verdict === "DOWNGRADE" && billing === "subscription" ? "Lighter model found" : v.label}</Pill>;
 }
 
 /** A headline number with a label, an optional change and an optional trend line. */

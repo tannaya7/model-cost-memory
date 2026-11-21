@@ -7,6 +7,7 @@ Money is returned as a JSON number in US dollars; timestamps are ISO 8601 in UTC
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import date, datetime
 from typing import Literal
@@ -17,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, 
 
 CheckKind = Literal["ANSWER_KEY", "TEST_COMMAND", "SCHEMA", "LATE_LABEL"]
 Outcome = Literal["PASS", "FAIL", "UNKNOWN"]
-RunKind = Literal["PRODUCTION", "SHADOW", "RETEST"]
+RunKind = Literal["PRODUCTION", "RETEST"]
 RunState = Literal["CAPTURED", "CHECKED", "INDEXED", "CONSOLIDATED", "ARCHIVED", "INGESTION_FAILED"]
 
 
@@ -139,14 +140,27 @@ class RunOut(Model):
     prompt_version: str | None
     effort: str | None = None
     agent: str | None = Field(default=None, description="Which agent or role made the call, if the SDK said")
+    feature: str | None = Field(default=None, description="The label your app sent for the feature or workflow, if any. Not verified")
     trace_id: str | None = Field(default=None, description="Shared by every call serving the same user task")
+    span_id: str | None = Field(default=None, description="This call's own id within its task, if the app sent one")
+    parent_span_id: str | None = Field(default=None, description="The span_id of the call that started this one, if the app sent one")
     tools_tokens: int | None = Field(default=None, description="Estimated tokens of the tool definitions sent")
     tool_call_count: int | None = Field(default=None, description="Tool calls the response made")
     tokens_in: int
     tokens_out: int
     cache_read_tokens: int
     cache_write_tokens: int
-    cost_usd: float | None = Field(description="Null when the model has no catalog price and none was sent")
+    usage_shape: str | None = Field(default=None, description="Provider usage layout the SDK read; 'none' = no usage block, counts unknown")
+    reasoning_tokens: int | None = Field(default=None, description="Reasoning tokens when reported separately; null = not reported")
+    tool_use_input_tokens: int | None = Field(default=None, description="Gemini tool-result input tokens, not priced; null = not reported")
+    price_status: str | None = Field(
+        default=None,
+        description="Why the run is or is not priced: PRICED, PARTLY_PRICED (a price-changing label such as a "
+                    "priority tier was reported that is not modelled), CALLER_COST (the cost came from the "
+                    "caller), NO_USAGE, or UNPRICED_* (unknown model, price not yet in force, price expired). "
+                    "Null = recorded before price versions existed. List prices, not an invoice",
+    )
+    cost_usd: float | None = Field(description="Null when the model has no catalog price and none was sent, or no usage was reported")
     latency_ms: int | None
     outcome: Outcome
     outcome_reason: str | None
@@ -161,7 +175,7 @@ class RunOut(Model):
         default=None, description="When the prompt, output, tool calls and answer key were cleared under the "
                                   "project's retention; the figures are kept")
     importance_score: float = Field(default=1.0, description="How much the run matters (failures and costly runs "
-                                                             "more): what decides archiving and re-test sampling")
+                                                             "more): what decides archiving and trial sampling")
     weight: float | None = Field(default=None, description="How much it counts in the recommendation now: "
                                                           "e^(-age/S), S shorter once its version is replaced")
 
@@ -204,14 +218,48 @@ class RunCreate(Model):
                     "efforts is compared as separate options",
     )
     agent: str | None = Field(default=None, max_length=100, description="Which agent or role made the call")
+    feature: str | None = Field(
+        default=None, max_length=100, pattern=r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,99}$",
+        description="Your own name for the feature or workflow this call serves, for example support_summary. Optional. It is your label: "
+                    "not verified, not an identity and not an invoice-grade chargeback record. Letters, digits, spaces and . _ - only")
     trace_id: str | None = Field(default=None, max_length=200,
                                  description="One id shared by every call that serves the same user task")
+    span_id: str | None = Field(default=None, max_length=200, description="This call's own id within its task (optional)")
+    parent_span_id: str | None = Field(default=None, max_length=200,
+                                       description="The span_id of the call that started this one (optional)")
     tools_tokens: int | None = Field(default=None, ge=0, le=MAX_TOKENS,
                                      description="Estimated tokens of the tool definitions sent with the call")
     tokens_in: int = Field(default=0, ge=0, le=MAX_TOKENS, description="Uncached input tokens")
     tokens_out: int = Field(default=0, ge=0, le=MAX_TOKENS, description="Output tokens, thinking included")
     cache_read_tokens: int = Field(default=0, ge=0, le=MAX_TOKENS)
     cache_write_tokens: int = Field(default=0, ge=0, le=MAX_TOKENS)
+    cache_write_1h_tokens: int = Field(
+        default=0, ge=0, le=MAX_TOKENS,
+        description="The part of cache_write_tokens written to the 1-hour cache (priced higher than the "
+                    "5-minute cache). Used for the cost only; not stored",
+    )
+    usage_shape: Literal["anthropic_messages", "openai_responses", "openai_chat", "deepseek_chat", "gemini",
+                         "none"] | None = Field(
+        default=None,
+        description="Which provider usage layout the SDK read. 'none' means the response carried no usage "
+                    "block: the token counts are then unknown, not zero. Absent for older SDKs and for counts "
+                    "given by hand",
+    )
+    usage_raw: dict | None = Field(
+        default=None,
+        description="The provider's usage block reduced to numbers (and the service tier, region and speed "
+                    "labels), kept so a figure can be audited later. No prompt or answer text",
+    )
+    reasoning_tokens: int | None = Field(
+        default=None, ge=0, le=MAX_TOKENS,
+        description="Reasoning/thinking tokens when the provider reports them separately. Already inside "
+                    "tokens_out for OpenAI and DeepSeek, and added into tokens_out for Gemini. Null = not reported",
+    )
+    tool_use_input_tokens: int | None = Field(
+        default=None, ge=0, le=MAX_TOKENS,
+        description="Gemini only: tokens of tool results handed back to the model. How they are billed is not "
+                    "documented, so they are NOT in tokens_in and NOT priced. Null = not reported",
+    )
     cost_usd: float | None = Field(
         default=None, ge=0, le=10_000,
         description="Used only when the model catalog has no price; otherwise the server computes it",
@@ -226,7 +274,7 @@ class RunCreate(Model):
     expected: dict | None = Field(
         default=None,
         description="The correct values for an ANSWER_KEY job, used to check this run. Stored only when the job "
-                    "has re-test consent, so a re-test can check the replayed run against the same answers",
+                    "has trial consent, so a trial can check the replayed run against the same answers",
     )
 
     @field_validator("prompt", "output")
@@ -234,6 +282,13 @@ class RunCreate(Model):
     def _within_size_limit(cls, value: str | None) -> str | None:
         if value is not None and len(value.encode("utf8")) > MAX_TEXT_BYTES:
             raise ValueError("must be at most 256 KB")
+        return value
+
+    @field_validator("usage_raw")
+    @classmethod
+    def _usage_raw_is_small(cls, value: dict | None) -> dict | None:
+        if value is not None and len(json.dumps(value, default=str)) > 4096:
+            raise ValueError("usage_raw must be at most 4 KB")
         return value
 
 
@@ -252,6 +307,29 @@ class LabelCreate(Model):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class ModelReferenceOut(Model):
+    """Where a model's price and links come from. Reference information only: no ranking, no benchmark, no claim about how
+    the model performs on anyone's work. Unknown is shown as unknown, never guessed."""
+
+    kind: Literal["api_model"] = Field(
+        description="Only API models you can call are listed. Coding tools and subscription apps such as Cursor or Copilot "
+                    "are not API endpoints, so they are never listed or ranked here")
+    maker: str | None = Field(description="Whose own pages the links go to; null when we read none for this model")
+    docs_url: str | None = Field(description="The maker's own page about its models")
+    pricing_url: str | None = Field(description="The maker's own pricing page")
+    deprecations_url: str | None = Field(description="The maker's own deprecation page")
+    price_check: Literal["confirmed", "differs", "not_readable", "not_listed", "other_host", "not_checked"] = Field(
+        description="The catalog price compared with what the maker's own pricing page states")
+    price_check_note: str
+    price_checked_at: datetime | None = Field(description="When the maker's pricing page was last read successfully")
+    price_check_stale: bool = Field(description="True when that reading is more than 7 days old")
+    official_input_per_mtok: float | None = Field(description="What the maker's page states, when it states one number")
+    official_output_per_mtok: float | None
+    price_basis: str = Field(description="What the price is and is not")
+    catalog_source: str = Field(description="Where the catalog's own number comes from")
+    catalog_synced_at: datetime | None = Field(description="When the catalog last confirmed this price from its source")
+
+
 class ModelOut(Model):
     """One model in the catalog."""
 
@@ -265,9 +343,32 @@ class ModelOut(Model):
     source: Literal["SYNC", "MANUAL"] = Field(description="MANUAL rows are overrides the daily sync never changes")
     first_seen_at: datetime
     used_by_project: bool = Field(description="This project has recorded runs on this model")
+    reference: ModelReferenceOut
+
+
+class PriceSourceOut(Model):
+    source_id: str
+    name: str
+    provider: str
+    url: str
+    status: Literal["NEVER", "OK", "UNREADABLE", "FETCH_FAILED"]
+    last_checked_at: datetime | None
+    last_ok_at: datetime | None
+    detail: str | None
+    model_count: int
+    stale: bool = Field(description="Last good reading is more than 7 days old")
+
+
+class CatalogInfoOut(Model):
+    source: str
+    last_synced_at: datetime | None = Field(description="When the catalog last confirmed any price from its source")
+    note: str
 
 
 class ModelPage(Model):
+    catalog: CatalogInfoOut
+    official_sources: list[PriceSourceOut]
+    kind_note: str
     items: list[ModelOut]
     next_cursor: str | None = Field(description="Pass as ?cursor= for the next page; null on the last page")
 
@@ -288,6 +389,21 @@ class ModelRef(Model):
     model_version: str = Field(description="The version in use now")
 
 
+class DifferenceOut(Model):
+    """This model's pass rate minus the model in use, with the engine's own Newcombe interval and verdict on it.
+    The compare chart draws exactly these numbers; it never recomputes them."""
+
+    against: str = Field(description="The model in use that it is compared with")
+    gap_points: float = Field(description="This model minus the model in use, in percentage points")
+    low_points: float
+    high_points: float
+    confidence: float = Field(description="Confidence of the interval: the level a move needs (switch_confidence)")
+    margin_points: float = Field(description="How much worse it may be and still qualify, in points")
+    status: Literal["GOOD_ENOUGH", "UNSURE", "CLEARLY_WORSE"] = Field(
+        description="The tolerance rule applied to this interval: at most margin worse / not yet sure / clearly worse")
+    method: Literal["unpaired"] = Field(default="unpaired", description="The models answered different requests")
+
+
 class ModelEvidenceOut(ModelRef):
     """What the runs say about one model in this job, and how the tolerance rule judged it."""
 
@@ -305,6 +421,13 @@ class ModelEvidenceOut(ModelRef):
     status: Literal["GOOD_ENOUGH", "UNSURE", "CLEARLY_WORSE", "BELOW_FLOOR", "RETIRED"]
     eligible: bool = Field(description="Good enough, priced and not retired: it can be recommended")
     why: str
+    vs_current: DifferenceOut | None = Field(
+        default=None, description="Null for the model in use itself, when there is no model in use, or with no checked answers")
+    priced_runs: int | None = Field(default=None, description="Checked runs with a known cost; null when not measured")
+    unpriced_runs: int | None = Field(default=None, description="Checked runs whose cost is unknown: not in the cost figures")
+    retest_runs: int | None = Field(default=None, description="Checked runs that were trials (your own past prompts replayed)")
+    cost_p50_usd: float | None = Field(default=None, description="Typical call cost (median), last 60 days, most-used version")
+    cost_p90_usd: float | None = Field(default=None, description="Expensive tail: 1 call in 10 costs at least this")
 
 
 class RecommendationRules(Model):
@@ -323,6 +446,30 @@ class FailingRunOut(Model):
     created_at: datetime
 
 
+class CheckBasisOut(Model):
+    """Where pass/fail came from. An LLM judge is not a check: a model-graded label is an opinion, not ground truth."""
+
+    kind: Literal["deterministic", "human_label"] = Field(
+        description="deterministic: a fixed rule decided (answer key, format, test command). human_label: reported by the app")
+    label: str
+    text: str
+
+
+class PairedOut(Model):
+    """The same prompts answered by both models (re-tests replay real prompts), compared as pairs (Newcombe 1998, method 10)."""
+
+    candidate: str
+    current: str
+    n_prompts: int
+    both_passed: int
+    only_candidate_passed: int
+    only_current_passed: int
+    neither_passed: int
+    gap_points: float = Field(description="Candidate minus model in use, in percentage points")
+    low_points: float
+    high_points: float
+
+
 class RecommendationEvidence(Model):
     n_runs: int = Field(description="Checked runs counted across every model")
     evidence_weight: float
@@ -330,6 +477,38 @@ class RecommendationEvidence(Model):
     failing_runs: list[FailingRunOut] = Field(
         description="The most recent failures of the recommended and the current model: the receipt"
     )
+    state: Literal["enough", "not_enough", "not_comparable", "no_recommendation"] = Field(
+        default="enough", description="Whether the evidence supports an answer. Never a verdict, never a saving")
+    state_note: str = Field(default="", description="One plain sentence for the state")
+    check: CheckBasisOut | None = Field(default=None, description="What decided pass or fail for this task")
+    window_from: datetime | None = Field(default=None, description="First checked answer counted")
+    window_to: datetime | None = Field(default=None, description="Last checked answer counted")
+    comparison: Literal["unpaired", "paired"] = Field(
+        default="unpaired",
+        description="unpaired: the models answered different requests (Newcombe two-sample interval, used for the verdict). "
+                    "paired: also available for prompts both models answered")
+    paired: PairedOut | None = Field(default=None, description="Informational; the verdict uses the unpaired rule")
+    limitations: list[str] = Field(default_factory=list, description="What this evidence cannot tell you")
+
+
+class PromisingOut(Model):
+    """'Worth a trial': a cheaper model that looks close to the model in use but is not proven. Never advice."""
+
+    model: str
+    current: str = Field(description="The model in use that it was compared with")
+    gap_points: float = Field(description="Observed candidate minus model in use, in percentage points")
+    low_points: float = Field(description="Lower end of the range of that gap, in points (one-sided 95% bound)")
+    high_points: float = Field(description="Upper end of the range of that gap, in points")
+    more_needed: int | None = Field(
+        description="About this many more checked answers on the candidate before a switch could be recommended")
+
+
+class SureEnoughOut(Model):
+    """Stage 2 of the progress bar: checked answers per model before a switch could be recommended."""
+
+    needed: int | None = Field(
+        description="About this many per model, if today's observed rates held; null when it cannot be told")
+    have: float | None = Field(description="What the thinner of the two compared models has now")
 
 
 class RecommendationOut(Model):
@@ -345,7 +524,7 @@ class RecommendationOut(Model):
     evidence: RecommendationEvidence
     progress: float = Field(description="Progress toward the evidence floor, 0..1; below 1 only when insufficient")
     retest_candidates: list[str] = Field(
-        description="Models a re-test would settle: cheaper ones that could qualify, or the best model when "
+        description="Models a trial would settle: cheaper ones that could qualify, or the best model when "
                     "the current one measures worse but that is not proven yet")
     forecast: ForecastOut | None = Field(description="Set for DOWNGRADE and SWITCH when both costs are known")
     summary: str | None = Field(
@@ -354,6 +533,10 @@ class RecommendationOut(Model):
     warnings: list[str]
     next_step: str | None
     computed_at: datetime
+    promising: PromisingOut | None = Field(
+        default=None, description="Set only for HOLD, never together with a proven model; never counted as a saving")
+    sure_enough: SureEnoughOut | None = Field(
+        default=None, description="Set for INSUFFICIENT_EVIDENCE when two models can be compared")
 
 
 class SpendOut(Model):
@@ -367,8 +550,8 @@ class SpendOut(Model):
 class ForecastOut(Model):
     """What switching would change per month, if next month looks like the last 30 days."""
 
-    runs_per_month: int = Field(description="Production runs in the last 30 days")
-    monthly_saving_usd: float = Field(description="Negative means switching costs more")
+    runs_per_month: int = Field(description="Production runs in the last 30 days on the model in use (not the candidate), the volume the saving is priced on")
+    monthly_saving_usd: float = Field(description="Change of the monthly bill at the same call volume: runs_per_month x (average cost per call now - on the recommended model). Negative means switching costs more")
     extra_failures_per_month: float = Field(description="Negative means fewer failures")
     extra_failures_low: float = Field(description="Lower end of the interval, in failures per month")
     extra_failures_high: float
@@ -410,7 +593,7 @@ class HistoryOut(Model):
     versions: list[ModelVersionSeen] = Field(description="Every model version this job has run on")
 
 
-AlertKind = Literal["VERSION_REGRESSION", "SILENT_DROP", "MODEL_DEPRECATED", "TOKEN_BURST", "BUDGET", "TRIAL_BUDGET", "MODEL_RETIRING"]
+AlertKind = Literal["VERSION_REGRESSION", "SILENT_DROP", "MODEL_DEPRECATED", "TOKEN_BURST", "BUDGET", "TRIAL_BUDGET", "MODEL_RETIRING", "MODEL_NOTICE"]
 
 
 class AlertOut(Model):
@@ -437,15 +620,66 @@ class AlertOut(Model):
     resolved_at: datetime | None
 
 
-RetestStatus = Literal["QUEUED", "RUNNING", "DONE", "STOPPED_BUDGET", "STOPPED_CAP", "FAILED"]
+RetestStatus = Literal["QUEUED", "RUNNING", "DONE", "STOPPED_BUDGET", "STOPPED_CAP", "STOPPED_USER", "FAILED"]
 
 
-class RetestCreate(Model):
-    """Replay past runs of this job on a candidate model, spending at most `budget_usd`."""
+class RetestPreviewRequest(Model):
+    """Ask what a replay would send, where, and cost, before any paid call. Makes no provider call and changes nothing."""
 
     candidate_model: str = Field(min_length=1, max_length=200, description="The model name to call")
-    budget_usd: float = Field(gt=0, le=1000, description="Required: the re-test stops before going over it")
+    budget_usd: float = Field(gt=0, le=1000, description="The replay stops before going over it")
     sample_size: int | None = Field(default=None, ge=1, le=500, description="Prompts to replay (default 50)")
+
+
+class RetestCreate(RetestPreviewRequest):
+    """Replay past runs of this job on a candidate model, spending at most `budget_usd`, after you confirmed a preview."""
+
+    confirmation: str = Field(min_length=20, max_length=2000,
+                              description="The single-use confirmation a preview of exactly these values returned")
+
+
+class PreviewDataRow(Model):
+    what: str
+    where: str
+    kind: Literal["sent", "stays", "never", "received"]
+
+
+class PreviewCost(Model):
+    low_usd: float
+    high_usd: float
+    worst_case_usd: float
+    budget_usd: float
+    monthly_cap_remaining_usd: float
+    note: str
+    estimated_from: str
+
+
+class PreviewExamples(Model):
+    available: int
+    planned: int
+    left_out_for_tool_use: int = Field(description="Distinct prompts left out because their runs used tools (not replayed in v1)")
+
+
+class RetestPreviewOut(Model):
+    job: str
+    candidate_model: str
+    budget_usd: float
+    sample_size_requested: int
+    can_start: bool
+    blocked: dict[str, str] | None = Field(description="Why it cannot start: code and message")
+    statements: list[str] = Field(description="What will not change: live traffic, source code, your project")
+    evaluator_kind: str
+    evaluator: str
+    provider: str | None = None
+    destination_host: str | None = None
+    examples: PreviewExamples | None = None
+    data: list[PreviewDataRow] = Field(default_factory=list)
+    retention_note: str | None = None
+    cost: PreviewCost | None = None
+    price_basis: dict | None = None
+    confirmation: str | None = Field(description="Single use, bound to exactly these values; returned only when it can start")
+    expires_at: datetime | None
+    confirm_minutes: int
 
 
 class RetestOut(Model):
@@ -467,6 +701,16 @@ class RetestOut(Model):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    confirmed_at: datetime | None = Field(default=None, description="When a person confirmed the preview. Null for an automatic, opt-in replay")
+    provider_host: str | None = None
+    evaluator: str | None = Field(default=None, description="ANSWER_KEY or SCHEMA: the task's own check")
+    price_basis: dict | None = Field(default=None, description="The list price the cost was worked out from. Not an invoice")
+    sample_size: int | None = Field(default=None, description="How many past runs were replayed (their ids are kept, never their text)")
+    evidence: Literal["enough", "inconclusive"] | None = Field(default=None)
+    evidence_note: str | None = None
+    pass_rate_low: float | None = Field(default=None, description="Lower end of the 95% range for the pass rate")
+    pass_rate_high: float | None = None
+    stopping: bool = Field(default=False, description="A person pressed Stop and the calls already in flight are finishing")
 
 
 class ProviderKeyIn(Model):
@@ -502,18 +746,20 @@ class UserOut(Model):
 
 
 class UiFlagsPatch(Model):
-    """Only these two true/false flags can be saved; anything else is refused."""
+    """Only these three true/false flags can be saved; anything else is refused."""
 
     model_config = ConfigDict(extra="forbid")
 
     tour_seen: StrictBool | None = None
     first_results_seen: StrictBool | None = None
+    welcome_seen: StrictBool | None = None
 
 
 class AuthConfig(Model):
     google: bool = Field(description="Google sign-in is configured on this server")
     dev_login: bool = Field(description="Development-only sign-in by email; never on in production")
     demo_project_id: str | None = Field(description="A project anyone may read without signing in")
+    auto_replays: bool = Field(default=False, description="This server allows automatic replays (off unless the operator turns them on)")
 
 
 class DevLogin(Model):
@@ -521,8 +767,18 @@ class DevLogin(Model):
     name: str | None = Field(default=None, max_length=100)
 
 
+BillingMode = Literal["per_use", "subscription", "both"]
+
+
+CompanyRole = Literal["owner", "admin", "member", "viewer"]
+
+
 class ProjectOut(Model):
     project_id: str
+    organisation_id: uuid.UUID | None = Field(default=None, description="Null for a personal project; the company's id otherwise")
+    role: CompanyRole | None = Field(default=None, description="The caller's role here. Below admin, webhook and key details are left out")
+    slug: str = Field(description="Short readable name used in the web address (/p/production). "
+                                  "Stable and unique per owner; the API still takes project_id")
     name: str
     webhook_url: str | None
     webhook_secret: str | None = Field(description="Verify X-MCM-Signature on webhook payloads with it")
@@ -537,11 +793,35 @@ class ProjectOut(Model):
     store_tool_arguments: bool = Field(
         default=False, description="Whether this project keeps the inputs of tool calls (off by default; they can "
                                    "hold private data). Used only to notice an agent repeating the same step")
+    billing_mode: BillingMode = Field(
+        default="per_use", description="How this project pays for AI: per_use (each call costs money), "
+                                       "subscription (a flat fee with a usage allowance) or both")
+    budget_timezone: str = Field(
+        default="UTC", description="The timezone (an IANA name such as Europe/Berlin) the budget month and its days "
+                                   "are counted in")
+    budget_alert_levels: list[int] = Field(
+        default_factory=lambda: [85, 95], description="Percentages of the monthly budget that raise an in-app alert")
+    budget_alert_projected: bool = Field(
+        default=True, description="Raise a warning when the low end of the forecast is above the budget")
+    budget_alert_webhook: bool = Field(
+        default=False, description="Also send budget alerts to the webhook. Off unless the owner turns it on")
+    notice_alert_webhook: bool = Field(
+        default=False, description="Also send model notices (deprecation and shutdown notices from the providers' own "
+                                   "pages) to the webhook. Off unless the owner turns it on")
+    auto_retests: bool | None = Field(default=None, description="Automatic paid replays (a new model, an unsure engine, a first key) are on. Off unless an admin turned them on")
+    ai_summary_consent: bool = Field(
+        default=False, description="The computed figures (never prompts or answers) of recommendations may be sent to an "
+                                   "outside AI to write a two-sentence summary. Off unless the owner turns it on")
+    ai_summary_host: str | None = Field(
+        default=None, description="The service the figures would go to, or null when this server has no summary service")
     created_at: datetime
 
 
 class ProjectCreate(Model):
     name: str = Field(min_length=1, max_length=100)
+    billing_mode: BillingMode | None = Field(default=None, description="Optional; defaults to per_use")
+    organisation_id: uuid.UUID | None = Field(
+        default=None, description="Create it in this company instead of your personal workspace (needs the member role or higher)")
 
 
 class ProjectCreated(Model):
@@ -561,9 +841,35 @@ class ProjectPatch(Model):
     content_retention_days: int | None = Field(
         default=None, ge=1, le=3650,
         description="Days a run keeps its prompt, output, tool calls and answer key (1 to 3650)")
+    billing_mode: BillingMode | None = Field(
+        default=None, description="How you pay for AI: per_use, subscription or both. Changes wording and which "
+                                  "alerts fire; no stored figure changes")
     store_tool_arguments: bool | None = Field(
         default=None, description="Keep the inputs of tool calls from now on (true) or stop storing new ones (false). "
                                   "Already-stored inputs stay until deleted or the retention period ends")
+    budget_timezone: str | None = Field(
+        default=None, max_length=64, description="An IANA timezone name, for example Europe/Berlin. The budget month "
+                                                 "and its days are counted in it")
+    budget_alert_levels: list[int] | None = Field(
+        default=None, max_length=6, description="Percentages (1 to 100, at most 6) of the budget that raise an in-app alert")
+    budget_alert_projected: bool | None = Field(
+        default=None, description="Raise a warning when even the low end of the forecast is above the budget")
+    budget_alert_webhook: bool | None = Field(
+        default=None, description="Also send budget alerts to your webhook (needs a webhook address). Off by default")
+    notice_alert_webhook: bool | None = Field(
+        default=None, description="Also send model notices to your webhook (needs a webhook address). Off by default")
+    auto_retests: bool | None = Field(default=None, description="Turn automatic paid replays on or off. They are off unless an admin turns them on")
+    ai_summary_consent: bool | None = Field(
+        default=None, description="Allow the computed figures of recommendations to be sent to an outside AI for a summary. Off by default")
+
+    @field_validator("budget_alert_levels")
+    @classmethod
+    def _levels_in_range(cls, value: list[int] | None) -> list[int] | None:
+        if value is None:
+            return None
+        if any(not 1 <= v <= 100 for v in value) or len(set(value)) != len(value):
+            raise ValueError("levels must be different whole numbers from 1 to 100")
+        return sorted(value)
 
 
 class ToolInputsDeleted(Model):
@@ -791,9 +1097,23 @@ class AgentInsightsOut(Model):
     kinds: UsageKindsOut
 
 
+class TokenPartOut(Model):
+    key: str = Field(description="input, cached_input, cache_write, output, reasoning or tool_use_input")
+    label: str
+    tokens: int | None = Field(description="Null when not known: see state. Never a silent zero")
+    state: Literal["measured", "not_reported", "unknown"] = Field(
+        description="measured: the provider reported it. not_reported: no provider layout seen in this group can "
+                    "report it. unknown: calls recorded before the usage ledger, or whose usage block was missing")
+    calls: int | None = Field(description="How many calls reported it, where that is known")
+    note: str | None = None
+
+
 class PromptGroupOut(Model):
-    job: str
+    label: str = Field(default="", description="What this row is: a task and version, a task, an agent or a version")
+    group_by: Literal["task_version", "task", "agent", "prompt_version", "template"] = "task_version"
+    job: str = Field(description="The task's name; empty when the grouping spans tasks")
     prompt_version: str | None = Field(description="Null groups all unversioned calls of the job")
+    agent: str | None = Field(default=None, description="The agent name your code sent, when grouped by agent")
     calls: int
     tokens_in: int
     tokens_out: int
@@ -804,13 +1124,834 @@ class PromptGroupOut(Model):
     avg_tokens_in: float
     avg_tokens_out: float
     cache_read_share: float | None = Field(description="cache_read / (cache_read + tokens_in); null when both are 0")
-    text_samples: int = Field(description="Recent calls with stored prompt text that were compared (at most 50)")
-    repeated_start_share: float | None = Field(description="Share of the prompt that starts identically in every call")
-    repeated_end_share: float | None = Field(description="Share of the prompt that ends identically in every call")
-    repeated_start_preview: str | None = Field(description="First 120 characters of the repeated start")
+    breakdown: list[TokenPartOut] = Field(
+        default_factory=list, description="What the total is made of, each part measured, not reported, or unknown")
+    ledger_calls: int = Field(default=0, description="Calls whose provider usage layout was recorded")
+    no_usage_calls: int = Field(default=0, description="Calls whose response carried no usage block (tokens unknown)")
+    legacy_calls: int = Field(default=0, description="Calls recorded before the usage ledger existed")
+    text_calls: int = Field(default=0, description="Calls in the period whose prompt text is still stored")
+    text_samples: int = Field(description="Newest calls with stored prompt text that were compared (at most 50). An estimate")
+    text_note: str | None = Field(default=None, description="Why the repeated-text split is missing, when it is")
+    spend_usd: float | None = Field(
+        default=None, description="List-price cost of the priced calls in this row. Null when none is priced: an unknown, never 0. Not an invoice")
+    priced_calls: int = Field(default=0, description="Calls in this row with a known cost")
+    unpriced_calls: int = Field(default=0, description="Calls in this row with no known cost: in no sum")
+    cost_share: float | None = Field(default=None, description="Of the project's priced cost in the period, 0..1; null when that is 0")
+    grouping_basis: Literal["named_by_your_code", "untagged"] = Field(
+        default="named_by_your_code",
+        description="untagged: the calls carry no version or agent label, so this grouping is an estimate. "
+                    "No prompt text and no fingerprint of it is used to group")
+    repeated_start_share: float | None = Field(description="Estimated share of the prompt that starts identically in every sampled call")
+    repeated_end_share: float | None = Field(description="Estimated share of the prompt that ends identically in every sampled call")
+    repeated_start_preview: str | None = Field(
+        description="Masked first 120 characters of the repeated start. Only returned when show_text=true; null otherwise")
 
 
 class PromptsOut(Model):
     days: int
-    total_tokens: int
+    total_tokens: int = Field(description="Billed tokens of every production call in the period (not a sample)")
     groups: list[PromptGroupOut]
+    period_start: datetime | None = None
+    period_end: datetime | None = None
+    timezone: str = "UTC"
+    total_calls: int = Field(default=0, description="Production calls in the period, all groups")
+    group_by: Literal["task_version", "task", "agent", "prompt_version", "template"] = "task_version"
+    grouping_note: str = ""
+
+
+class PromptVersionOut(Model):
+    label: str
+    kind: Literal["tagged", "detected", "untagged"]
+    first_seen: datetime
+    last_seen: datetime
+    calls: int
+    typical_tokens_in: float = Field(description="Median input tokens per call")
+    typical_tokens_out: float = Field(description="Median output tokens per call")
+    cache_read_share: float | None = Field(description="cache_read / (cache_read + tokens_in); null when both are 0")
+    priced_calls: int
+    unpriced_calls: int
+    cost_per_call: float | None = Field(description="List-price cost, priced calls only; null when none were priced")
+    checked: int = Field(description="Calls whose answer was checked (correct or wrong)")
+    correct_rate: float | None = Field(description="Null below 25 checked answers")
+    rate_low: float | None
+    rate_high: float | None
+    start_preview: str | None = Field(description="Detected versions only: the start of the prompt (120 characters)")
+
+
+class PromptComparisonOut(Model):
+    older: str
+    newer: str
+    side_by_side: bool = Field(description="True when the two versions' time ranges overlap")
+    summary: str = Field(description="Facts only; no verdict and no cause")
+
+
+class PromptVersionsOut(Model):
+    job: str
+    days: int
+    source: Literal["tagged", "detected", "none"]
+    reason: Literal["no_calls", "text_not_kept", "no_change", "unstable"] | None
+    versions: list[PromptVersionOut]
+    comparison: PromptComparisonOut | None
+
+
+class CostPerSuccessOut(Model):
+    value_usd: float | None = Field(description="Cost of one correct answer; null when it cannot be worked out (see reason)")
+    formula: str
+    spend_usd: float = Field(description="Cost of the priced, checked calls: the top of the division")
+    passed: int = Field(description="Passes among those same calls: the bottom of the division")
+    checked_priced_runs: int
+    checked_unpriced_runs: int = Field(description="Checked calls left out because their cost is unknown")
+    unchecked_runs: int = Field(description="Calls left out because they have no pass/fail result yet")
+    reason: str | None
+    success_definition: str = Field(description="What a correct answer means for this task, from how it is checked")
+
+
+class PriceVersionUsedOut(Model):
+    version_id: str
+    model: str
+    provider: str
+    input_per_mtok: float
+    output_per_mtok: float
+    effective_from: datetime
+    effective_to: datetime | None
+    source_kind: str = Field(description="SYNC, MANUAL (entered by hand) or BACKFILL (the price when versions began)")
+    source_url: str | None
+    checked_at: datetime | None = Field(description="When the price was last looked at; null for a hand-entered price")
+    applicability: str | None
+    runs: int
+    spend_usd: float
+
+
+class CostBasisOut(Model):
+    status: str
+    label: str
+    runs: int
+    spend_usd: float | None = Field(description="Null for runs with no known cost: an unknown, never zero")
+
+
+class JobReceiptOut(Model):
+    job: str
+    runs: int
+    passed: int
+    failed: int
+    unchecked: int
+    excluded: int
+    spend_usd: float
+    unpriced_runs: int
+    cost_per_success: CostPerSuccessOut
+
+
+class CostReceiptOut(Model):
+    """How a spend figure was worked out: currency, period, which calls were counted and which were left out,
+    the dated list prices used, and a cost per correct answer with its formula. List prices, not an invoice."""
+
+    currency: str
+    timezone: str
+    period_start: datetime
+    period_end: datetime
+    period_days: int
+    runs: int
+    passed: int
+    failed: int
+    unchecked: int = Field(description="Calls with no pass/fail result yet")
+    excluded: int = Field(description="Calls left out of the checks (archived, or the answer was invalidated)")
+    spend_usd: float = Field(description="Priced calls only; see unpriced_runs")
+    spend_on_failed_checks_usd: float = Field(description="Cost of calls whose check failed; a check can be a deliberate test")
+    unpriced_runs: int
+    unpriced_note: str | None
+    partly_priced_runs: int
+    basis: list[CostBasisOut]
+    price_versions: list[PriceVersionUsedOut]
+    price_versions_checked_at: datetime | None
+    price_versions_oldest_effective: datetime | None
+    cost_per_success: CostPerSuccessOut | None
+    jobs: list[JobReceiptOut]
+    notes: list[str]
+
+
+class ProjectionDayOut(Model):
+    day: date
+    spend_usd: float = Field(description="Priced spend on that full local day")
+
+
+class ProjectionOut(Model):
+    """The month's spend so far (a fact about recorded calls) and a forecast for the month's end (an estimate), kept
+    apart. Alert-only: nothing is ever blocked. List prices in US dollars, not an invoice."""
+
+    state: Literal["ok", "not_enough_history", "paused", "no_spend"]
+    reason: Literal["too_new", "sparse", "no_recent_calls"] | None = Field(
+        description="Why there is no forecast: too_new (under 7 full days of history), sparse (priced spend on fewer "
+                    "than 5 of the last 7 days) or no_recent_calls (nothing recorded for 48 hours)")
+    currency: str
+    timezone: str = Field(description="The timezone the month and its days are counted in")
+    month: str = Field(description="The calendar month, for example 2028-02")
+    period_start: datetime = Field(description="First moment of the month, as UTC")
+    period_end: datetime = Field(description="First moment of the next month, as UTC")
+    first_day: date
+    last_day: date
+    days_in_month: int
+    day_of_month: int
+    days_left: float = Field(description="Days still to come, the rest of today included as a fraction")
+    actual_usd: float = Field(description="Spent so far this month on calls with a known price. A fact, not a forecast")
+    unpriced_runs: int = Field(description="Calls this month with no known price: in no figure here, never counted as free")
+    projected_low_usd: float | None = Field(description="Forecast, low end. Null when there is no forecast")
+    projected_likely_usd: float | None
+    projected_high_usd: float | None
+    history_days: int = Field(description="Full days since the first priced call")
+    active_days: int = Field(description="Of the last 7 full days, how many had priced spend")
+    recent_days: list[ProjectionDayOut]
+    data_through: datetime | None = Field(description="When the newest call was recorded")
+    budget_usd: float | None
+    used_share: float | None = Field(description="actual_usd divided by the budget")
+    vs_budget: Literal["over", "may_go_over", "under"] | None = Field(
+        description="over: even the low end of the forecast is above the budget (this is what the warning needs). "
+                    "may_go_over: only the high end is. under: the whole range is below")
+    rule: str = Field(description="The forecast rule in plain words")
+    data_note: str = Field(description="What the figures count and what can be missing or late")
+
+
+class NoticeOut(Model):
+    """What a provider's own page says about a model this project uses. Information only: nothing is changed."""
+
+    notice_id: uuid.UUID
+    provider: str
+    provider_name: str
+    model: str = Field(description="The provider's own model id: matched exactly, never by family")
+    status: str = Field(description="The provider's own word for it: Active, Deprecated, Retired, Scheduled or Shutdown")
+    listed_date: date | None = Field(description="The date the page lists, as the provider wrote it; null when it lists none")
+    date_wording: Literal["not_sooner_than", "tentative", "earliest_possible", "scheduled"] = Field(
+        description="How the provider words that date: a notice with 'earliest possible' or 'not sooner than' is "
+                    "never a promised date")
+    deprecated_on: date | None
+    replacement: str | None = Field(description="What the provider lists as a replacement. Informational: we never switch anything")
+    section: str | None
+    notice_url: str = Field(description="The exact section of the provider's page that holds the notice")
+    source_name: str
+    checked_at: datetime = Field(description="When our reading of that page last succeeded")
+    text: str = Field(description="The notice in the provider's own terms, as one sentence")
+    served_by_known: bool = Field(description="True when the project's calls name this provider; false when they name none, so a partner platform cannot be ruled out")
+    stale_note: str | None = Field(description="Set when the reading is more than 7 days old")
+    informational: bool = True
+
+
+class NoticeElsewhereOut(Model):
+    model: str
+    provider_name: str
+    notice_url: str
+
+
+class NoticeSourceOut(Model):
+    source_id: str
+    name: str
+    provider: str
+    url: str
+    status: Literal["NEVER", "OK", "UNREADABLE", "FETCH_FAILED"] = Field(
+        description="NEVER: not read yet. UNREADABLE: fetched but nothing could be read (its layout may have changed). "
+                    "FETCH_FAILED: the page could not be fetched. Notices from a source never read are not shown")
+    last_checked_at: datetime | None
+    last_ok_at: datetime | None = Field(description="When it was last read successfully: the checked-at date of its notices")
+    detail: str | None
+    notice_count: int
+    stale: bool = Field(description="True when the last good reading is more than 7 days old")
+    covers: str = Field(description="What the page says about other platforms, such as cloud partners, whose dates can differ")
+
+
+class NoticesOut(Model):
+    notices: list[NoticeOut]
+    hosted_elsewhere: list[NoticeElsewhereOut] = Field(
+        description="Notices about models this project runs, not applied because its calls name another host, which sets its own dates")
+    sources: list[NoticeSourceOut]
+    note: str
+
+
+
+class ChangePeriodOut(Model):
+    start: date = Field(description="First whole UTC day of the period")
+    end: date = Field(description="The day after the last whole day (exclusive); today is never included")
+    days: int
+    calls: int
+    tokens_in: int
+    tokens_out: int
+    cache_read_tokens: int
+    priced_calls: int
+    spend_usd: float | None = Field(description="Spend on priced calls; null on a subscription project, which has no dollar figures")
+    calls_with_usage: int = Field(description="Calls that report token counts; the rest are left out of the token figures")
+    calls_with_task_id: int = Field(description="Calls that carry a task id; only these can show a repeated call")
+    days_with_calls: int
+
+
+class ObservationOut(Model):
+    """A measured difference. It says what changed, never why."""
+
+    key: str
+    label: str
+    unit: Literal["count", "tokens", "share", "usd"]
+    before: float | None = Field(description="Null when not measurable in the earlier period")
+    after: float | None
+    change: float | None = Field(description="after minus before; for a share, in percentage points")
+    change_pct: float | None = Field(description="Null for a share, and when the earlier period is too small for a percentage")
+    size: Literal["notable", "small", "unknown"] = Field(
+        description="notable: at least 20% (5 points for a share) with enough calls. unknown: too few calls to say")
+    note: str | None = None
+
+
+class MixRowOut(Model):
+    name: str
+    before_share: float | None = Field(description="Share of calls, percent")
+    after_share: float | None
+    change_points: float | None
+    calls_before: int
+    calls_after: int
+
+
+class SplitOut(Model):
+    """A total change split exactly into parts that add up to it."""
+
+    what: Literal["spend_usd", "tokens"]
+    total_change: float
+    from_calls: float = Field(description="More or fewer calls, at the earlier average per call")
+    from_mix: float = Field(description="Calls moving between models, plus models that are new in this period")
+    from_per_call: float = Field(description="A call costing or weighing more or less on a model that ran in both periods")
+
+
+class ContextEventOut(Model):
+    """Something the product recorded in the window. It is never a cause."""
+
+    kind: Literal["prompt_version", "new_model", "price_change"]
+    on: date
+    label: str
+    link: Literal["same_time", "concentrated"] = Field(
+        description="same_time: it happened in the same period. concentrated: the calls on it differ in the same direction "
+                    "as the overall change. Neither shows it caused the change")
+    evidence: str | None
+    relates_to: list[str] = Field(description="Which observations it coincides with")
+
+
+class ChangesOut(Model):
+    days: int
+    mode: Literal["per_use", "subscription", "both"]
+    comparable: bool = Field(description="False when either period has too few calls for a percentage change")
+    current: ChangePeriodOut
+    previous: ChangePeriodOut
+    observations: list[ObservationOut]
+    model_mix: list[MixRowOut]
+    task_mix: list[MixRowOut]
+    splits: list[SplitOut]
+    events: list[ContextEventOut]
+    notes: list[str] = Field(description="Coverage and missing data, in plain words")
+    not_recorded: list[str] = Field(description="Kinds of change this cannot see")
+    basis: str = Field(description="What these figures are and are not")
+
+
+class McpToolOut(Model):
+    name: str
+    calls: int
+
+
+class McpServerOut(Model):
+    """One tool server. Counts are exact; usage is the whole request's, shared with everything in it, never the tool's own."""
+
+    server: str
+    certainty: Literal["provider_reported", "likely", "mixed"] = Field(
+        description="provider_reported: the provider's own response named the server. likely: only a tool name looks like "
+                    "mcp__server__tool (a hint, not proof). mixed: both")
+    calls: int
+    failed_calls: int = Field(description="Calls the provider said failed; only calls whose result told us are included")
+    failure_known_calls: int = Field(description="Calls whose result said whether they failed")
+    requests: int = Field(description="Distinct requests that made at least one call to this server")
+    task_runs: int = Field(description="Distinct task runs (trace ids) among those requests")
+    first_seen: datetime
+    last_seen: datetime
+    request_time_ms: float | None = Field(description="Median time of those requests. A tool call's own duration is not reported")
+    request_tokens_in: int = Field(description="Input tokens of those whole requests, not of the tool")
+    request_tokens_out: int
+    request_cache_read_tokens: int
+    request_cost_usd: float | None = Field(description="Recorded cost of those whole requests (priced ones); null on a subscription project")
+    unpriced_requests: int
+    tools: list[McpToolOut]
+    tasks: list[McpToolOut] = Field(description="AI tasks the calls came from, with their call counts")
+    providers: list[str]
+
+
+class McpTotalsOut(Model):
+    requests: int = Field(description="Distinct requests that called any MCP server: each counted once")
+    requests_with_several_servers: int = Field(description="Requests shared between servers, so the rows add up to more than this")
+    tokens_in: int
+    tokens_out: int
+    cache_read_tokens: int
+    cost_usd: float | None
+    unpriced_requests: int
+
+
+class McpOwnToolsOut(Model):
+    calls: int
+    requests: int
+    tools: list[McpToolOut]
+
+
+class McpSupportOut(Model):
+    """What a provider tells us about MCP calls, and what stays unsupported or unknown."""
+
+    key: str
+    label: str
+    native: Literal["supported", "partly", "unknown"]
+    seen_as: str
+    we_read: list[str]
+    we_do_not_read: list[str]
+    not_reported_by_provider: list[str]
+    limits: list[str]
+    sources: list[str]
+    checked_on: str
+
+
+class ToolServersOut(Model):
+    days: int
+    since: datetime
+    until: datetime
+    job: str | None
+    mode: Literal["per_use", "subscription", "both"]
+    servers: list[McpServerOut]
+    own_tools: McpOwnToolsOut = Field(description="Tool calls that are not from an MCP server we can recognise")
+    totals: McpTotalsOut
+    support: list[McpSupportOut]
+    unreadable_calls: int
+    truncated: bool
+    notes: list[str]
+    method: list[str] = Field(description="How each figure is worked out, and what is not attributed")
+    tool_list_size: Literal["unknown"] = Field(
+        default="unknown", description="The share of a request's input spent on one server's tool definitions is not measurable: "
+                                       "providers load the tool list and report one usage total")
+
+
+class TaskTotalsOut(Model):
+    calls: int
+    tokens: int
+    cost_usd: float | None = Field(description="Priced calls only; null when none is priced and on a subscription project")
+    unpriced_calls: int
+
+
+class TaskNodeOut(Model):
+    """One recorded call in a task, in display order. Totals count each call once: `own` is this call, `subtree` adds its children."""
+
+    run_id: uuid.UUID
+    parent_run_id: uuid.UUID | None = Field(description="The recorded call this one sits under; null for a root, an unlinked or an unstructured call")
+    depth: int
+    section: Literal["tree", "unlinked", "no_structure"]
+    link: Literal["root", "child", "unlinked", "no_structure"]
+    reason: str | None = Field(description="Why a call is unlinked")
+    missing_parent: str | None = Field(description="The parent span id that matched no recorded call")
+    duplicate_span: bool = Field(description="Another call in this task has the same span id")
+    child_count: int
+    agent: str | None
+    model: str
+    job: str
+    span_id: str | None
+    parent_span_id: str | None
+    started_at: datetime
+    latency_ms: int | None
+    tools: list[str]
+    own: TaskTotalsOut
+    subtree: TaskTotalsOut
+
+
+class RepeatedCallItemOut(Model):
+    run_id: uuid.UUID
+    at: datetime
+    gap_seconds: float | None = Field(description="Seconds since the previous call of the same kind")
+    cost_usd: float | None
+    tokens: int
+    agent: str | None
+    model: str
+    failed: bool | None = Field(description="Recorded as failed; null when not recorded")
+    in_window: bool = Field(description="Inside the stretch that reached the threshold")
+
+
+class RepeatedCallOut(Model):
+    """A possible repeated call. Never a verdict: polling and retries repeat on purpose."""
+
+    label: Literal["possible_repeated_call"] = "possible_repeated_call"
+    step: str
+    basis: Literal["arguments", "prompt"] = Field(description="What 'the same' was compared on")
+    repeats: int = Field(description="Times in the whole task")
+    in_window: int = Field(description="Times in the stretch that reached the threshold")
+    threshold: int
+    window: int
+    calls: list[RepeatedCallItemOut]
+    median_gap_seconds: float | None
+    results_stored: bool
+    distinct_results: int | None
+    failed_calls: int
+    cost_usd: float | None = Field(description="Recorded cost of these calls; not a claim that it was wasted")
+    hints: list[str]
+
+
+class TaskStructureOut(Model):
+    roots: int
+    linked_children: int
+    unlinked: int = Field(description="Calls whose parent was not recorded, is themselves, or forms a cycle")
+    no_structure: int = Field(description="Calls that sent no span ids")
+
+
+class AgentTaskOut(Model):
+    trace_id: str
+    jobs: list[str]
+    agents: list[str]
+    models: list[str]
+    first_at: datetime
+    last_at: datetime
+    totals: TaskTotalsOut
+    structure: TaskStructureOut
+    nodes: list[TaskNodeOut]
+    repeated: RepeatedCallOut | None
+    notes: list[str]
+    truncated: bool
+    method: list[str]
+
+
+class AgentTaskSummaryOut(Model):
+    trace_id: str
+    jobs: list[str]
+    agents: list[str]
+    models: list[str]
+    first_at: datetime
+    last_at: datetime
+    totals: TaskTotalsOut
+    structure: TaskStructureOut
+    repeated_step: str | None = Field(description="What possibly repeated, when a possible repeated call was found at the chosen threshold")
+    repeated_times: int | None
+    notes: list[str]
+
+
+class SpreadOut(Model):
+    tasks: int
+    median: float
+    p25: float
+    p75: float
+
+
+class CohortSideOut(Model):
+    tokens: SpreadOut
+    cost_usd: SpreadOut | None
+
+
+class CohortOut(Model):
+    """Equivalent tasks only: the same AI task and the same models. Measured medians in this project, never a multiplier."""
+
+    job: str
+    models: list[str]
+    single_agent: CohortSideOut
+    multi_agent: CohortSideOut
+
+
+class AgentTasksOut(Model):
+    days: int
+    repeats: int
+    window: int
+    mode: Literal["per_use", "subscription", "both"]
+    repeat_choices: list[int]
+    window_choices: list[int]
+    min_cohort: int
+    tasks: list[AgentTaskSummaryOut]
+    cohorts: list[CohortOut]
+    notes: list[str]
+    method: list[str]
+
+
+_EMAIL = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+
+
+class WorkspaceOut(Model):
+    kind: Literal["personal", "company"]
+    org_id: uuid.UUID | None = Field(description="Null for the personal workspace")
+    name: str
+    role: CompanyRole = Field(description="Always owner in your own personal workspace")
+    project_count: int
+    member_count: int
+
+
+class OrgCreate(Model):
+    name: str = Field(min_length=1, max_length=80)
+
+
+class OrgOut(Model):
+    org_id: uuid.UUID
+    name: str
+    role: CompanyRole
+
+
+class EventOut(Model):
+    event_id: uuid.UUID
+    action: str
+    actor: str | None
+    target: str | None
+    detail: dict
+    at: datetime
+
+
+class MemberOut(Model):
+    user_id: uuid.UUID
+    email: str | None = Field(description="Only admins and owners see addresses")
+    name: str | None
+    role: CompanyRole
+    joined_at: datetime
+
+
+class MemberRolePatch(Model):
+    role: CompanyRole
+
+
+class InviteCreate(Model):
+    email: str = Field(max_length=254, pattern=_EMAIL)
+    role: Literal["admin", "member", "viewer"] = "member"
+
+
+class InviteOut(Model):
+    invite_id: uuid.UUID
+    email: str
+    role: Literal["admin", "member", "viewer"]
+    state: Literal["pending", "used", "expired", "withdrawn"]
+    created_at: datetime
+    expires_at: datetime
+
+
+class InviteCreated(Model):
+    invite: InviteOut
+    token: str = Field(description="Shown once; only a hash is stored")
+    link: str = Field(description="Path to send the person to. No email is sent for you")
+
+
+class InviteAccept(Model):
+    token: str = Field(min_length=20, max_length=200)
+
+
+class CompanyProjectRow(Model):
+    project_id: str
+    slug: str
+    name: str
+    pay_mode: Literal["per_use", "subscription", "both"]
+    calls: int
+    tokens: int
+    cost_usd: float | None = Field(description="List-price calculation, not an invoice. Null for flat-plan projects")
+    cost_kind: Literal["billable_list_price", "list_price_may_include_flat_plan", "none_flat_plan"]
+    unpriced_calls: int = Field(description="Calls with no known price: their cost is unknown, never counted as free")
+    calls_reporting_tokens: int
+
+
+class CompanyTaskRow(Model):
+    project: str | None
+    project_id: str | None
+    task: str = Field(description="Chosen by the calling app: a caller-supplied label, not a verified identity")
+    calls: int
+    tokens: int
+    cost_usd: float | None
+    unpriced_calls: int
+    pay_mode: Literal["per_use", "subscription", "both"] | None
+    label_source: Literal["caller_supplied"]
+    folded_groups: int | None = Field(default=None, description="How many small groups an 'Other' row stands for")
+
+
+class CompanyModelRow(Model):
+    model: str
+    calls: int
+    tokens: int
+    cost_usd: float
+    unpriced_calls: int
+    flat_plan_calls: int
+    label_source: Literal["caller_supplied"]
+    folded_groups: int | None = Field(default=None, description="How many small models an 'Other' row stands for")
+
+
+class CompanyDay(Model):
+    day: date
+    calls: int
+    tokens: int
+    billable_usd: float = Field(description="Pay-per-use projects only")
+
+
+class AttributionRow(Model):
+    dimension: Literal["project", "task", "model", "agent", "task_trace", "person"]
+    source: Literal["verified", "caller_supplied", "not_recorded"]
+    detail: str
+    coverage_share: float | None
+
+
+class CompanyModeRow(Model):
+    projects: int
+    calls: int
+    tokens: int
+    usd: float | None
+    unpriced_calls: int
+
+
+class CompanyTotals(Model):
+    calls: int = Field(description="Counted")
+    tokens: int = Field(description="Counted, from calls that report token counts")
+    billable_usd: float = Field(description="Pay-per-use projects only. Calculated at list price, not an invoice")
+    billable_basis: str
+    mixed_mode_usd: float = Field(description="List-price dollars of mixed-mode projects, kept apart from the billable total")
+    unpriced_calls: int = Field(description="Calls whose price is unknown: their cost is not counted, not treated as free")
+    has_data: bool
+
+
+class CompanyCoverage(Model):
+    calls: int
+    calls_reporting_tokens: int
+    calls_without_token_counts: int
+    token_report_share: float | None
+    calls_in_money_projects: int
+    calls_priced: int
+    calls_with_task_id: int
+    calls_with_agent_label: int
+    task_id_share: float | None
+    agent_label_share: float | None
+
+
+class CompanyOverviewOut(Model):
+    org_id: uuid.UUID
+    name: str
+    days: int
+    since: datetime
+    until: datetime
+    your_role: CompanyRole
+    projects_shown: int = Field(description="Projects your role may open. Others are not counted or hinted at")
+    members: int = Field(description="A count only. No person is listed and no per-person figure exists")
+    totals: CompanyTotals
+    by_mode: dict[str, CompanyModeRow]
+    coverage: CompanyCoverage
+    projects: list[CompanyProjectRow]
+    trend: list[CompanyDay]
+    tasks: list[CompanyTaskRow]
+    models: list[CompanyModelRow]
+    attribution: list[AttributionRow]
+    chargeback_grade: Literal[False] = False
+    notes: list[str]
+
+
+JobRole = Literal["engineering", "product", "data_science", "operations", "support", "finance", "legal", "other"]
+
+
+class NoticeSection(Model):
+    heading: str
+    body: list[str]
+
+
+class CompanyNoticeOut(Model):
+    version: str
+    sections: list[NoticeSection]
+    min_group_size: int = Field(description="Smallest group any rollup shows. Our design choice, not a standard")
+    acknowledged: bool = Field(description="Whether you were shown this version and recorded it. Not a consent")
+    acknowledged_at: datetime | None
+    required_for_access: Literal[False] = Field(default=False, description="Access never depends on acknowledging")
+    status_counts: dict[str, int] | None = Field(description="Admins only: how many acknowledged, as counts")
+
+
+class NoticeAck(Model):
+    version: str = Field(max_length=100)
+
+
+class YouInCompany(Model):
+    role: CompanyRole
+    job_role: JobRole | None
+    job_roles: dict[str, str] = Field(description="The fixed list you can choose from")
+    notice_version: str
+    notice_acknowledged: bool
+
+
+class JobRolePut(Model):
+    job_role: JobRole | None = Field(description="Your own optional job role from the fixed list, or null to clear it")
+
+
+class RollupGroup(Model):
+    job_role: JobRole
+    label: str
+    members: int
+
+
+class RollupOut(Model):
+    min_group_size: int
+    members: int
+    shown: bool
+    groups: list[RollupGroup]
+    not_shown: int = Field(description="Members in groups too small to show, or who chose no role, together")
+    reason: str
+    declared_share: float | None = None
+    usage_by_role: None = Field(description="Always null: usage or cost by role is not available")
+    usage_by_role_note: str
+
+
+SavingsStatus = Literal["waiting", "not_enough_data", "saving", "no_clear_change", "cost_up", "less_correct"]
+
+
+class SavingsRealized(Model):
+    """The observed change in cost per correct answer since a model change. Can be negative. Not an estimate of anything else."""
+
+    metric: str
+    unit: Literal["usd", "tokens"]
+    unit_words: str
+    before: float | None
+    after: float | None
+    change: float | None = Field(description="Before minus after, per correct answer. Positive = cheaper now; negative = it went up")
+    range_low: float | None
+    range_high: float | None
+    range_note: str
+    pass_rate_before: float
+    pass_rate_after: float
+    pass_rate_change_low: float
+    pass_rate_change_high: float
+    checked_before: int
+    checked_after: int
+    correct_before: int
+    correct_after: int
+    price_basis: str
+    mix_compared: str
+
+
+class SavingsEstimated(Model):
+    """A counterfactual. Never added to anything, never shown without its assumptions."""
+
+    label: str
+    unit: Literal["usd", "tokens"]
+    correct_answers: int
+    point: float | None
+    low: float | None
+    high: float | None
+    what: str
+    assumptions: list[str]
+
+
+class SavingsEntry(Model):
+    job: str
+    from_model: str
+    to_model: str
+    switch_date: date
+    status: SavingsStatus
+    reason: str | None
+    reasons: list[str]
+    window: dict | None = Field(description="The equal periods compared: days and the before and after date ranges")
+    realized: SavingsRealized | None
+    estimated_avoided: SavingsEstimated | None
+    data_notes: list[str]
+    progress: dict[str, int] | None
+    coverage: dict[str, int] | None
+
+
+class SavingsTotal(Model):
+    label: str
+    unit: Literal["usd", "tokens"]
+    point: float
+    low: float
+    high: float
+    entries: int
+
+
+class SavingsOut(Model):
+    mode: Literal["per_use", "subscription", "both"]
+    unit: Literal["usd", "tokens"]
+    as_of: date = Field(description="Only completed days are used, so the answer does not change as today fills up")
+    jobs_checked: int
+    entries: list[SavingsEntry]
+    counts: dict[str, int]
+    estimated_avoided_total: SavingsTotal | None = Field(description="The estimated counterfactuals added up. Separate from everything realized")
+    notes: list[str]
+    method: list[str]
+
