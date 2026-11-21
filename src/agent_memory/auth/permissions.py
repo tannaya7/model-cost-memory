@@ -71,6 +71,8 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str] = {
     ("POST", "/v1/jobs/{job}/retest/preview"): "retest.start",
     ("POST", "/v1/jobs/{job}/retest/{retest_id}/stop"): "retest.start",
     ("GET", "/v1/insights/export.csv"): "export.run",
+    ("GET", "/v1/insights/features/export.csv"): "export.run",
+    ("GET", "/v1/insights/planner/export.csv"): "export.run",
     ("PUT", "/v1/provider-key"): "providerkey.change",
     ("DELETE", "/v1/provider-key"): "providerkey.change",
     ("POST", "/v1/limits"): "limits.change",

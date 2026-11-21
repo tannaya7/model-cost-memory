@@ -13527,6 +13527,100 @@
         ]
       }
     },
+    "/v1/insights/features/export.csv": {
+      "get": {
+        "description": "Cost by feature label as a CSV file, for admins and owners: one row per label, with calls, tokens, list-price cost, unpriced calls and\ncost per correct answer. Labels are your app's own words and are not verified. Aggregates only: no prompts, answers, keys or people.",
+        "operationId": "export_features_csv_v1_insights_features_export_csv_get",
+        "parameters": [
+          {
+            "description": "The last N days",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "description": "The last N days",
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Features Csv",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
     "/v1/insights/planner": {
       "get": {
         "description": "What a task might cost at traffic levels you type, from its own recorded calls: list-price scenarios with a range where the data\nsupports one. Not a bill or a forecast. Nothing is sent to a provider and nothing is changed.",
@@ -13711,6 +13805,193 @@
           }
         },
         "summary": "Get Planner",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
+    "/v1/insights/planner/export.csv": {
+      "get": {
+        "description": "The planner's current result as a CSV file, for admins and owners: one row per model and scenario, with the assumptions, the history\nperiod, the price versions used and the not-a-bill wording on every row. Unknown figures are empty, never 0. No prompt or answer text.",
+        "operationId": "export_planner_csv_v1_insights_planner_export_csv_get",
+        "parameters": [
+          {
+            "description": "The task whose recorded calls the scenario is based on",
+            "in": "query",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "description": "The task whose recorded calls the scenario is based on",
+              "maxLength": 200,
+              "title": "Job",
+              "type": "string"
+            }
+          },
+          {
+            "description": "How many days of history to use",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "description": "How many days of history to use",
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Tasks per period to price (up to 6 scenarios)",
+            "in": "query",
+            "name": "calls",
+            "required": false,
+            "schema": {
+              "default": [
+                1000,
+                10000,
+                100000
+              ],
+              "description": "Tasks per period to price (up to 6 scenarios)",
+              "items": {
+                "type": "integer"
+              },
+              "maxItems": 6,
+              "title": "Calls",
+              "type": "array"
+            }
+          },
+          {
+            "description": "Extra attempts per task, typed by you",
+            "in": "query",
+            "name": "retry_rate",
+            "required": false,
+            "schema": {
+              "default": 0.0,
+              "description": "Extra attempts per task, typed by you",
+              "maximum": 10,
+              "minimum": 0,
+              "title": "Retry Rate",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "input_change_pct",
+            "required": false,
+            "schema": {
+              "default": 0.0,
+              "maximum": 1000,
+              "minimum": -90,
+              "title": "Input Change Pct",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "output_change_pct",
+            "required": false,
+            "schema": {
+              "default": 0.0,
+              "maximum": 1000,
+              "minimum": -90,
+              "title": "Output Change Pct",
+              "type": "number"
+            }
+          },
+          {
+            "description": "Leave out far-out calls (visible, reversible)",
+            "in": "query",
+            "name": "exclude_far_out",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Leave out far-out calls (visible, reversible)",
+              "title": "Exclude Far Out",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "period",
+            "required": false,
+            "schema": {
+              "default": "month",
+              "pattern": "^(day|week|month)$",
+              "title": "Period",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-project-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Project-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Planner Csv",
         "tags": [
           "insights"
         ]

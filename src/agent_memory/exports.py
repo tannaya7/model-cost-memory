@@ -83,3 +83,58 @@ COMPANY_COLUMNS = (
     "currency", "cost_basis", "period_start", "period_end", "attribution", "chargeback_grade",
 )
 COMPANY_TEXT = ("section", "name", "project", "pay_mode", "day", "currency", "cost_basis", "period_start", "period_end", "attribution")
+
+
+# --- cost by feature label -----------------------------------------------------------------------------------------
+FEATURE_COLUMNS = (
+    "feature", "label_kind", "runs", "passed", "failed", "unchecked_runs", "excluded_runs", "tokens", "no_usage_runs", "spend_usd", "unpriced_runs",
+    "share_of_spend", "cost_per_correct_answer_usd", "currency", "cost_basis", "label_note", "period_start", "period_end",
+)
+FEATURE_TEXT = ("feature", "label_kind", "currency", "cost_basis", "label_note", "period_start", "period_end")
+FEATURE_NOTE = "the label is your own app's word: not verified, not an identity, not a chargeback record"
+
+
+def feature_rows(breakdown: Any, *, cost_column: str, cost_basis: str) -> list[dict[str, Any]]:
+    """One row per feature label from a FeatureBreakdownOut: aggregates only. An unknown value stays empty, never 0."""
+    rows = []
+    for r in breakdown.rows:
+        kind = "your label" if r.feature is not None else ("several smaller labels added together" if r.folded_labels else "no label sent")
+        rows.append({
+            "feature": r.label, "label_kind": kind, "runs": r.runs, "passed": r.passed, "failed": r.failed, "unchecked_runs": r.unchecked,
+            "excluded_runs": r.excluded, "tokens": r.tokens, "no_usage_runs": r.no_usage_runs, cost_column: r.spend_usd, "unpriced_runs": r.unpriced_runs,
+            "share_of_spend": r.share_of_spend, "cost_per_correct_answer_usd": r.cost_per_success.value_usd, "currency": breakdown.currency,
+            "cost_basis": cost_basis, "label_note": FEATURE_NOTE,
+            "period_start": breakdown.period_start.date().isoformat(), "period_end": breakdown.period_end.date().isoformat(),
+        })
+    return rows
+
+
+# --- cost planner scenarios ----------------------------------------------------------------------------------------
+PLANNER_COLUMNS = (
+    "ai_task", "model", "provider", "tasks_per_period", "period", "attempts", "estimate_usd", "low_usd", "high_usd", "per_task_usd", "result",
+    "calls_observed", "calls_used", "calls_left_out", "mean_call_usd", "price_versions_used", "retry_rate", "input_size_change_pct",
+    "output_size_change_pct", "far_out_calls_left_out", "history_start", "history_end", "currency", "estimate_basis", "assumptions_source",
+)
+PLANNER_TEXT = ("ai_task", "model", "provider", "period", "result", "price_versions_used", "far_out_calls_left_out", "history_start", "history_end",
+                "currency", "estimate_basis", "assumptions_source")
+PLANNER_BASIS = ("scenario estimate from recorded calls at list prices of the day; not a bill, not a promise and not a forecast; "
+                 "a range is shown only with enough comparable calls; calls without a price are left out, never counted as free")
+
+
+def planner_rows(plan: Any, *, retry_rate: float, input_change_pct: float, output_change_pct: float, far_out: bool) -> list[dict[str, Any]]:
+    """One row per model and scenario from a PlannerOut. Unknown figures (no estimate, no range) stay empty, never 0."""
+    rows = []
+    for m in plan.models:
+        versions = "; ".join(f"in force from {v.effective_from.date().isoformat()} ({v.runs} calls)" for v in m.versions_used)
+        for s in m.scenarios:
+            rows.append({
+                "ai_task": plan.job, "model": m.model, "provider": m.provider or "", "tasks_per_period": s.tasks_per_period, "period": plan.period_label,
+                "attempts": round(s.attempts, 4), "estimate_usd": s.estimate_usd, "low_usd": s.low_usd, "high_usd": s.high_usd, "per_task_usd": s.per_task_usd,
+                "result": m.status_text if s.estimate_usd is None else (s.range_note or m.status_text),
+                "calls_observed": m.observed_calls, "calls_used": m.used_calls, "calls_left_out": sum(m.left_out.values()),
+                "mean_call_usd": m.mean_call_usd, "price_versions_used": versions, "retry_rate": retry_rate, "input_size_change_pct": input_change_pct,
+                "output_size_change_pct": output_change_pct, "far_out_calls_left_out": f"{m.filtered_out} left out" if far_out else "filter off",
+                "history_start": plan.period_start.date().isoformat(), "history_end": plan.period_end.date().isoformat(), "currency": plan.currency,
+                "estimate_basis": PLANNER_BASIS, "assumptions_source": "retry rate, size changes and tasks per period were typed by the user; calls and prices are measured history",
+            })
+    return rows

@@ -59,8 +59,11 @@ def test_no_export_route_exists_without_an_entry_in_the_table():
         paths += [x.path for x in (inner.routes if inner else [r]) if hasattr(x, "path")]
     exports = {p for p in paths if re.search(r"export|download|csv", p, re.I)}
     # every export route is known by name; a project export needs export.run, the company one overview.export. A new one fails here.
-    assert exports == {"/v1/insights/export.csv", "/v1/organisations/{org_id}/overview/export.csv"}, exports
+    assert exports == {"/v1/insights/export.csv", "/v1/insights/features/export.csv", "/v1/insights/planner/export.csv",
+                       "/v1/organisations/{org_id}/overview/export.csv"}, exports
     assert ROUTE_PERMISSIONS[("GET", "/v1/insights/export.csv")] == "export.run" and "overview.export" in ORG_PERMISSIONS
+    assert ROUTE_PERMISSIONS[("GET", "/v1/insights/features/export.csv")] == "export.run"
+    assert ROUTE_PERMISSIONS[("GET", "/v1/insights/planner/export.csv")] == "export.run"
 
 
 def test_the_matrix_lists_every_permission_for_both_scopes():

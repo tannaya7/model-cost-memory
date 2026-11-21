@@ -19,7 +19,7 @@ import secrets
 import uuid
 from collections import defaultdict
 from dataclasses import asdict
-from typing import Literal
+from typing import Any, Literal
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -36,7 +36,10 @@ from .db import dispose_engine, get_session
 from .insights.coverage import CoverageOut, coverage
 from .insights.planner import PlannerOut, plan
 from .insights.features import FeatureBreakdownOut, feature_breakdown
-from .exports import COST_BASIS, PROJECT_COLUMNS, PROJECT_TEXT, csv_file, write_csv
+from .exports import (
+    COST_BASIS, FEATURE_COLUMNS, FEATURE_TEXT, PLANNER_COLUMNS, PLANNER_TEXT, PROJECT_COLUMNS, PROJECT_TEXT, csv_file, feature_rows, planner_rows,
+    write_csv,
+)
 from .insights.agents import agent_insights
 from .insights.savings import savings as savings_insight
 from .insights.changes import DAYS as CHANGE_DAYS
@@ -764,8 +767,7 @@ async def get_feature_breakdown(
     return await feature_breakdown(session, project.project_id, days=days)
 
 
-@app.get("/v1/insights/planner", response_model=PlannerOut, tags=["insights"])
-async def get_planner(
+def planner_query(
     job: str = Query(max_length=200, description="The task whose recorded calls the scenario is based on"),
     days: int = Query(default=30, ge=1, le=365, description="How many days of history to use"),
     calls: list[int] = Query(default=[1000, 10000, 100000], max_length=6, description="Tasks per period to price (up to 6 scenarios)"),
@@ -774,18 +776,58 @@ async def get_planner(
     output_change_pct: float = Query(default=0.0, ge=-90, le=1000),
     exclude_far_out: bool = Query(default=False, description="Leave out far-out calls (visible, reversible)"),
     period: str = Query(default="month", pattern="^(day|week|month)$"),
+) -> dict[str, Any]:
+    """The planner's typed assumptions, checked once. The screen and its CSV file both read them through here."""
+    if any(c < 1 or c > 1_000_000_000 for c in calls):
+        raise HTTPException(422, "Tasks per period must be between 1 and 1,000,000,000")
+    return {"job": job, "days": days, "calls": calls, "retry_rate": retry_rate, "input_change_pct": input_change_pct,
+            "output_change_pct": output_change_pct, "exclude_far_out": exclude_far_out, "period": period}
+
+
+async def _plan_or_404(session: AsyncSession, project: Project, q: dict[str, Any]) -> PlannerOut:
+    try:
+        return await plan(session, project.project_id, **q)
+    except LookupError as exc:
+        raise HTTPException(404, f"Unknown task '{q['job']}'") from exc
+
+
+@app.get("/v1/insights/planner", response_model=PlannerOut, tags=["insights"])
+async def get_planner(
+    q: dict[str, Any] = Depends(planner_query),
     project: Project = Depends(current_project),
     session: AsyncSession = Depends(get_session),
 ) -> PlannerOut:
     """What a task might cost at traffic levels you type, from its own recorded calls: list-price scenarios with a range where the data
     supports one. Not a bill or a forecast. Nothing is sent to a provider and nothing is changed."""
-    if any(c < 1 or c > 1_000_000_000 for c in calls):
-        raise HTTPException(422, "Tasks per period must be between 1 and 1,000,000,000")
-    try:
-        return await plan(session, project.project_id, job=job, days=days, calls=calls, retry_rate=retry_rate, input_change_pct=input_change_pct,
-                          output_change_pct=output_change_pct, exclude_far_out=exclude_far_out, period=period)
-    except LookupError as exc:
-        raise HTTPException(404, f"Unknown task '{job}'") from exc
+    return await _plan_or_404(session, project, q)
+
+
+async def _csv_download(session: AsyncSession, project: Project, user: User | None, *, columns, rows, text, filename: str, event: str, **audit) -> Response:
+    """The one way a new project export leaves the server: neutralized text, a BOM for Excel, an audit event for company projects."""
+    body, changed = write_csv(columns, rows, text_columns=text)
+    if project.organisation_id is not None and user is not None:
+        from .auth.orgs import audit_project
+        await audit_project(session, project, user, event, rows=len(rows), **audit)
+        await session.commit()
+    safe = re.sub(r"[^A-Za-z0-9._-]", "-", project.slug or project.project_id)
+    return Response(content=csv_file(body), media_type="text/csv; charset=utf-8", headers={
+        "Content-Disposition": f'attachment; filename="model-cost-memory-{safe}-{filename}.csv"', "Cache-Control": "no-store",
+        "X-Export-Rows": str(len(rows)), "X-Export-Neutralized": str(changed), "X-Content-Type-Options": "nosniff"})
+
+
+@app.get("/v1/insights/planner/export.csv", tags=["insights"])
+async def export_planner_csv(
+    q: dict[str, Any] = Depends(planner_query),
+    project: Project = Depends(current_project), user: User | None = Depends(optional_user),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """The planner's current result as a CSV file, for admins and owners: one row per model and scenario, with the assumptions, the history
+    period, the price versions used and the not-a-bill wording on every row. Unknown figures are empty, never 0. No prompt or answer text."""
+    result = await _plan_or_404(session, project, q)
+    rows = planner_rows(result, retry_rate=q["retry_rate"], input_change_pct=q["input_change_pct"], output_change_pct=q["output_change_pct"],
+                        far_out=q["exclude_far_out"])
+    return await _csv_download(session, project, user, columns=PLANNER_COLUMNS, rows=rows, text=PLANNER_TEXT, filename=f"planner-{re.sub(r'[^A-Za-z0-9._-]', '-', q['job'])}",
+                               event="project_data_exported", export="planner", days=q["days"])
 
 
 @app.get("/v1/insights/coverage", response_model=CoverageOut, tags=["insights"])
@@ -800,6 +842,22 @@ async def get_coverage(
     """How complete and reliable the records Model & Cost Memory RECEIVED are: attempts, usage, prices, checks, duplicates and flagged
     calls, each with its denominator and the reason it is doubtful. It cannot see calls that never reached this product. Read-only."""
     return await coverage(session, project.project_id, days=days, provider=provider, model=model, job=job)
+
+
+@app.get("/v1/insights/features/export.csv", tags=["insights"])
+async def export_features_csv(
+    days: int = Query(default=30, ge=1, le=365, description="The last N days"),
+    project: Project = Depends(current_project), user: User | None = Depends(optional_user),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Cost by feature label as a CSV file, for admins and owners: one row per label, with calls, tokens, list-price cost, unpriced calls and
+    cost per correct answer. Labels are your app's own words and are not verified. Aggregates only: no prompts, answers, keys or people."""
+    mode = project.billing_mode if project.billing_mode in ("subscription", "both") else "per_use"
+    cost = "spend_usd" if mode == "per_use" else "list_price_usd"
+    columns = [cost if c == "spend_usd" else c for c in FEATURE_COLUMNS]
+    rows = feature_rows(await feature_breakdown(session, project.project_id, days=days), cost_column=cost, cost_basis=COST_BASIS[mode])
+    return await _csv_download(session, project, user, columns=columns, rows=rows, text=FEATURE_TEXT, filename=f"cost-by-feature-last-{days}-days",
+                               event="project_data_exported", export="features", days=days)
 
 
 @app.get("/v1/insights/cost-receipt", response_model=CostReceiptOut, tags=["insights"])
