@@ -1,6 +1,26 @@
+/// <reference types="vitest/config" />
+import fs from "node:fs";
+import path from "node:path";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+
+/** MSW says its worker script is for development only, but publicDir copies it into dist. Remove it from
+ * production builds unless this is the mock build (VITE_USE_MOCK=true). Method not verified against Vite's
+ * docs: public files are copied during the build, so deleting in closeBundle is the simple safe approach. */
+function dropMockServiceWorker(keep: boolean): Plugin {
+  let outDir = "dist";
+  return {
+    name: "drop-mock-service-worker",
+    apply: "build",
+    configResolved(config) {
+      outDir = path.resolve(config.root, config.build.outDir);
+    },
+    closeBundle() {
+      if (!keep) fs.rmSync(path.join(outDir, "mockServiceWorker.js"), { force: true });
+    },
+  };
+}
 
 function mockApiPlugin(): Plugin {
   return {
@@ -8,7 +28,7 @@ function mockApiPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = req.url || "";
-        if (!url.startsWith("/v1") && !url.startsWith("/auth")) {
+        if (!url.startsWith("/v1") && !url.startsWith("/auth") && !url.startsWith("/healthz")) {
           return next();
         }
 
@@ -81,7 +101,7 @@ function mockApiPlugin(): Plugin {
 export default defineConfig(() => {
   const isMock = process.env.VITE_USE_MOCK === "true";
   return {
-    plugins: [react(), tailwindcss(), isMock ? mockApiPlugin() : null],
+    plugins: [react(), tailwindcss(), dropMockServiceWorker(isMock), isMock ? mockApiPlugin() : null],
     server: {
       port: 5174,
       proxy: isMock
@@ -89,7 +109,14 @@ export default defineConfig(() => {
         : {
             "/v1": "http://127.0.0.1:8000",
             "/auth": "http://127.0.0.1:8000",
+            "/healthz": "http://127.0.0.1:8000",
           },
+    },
+    test: {
+      environment: "jsdom",
+      setupFiles: ["./src/test/setup.ts"],
+      include: ["src/**/*.test.{ts,tsx}"],
+      testTimeout: 30_000, // a cold start on a busy laptop is slow; CI finishes each test in well under a second
     },
   };
 });

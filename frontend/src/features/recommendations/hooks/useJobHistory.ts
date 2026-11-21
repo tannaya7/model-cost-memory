@@ -5,7 +5,7 @@ export function useJobHistory(jobName: string | undefined) {
   return useQuery({
     queryKey: ["history", jobName],
     queryFn: () =>
-      jobName ? fetchJobHistory(jobName) : Promise.reject(new Error("No job name provided")),
+      jobName ? fetchJobHistory(jobName) : Promise.reject(new Error("No AI task name provided")),
     enabled: Boolean(jobName),
   });
 }

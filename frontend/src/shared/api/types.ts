@@ -1,6 +1,8 @@
 import type { components } from "./generated";
 
 export type Job = components["schemas"]["JobOut"];
+export type TaskProfile = components["schemas"]["TaskProfileOut"];
+export type TaskSummary = components["schemas"]["TaskSummaryOut"];
 export type JobCreate = components["schemas"]["JobCreate"];
 export type Run = components["schemas"]["RunOut"];
 export type RunDetail = components["schemas"]["RunDetail"];
@@ -34,6 +36,10 @@ export type ProviderKey = components["schemas"]["ProviderKeyOut"];
 export type User = components["schemas"]["UserOut"];
 export type AuthConfig = components["schemas"]["AuthConfig"];
 export type Project = components["schemas"]["ProjectOut"];
+export type News = components["schemas"]["NewsOut"];
+export type DayPoint = components["schemas"]["DayPointOut"];
+export type NewsItem = components["schemas"]["NewsItemOut"];
+export type NewsRefresh = components["schemas"]["NewsRefreshOut"];
 export type ProjectCreateInput = components["schemas"]["ProjectCreate"];
 export type ProjectCreateResult = components["schemas"]["ProjectCreated"];
 export type ProjectPatchInput = components["schemas"]["ProjectPatch"];
@@ -45,3 +51,18 @@ export type UsageLimit = components["schemas"]["UsageLimitOut"];
 export type UsageLimitInput = components["schemas"]["UsageLimitIn"];
 export type LimitSuggestion = components["schemas"]["LimitSuggestionOut"];
 export type LimitState = UsageLimit["state"];
+
+export type Workspace = components["schemas"]["WorkspaceOut"];
+export type CompanyRole = Workspace["role"];
+export type Member = components["schemas"]["MemberOut"];
+export type Invite = components["schemas"]["InviteOut"];
+export type InviteCreated = components["schemas"]["InviteCreated"];
+export type CompanyEvent = components["schemas"]["EventOut"];
+export type PermissionRow = { permission: string; means: string; roles: CompanyRole[] };
+export type PermissionMatrix = { roles: CompanyRole[]; project: PermissionRow[]; company: PermissionRow[] };
+export type CompanyOverview = components["schemas"]["CompanyOverviewOut"];
+export type CompanyNotice = components["schemas"]["CompanyNoticeOut"];
+export type YouInCompany = components["schemas"]["YouInCompany"];
+export type RollupResult = components["schemas"]["RollupOut"];
+export type RetestPreview = components["schemas"]["RetestPreviewOut"];
+export type RetestPreviewInput = components["schemas"]["RetestPreviewRequest"];

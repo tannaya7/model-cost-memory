@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLabelRun } from "../hooks/useLabelRun";
 import { ApiError } from "../../../shared/api/apiFetch";
+import { useToast } from "../../../ui/Toast";
 import type { LabelCreate } from "../../../shared/api/types";
 
 type Outcome = LabelCreate["outcome"];
@@ -18,11 +19,12 @@ export function RunLabelForm({ runId }: { runId: string }) {
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [reason, setReason] = useState("");
   const mutation = useLabelRun(runId);
+  const toast = useToast();
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!outcome) return;
-    mutation.mutate({ outcome, reason: reason.trim() || null });
+    mutation.mutate({ outcome, reason: reason.trim() || null }, { onSuccess: () => toast({ message: `Labelled ${outcome === "PASS" ? "pass" : "fail"}. It now counts toward the pass rate.` }) });
   }
 
   const choice = (value: Outcome, label: string, selected: string) => (
@@ -44,7 +46,7 @@ export function RunLabelForm({ runId }: { runId: string }) {
         <h3 className="text-sm font-semibold text-ink">Label this run</h3>
         <p className="mt-1 text-xs text-dim">
           No automatic check could decide this run. Until it is labelled, it does not count toward
-          any pass rate.
+          any pass rate. A label cannot be changed afterwards.
         </p>
       </div>
 

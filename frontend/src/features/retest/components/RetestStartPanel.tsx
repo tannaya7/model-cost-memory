@@ -1,14 +1,16 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useP } from "../../../app/project";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "../../../shared/components/Card";
 import { Badge } from "../../../shared/components/Badge";
 import { useJobs } from "../../jobs/hooks/useJobs";
 import { fetchModels } from "../../models/api/modelsApi";
-import { useRetestLimits, useStartRetest } from "../hooks/useRetest";
+import { usePreviewRetest, useRetestLimits, useStartRetest } from "../hooks/useRetest";
 import { ApiError, errorCode } from "../../../shared/api/apiFetch";
+import { InlineConfirm } from "../../../ui/InlineConfirm";
 import { ProviderKeyForm } from "./ProviderKeyForm";
-import type { Model } from "../../../shared/api/types";
+import type { Model, RetestPreview } from "../../../shared/api/types";
 
 function formatPrice(price: number | null | undefined): string {
   return price != null ? `$${price.toFixed(2)}` : "—";
@@ -18,7 +20,7 @@ export function RetestStartPanel() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialJobParam = searchParams.get("job") || "";
-  // The model the engine named for a re-test ("Re-test X to settle it"), passed from the job page.
+  // The model the engine named for a trial ("Start a trial on X to settle it"), passed from the job page.
   const suggestedModel = searchParams.get("model") || "";
 
   const jobsQuery = useJobs();
@@ -29,12 +31,17 @@ export function RetestStartPanel() {
   });
 
   const startMutation = useStartRetest();
+  const previewMutation = usePreviewRetest();
+  const [preview, setPreview] = useState<RetestPreview | null>(null);
 
   const [selectedJob, setSelectedJob] = useState<string>(initialJobParam);
   const [selectedModel, setSelectedModel] = useState<string>(suggestedModel);
   const [budgetUsd, setBudgetUsd] = useState<string>("2.00");
+  const [sampleSize, setSampleSize] = useState<string>("50");
+  const p = useP();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [askForKey, setAskForKey] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const jobs = jobsQuery.data || [];
   const limits = limitsQuery.data;
@@ -99,7 +106,11 @@ export function RetestStartPanel() {
     !isNaN(budgetNum) && budgetNum > 0 && budgetNum <= (capRemaining || 10);
   const isCapExhausted = limits !== undefined && capRemaining <= 0;
 
+  const sampleNum = Number(sampleSize);
+  const isSampleValid = Number.isInteger(sampleNum) && sampleNum >= 1 && sampleNum <= 500;
+
   const canSubmit =
+    isSampleValid &&
     Boolean(selectedJob) &&
     Boolean(selectedModel) &&
     !isJobRetestDisabled &&
@@ -107,9 +118,36 @@ export function RetestStartPanel() {
     !isCapExhausted &&
     !startMutation.isPending;
 
+  // Changing anything closes the review, so it always describes what is on screen.
+  useEffect(() => {
+    setConfirming(false);
+    setPreview(null);
+  }, [selectedJob, selectedModel, budgetUsd, sampleSize]);
+
+  /** The button asks for a preview (no provider call, nothing changes) and opens the review. Nothing is sent to a provider
+   *  until "Start trial", which uses the single-use confirmation that preview returned. */
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
+    setSubmitError(null);
+    try {
+      const shown = await previewMutation.mutateAsync({
+        jobName: selectedJob,
+        input: { candidate_model: selectedModel, budget_usd: Number(budgetNum.toFixed(2)), sample_size: sampleNum },
+      });
+      if (!shown.can_start && shown.blocked?.code === "provider_key_required") {
+        setAskForKey(true);
+        return;
+      }
+      setPreview(shown);
+      setConfirming(true);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Could not prepare the preview. Check your connection and try again.");
+    }
+  };
+
+  const startTrial = async () => {
+    if (!canSubmit || !preview?.can_start || !preview.confirmation) return;
     setSubmitError(null);
 
     try {
@@ -118,13 +156,16 @@ export function RetestStartPanel() {
         input: {
           candidate_model: selectedModel,
           budget_usd: Number(budgetNum.toFixed(2)),
+          sample_size: sampleNum,
+          confirmation: preview.confirmation,
         },
       });
 
       navigate(
-        `/retest/${encodeURIComponent(result.retest_id)}?job=${encodeURIComponent(result.job)}`,
+        p(`/retest/${encodeURIComponent(result.retest_id)}?job=${encodeURIComponent(result.job)}`),
       );
     } catch (err) {
+      setConfirming(false);
       if (errorCode(err) === "provider_key_required") {
         setAskForKey(true);
       } else if (err instanceof ApiError) {
@@ -132,7 +173,7 @@ export function RetestStartPanel() {
       } else if (err instanceof Error) {
         setSubmitError(err.message);
       } else {
-        setSubmitError("Failed to start re-test");
+        setSubmitError("The trial could not be started. Check your connection and try again.");
       }
     }
   };
@@ -147,17 +188,17 @@ export function RetestStartPanel() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-semibold text-ink">
-                Monthly Re-test Budget Cap
-              </h3>
+              <h2 className="text-base font-semibold text-ink">
+                Monthly budget for trials on new models
+              </h2>
               {isCapExhausted ? (
-                <Badge tone="bad">Cap Reached</Badge>
+                <Badge tone="bad">Budget used up</Badge>
               ) : (
                 <Badge tone="ok">Available</Badge>
               )}
             </div>
             <p className="mt-1 text-xs text-dim">
-              Protects against accidental re-test runaway costs across all jobs.
+              A trial replays your past prompts on another model to see if it does as well. This is the most you allow trials to spend each month, across all your AI tasks, so a trial can never run up a surprise bill.
             </p>
           </div>
           <div className="text-right">
@@ -193,8 +234,7 @@ export function RetestStartPanel() {
 
         {isCapExhausted && (
           <div className="mt-4 rounded-md border border-bad/30 bg-bad-soft p-3 text-xs text-bad">
-            Your monthly re-test cap has been exhausted. You cannot start new
-            re-tests until the cap resets next month.
+            Your monthly trial budget is used up. You cannot start a new trial until it resets next month, or you raise the budget in Settings.
           </div>
         )}
       </Card>
@@ -210,8 +250,8 @@ export function RetestStartPanel() {
       )}
       {limits?.provider_key && (
         <p className="text-xs text-dim">
-          Re-tests use your {limits.provider_key.provider} key ending in{" "}
-          <span className="font-mono text-ink">{limits.provider_key.key_hint}</span>, within the monthly cap above.
+          Trials use your {limits.provider_key.provider} key ending in{" "}
+          <span className="font-mono text-ink">{limits.provider_key.key_hint}</span>, within the monthly budget above.
         </p>
       )}
 
@@ -219,12 +259,11 @@ export function RetestStartPanel() {
       <Card className="p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="border-b border-rule pb-4">
-            <h3 className="text-base font-semibold text-ink">
-              Configure Re-test Run
-            </h3>
+            <h2 className="text-base font-semibold text-ink">
+              Set up a trial on a new model
+            </h2>
             <p className="mt-1 text-xs text-dim">
-              Select a target job and candidate model to evaluate offline
-              without affecting live production traffic.
+              Choose the AI task and the model to try. We replay past prompts on that model, so your live app is not affected.
             </p>
           </div>
 
@@ -240,7 +279,7 @@ export function RetestStartPanel() {
               htmlFor="retest-job"
               className="block text-sm font-medium text-ink mb-1"
             >
-              Target Job <span className="text-bad">*</span>
+              AI task to test <span className="text-bad">*</span>
             </label>
             <select
               id="retest-job"
@@ -253,7 +292,7 @@ export function RetestStartPanel() {
               className="w-full rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50"
             >
               {jobs.length === 0 ? (
-                <option value="">No jobs found</option>
+                <option value="">No AI tasks yet</option>
               ) : (
                 jobs.map((j) => (
                   <option
@@ -262,7 +301,7 @@ export function RetestStartPanel() {
                     disabled={j.retest_consent === false}
                   >
                     {j.name}
-                    {j.retest_consent === false ? " (re-tests off)" : ""}
+                    {j.retest_consent === false ? " (trials off)" : ""}
                   </option>
                 ))
               )}
@@ -270,9 +309,8 @@ export function RetestStartPanel() {
 
             {isJobRetestDisabled && (
               <div className="mt-2 rounded-md border border-warn/30 bg-warn-soft p-3 text-xs text-warn">
-                <span className="font-semibold">Re-tests are disabled:</span> This
-                job has retest consent turned off in settings. To enable
-                re-testing, edit the job settings and turn re-test consent on.
+                <span className="font-semibold">Trials are turned off:</span> This
+                AI task does not allow its past prompts to be sent to another provider. To allow it, open the AI task's settings and turn trials on.
               </div>
             )}
           </div>
@@ -342,7 +380,7 @@ export function RetestStartPanel() {
                 htmlFor="retest-budget"
                 className="block text-sm font-medium text-ink"
               >
-                Max Run Budget (USD) <span className="text-bad">*</span>
+                Most this trial may spend (USD) <span className="text-bad">*</span>
               </label>
               <span className="text-xs text-dim">
                 Available: ${capRemaining.toFixed(2)}
@@ -369,13 +407,36 @@ export function RetestStartPanel() {
             </div>
             {!isBudgetValid && (
               <p className="mt-1 text-xs text-bad">
-                Budget must be greater than $0.00 and cannot exceed the available
-                cap of ${capRemaining.toFixed(2)}.
+                The budget must be more than $0.00 and no more than the ${capRemaining.toFixed(2)} left in your monthly trial budget.
               </p>
             )}
             <p className="mt-1 text-xs text-dim">
-              The re-test will immediately stop if the budget is reached before
-              all planned runs complete.
+              The trial stops straight away if it reaches this amount before all the prompts are replayed.
+            </p>
+          </div>
+
+          {/* How many past prompts to replay */}
+          <div>
+            <label htmlFor="retest-sample" className="mb-1 block text-sm font-medium text-ink">
+              Past prompts to replay
+            </label>
+            <input
+              id="retest-sample"
+              type="number"
+              step="1"
+              min="1"
+              max="500"
+              value={sampleSize}
+              onChange={(e) => {
+                setSampleSize(e.target.value);
+                setSubmitError(null);
+              }}
+              disabled={isLoading || isCapExhausted}
+              className="w-full max-w-40 rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50"
+            />
+            {!isSampleValid && <p className="mt-1 text-xs text-bad">Between 1 and 500 prompts.</p>}
+            <p className="mt-1 text-xs text-dim">
+              Chosen at random from this AI task's recorded prompts, replayed once each. More prompts give a firmer answer but cost more; the budget above still caps the spend.
             </p>
           </div>
 
@@ -383,23 +444,63 @@ export function RetestStartPanel() {
           <div className="rounded-md border border-rule bg-bg p-4 text-xs text-dim space-y-1">
             <p className="font-medium text-ink">What this spends</p>
             <p>
-              Up to 50 past prompts of this job are replayed on the candidate model with your own provider key,
-              most important runs first, and each answer is checked like a production run. Before every call
-              the runner checks that this re-test stays within its budget and the project within its monthly cap,
-              so it stops before either is exceeded. It also stops early once the answer is clear.
+              Up to 50 past prompts of this AI task are replayed on the model you chose, using your own provider key, most important first. Each answer is checked the same way as your real ones. Before every call we check that the trial stays within its budget and your monthly trial budget, so it stops before either is exceeded. It also stops early once the answer is clear.
             </p>
           </div>
 
           {/* Submit Action */}
+          {confirming && canSubmit && preview && (
+            preview.can_start ? (
+              <InlineConfirm
+                label="Start this trial"
+                confirmLabel="Confirm and start (spends up to this)"
+                cancelLabel="Not now"
+                busy={startMutation.isPending}
+                busyLabel="Starting the trial..."
+                onConfirm={() => void startTrial()}
+                onCancel={() => setConfirming(false)}
+              >
+                <div className="flex flex-col gap-2 text-left">
+                  <p>
+                    Replay <b className="text-ink">{preview.examples?.planned ?? 0}</b> past prompts of <b className="text-ink">{selectedJob}</b> on{" "}
+                    <b className="text-ink">{selectedModel}</b> ({preview.provider}), using your own provider key.
+                  </p>
+                  <ul className="flex flex-col gap-1">
+                    {(preview.data ?? []).map((d) => (
+                      <li key={d.kind}><span className="text-ink">{d.what}</span> {d.where}</li>
+                    ))}
+                  </ul>
+                  {preview.cost && (
+                    <p>
+                      Expected cost: <b className="text-ink">${preview.cost.low_usd.toFixed(4)} to ${preview.cost.high_usd.toFixed(4)}</b>, never more than your budget of ${preview.cost.budget_usd.toFixed(2)}.{" "}
+                      {preview.cost.note} Prices are this product&apos;s list prices, not your invoice.
+                    </p>
+                  )}
+                  {preview.examples && preview.examples.left_out_for_tool_use > 0 && (
+                    <p>{preview.examples.left_out_for_tool_use} prompts are left out because their runs used tools.</p>
+                  )}
+                  <p>How answers are checked: {preview.evaluator}</p>
+                  <p>{preview.retention_note}</p>
+                  <ul className="list-disc pl-5">{preview.statements.map((t) => <li key={t}>{t}</li>)}</ul>
+                  <p className="text-xs text-muted">This confirmation works once and expires in {preview.confirm_minutes} minutes.</p>
+                </div>
+              </InlineConfirm>
+            ) : (
+              <div role="group" aria-label="This trial cannot start" className="mt-3 rounded-[10px] border border-rule bg-surface-2 p-3 text-[13px] text-dim">
+                <p className="font-semibold text-ink">This trial cannot start yet.</p>
+                <p className="mt-1">{preview.blocked?.message}</p>
+              </div>
+            )
+          )}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-rule">
             <button
               type="submit"
-              disabled={!canSubmit}
+              disabled={!canSubmit || confirming}
               className="rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-on-accent shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 transition-opacity"
             >
-              {startMutation.isPending
-                ? "Starting Re-test..."
-                : "Start Re-test"}
+              {startMutation.isPending || previewMutation.isPending
+                ? "Preparing the review..."
+                : "Review and start a trial"}
             </button>
           </div>
         </form>

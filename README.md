@@ -19,17 +19,29 @@ recommended and why it changed.
   with the reason it passed or failed.
 - Evidence fades with age, faster for model versions that have been superseded, so conclusions stay
   current without anyone curating a test set.
-- A cheaper model is recommended only when the system is **95% sure it is at most 3 points worse** than the
+- A cheaper model is recommended only when the system is **about 97.5% sure (one-sided) that it is at most 3 points worse** than the
   best, ranked by **cost per successful run**, with a savings forecast and the failing runs behind it.
-  Advising a move away from the model in use asks for **99%**, so the advice does not flip on daily noise.
+  Advising a move away from the model in use asks for **about 99.5% (one-sided)**, so the advice does not flip on daily noise.
 - Scheduled jobs store each changed verdict with its lineage, detect regressions across version changes (and
-  silent drops under an unchanged name), alert a signed webhook, track model retirements, and **re-test**
+  silent drops under an unchanged name), alert a signed webhook, track model retirements, and **trial**
   cheaper candidates on the customer's own key, always within a budget and a monthly cap.
 - **Usage limits**: a plan's 5-hour or weekly limit, a one-model limit, an API budget or daily quota. From the
   recorded runs it forecasts whether a limit runs out before it resets and, if so, names per job the cheaper
   option proven to still do it, at a model and reasoning effort (`sonnet-5@low` instead of `opus-5-5@medium`).
-- A React web app: Google sign-in, projects and keys, recommendations, evidence, history, alerts, re-tests,
-  spend, breakdowns and a live view of runs crossing the pipeline.
+- A web app built around three questions: which model should each job use, did anything break, and what does
+  it cost. A visitor lands on a page that explains the product, signs in with Google, sees all their projects
+  (or creates the first: name it, take its key once, wrap the model call), and opens a project's dashboard at
+  `/p/<project>`. Inside a project, four places instead of a long menu: an **Overview** that leads with the monthly saving, spend over
+  time and what needs attention; **Jobs**, where each job's verdict is stated in words and proven on a
+  cost-versus-quality map, with quality and spend over time, evidence, runs, history and trials; **Models**,
+  with prices and retirements; and **Activity**, with alerts, the live pipeline and AI news. Every chart has a
+  table view, and Ctrl/⌘ K jumps anywhere.
+- **News about your models**: headlines from the model makers, the press and the community, refreshed hourly.
+  Each alert shows what was said about its model around when it happened (a silent drop often has an
+  announcement behind it), each job page and the overview show the stories naming the models in use, and a
+  full AI news page lists everything, with "Affects my models" as a filter.
+- **Customers' data has an end**: a run's prompt and answer are deleted after the project's retention (90 days
+  by default; the figures stay), and an owner can delete a project and everything recorded under it.
 
 Full design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 illustrated walkthrough: [`docs/Architecture_Overview.pdf`](docs/Architecture_Overview.pdf) ·
@@ -44,7 +56,7 @@ measured results: [`reports/`](reports/)
 | 7 | Recommendation engine (95% intervals, 3-point tolerance), spend by job | done |
 | 8 | Consolidation, supersession, history and lineage, result cache, savings forecast | done |
 | 9 | Simulated-time harness, regression and silent-drop detection, signed webhook alerts | done |
-| 10 | Re-test runner: budget and cap before every call, just-in-time provider key, automatic triggers | done |
+| 10 | Trial runner: budget and cap before every call, just-in-time provider key, automatic triggers | done |
 | 11 | Google sign-in, project ownership and setup, public read-only demo, breakdown insights | done |
 | 12 | Staleness experiment, live data-flow view (SSE), optional recommendation summary | done |
 | — | Public deployment on the server | waiting for the server and domain |
@@ -53,19 +65,26 @@ measured results: [`reports/`](reports/)
 
 Simulated data, run through the production engine, decay, consolidation and regression code:
 
-- **Staleness experiment** ([report](reports/staleness_experiment.md)), 5 timelines of 120 days: as the
-  workload drifts and a new model version arrives, the self-maintaining memory picks the right model 75% of
+- **Staleness experiment** ([report](reports/staleness_experiment.md)), 20 timelines of 120 days: as the
+  workload drifts and a new model version arrives, the self-maintaining memory picks the right model 76% of
   the time over the whole timeline (92% in the second half), a test set frozen at day 14 25% (0%), and one
-  re-checked every month 69% (88%). Its wrong answers are all the safe kind: a good model that costs more.
-  Keeping the evidence fresh costs 9% of production spend. In a world where nothing changes it does not
-  wander: 2-3 changes of answer per timeline, never to a model that is not good enough.
+  re-checked every month 65% (81%). 76 of its 77 wrong answers were the safe kind, a good model that costs
+  more; once in 320 checkpoints it had just moved to the cheap model as that model stopped being good
+  enough, and it moved back within a week. Keeping the evidence fresh costs 9% of production spend (with a
+  third of the trial runs, 3% of spend but 51% accuracy). In a world where nothing changes it does not
+  wander: 1.9 changes of answer per timeline, never to a model that is not good enough.
 - **Regression detection** ([version](reports/regression_detection.json),
-  [silent](reports/silent_drop_detection.json)), 100 trials per size: a version upgrade that costs 5 points is
-  caught 93% of the time (likely 86-97%) and 10 points always, the day after it lands, with 2 false alarms in
-  100 unchanged upgrades. A silent drop under an unchanged name, watched for 28 days, is caught at 5 points
-  77% of the time at 50 runs a day and 100/100 at 100 runs a day, and always at 10 points, with 1 false
-  alarm in 100 at 50 runs a day: **90% of 5-point silent drops once a job has about 100 runs a day**. False
-  alarms at 100 runs a day are still to be measured.
+  [silent](reports/silent_drop_detection.json), [silent at 100 a day](reports/silent_drop_detection_100.json),
+  with drifting inputs: [version](reports/regression_detection_drift.json),
+  [silent](reports/silent_drop_detection_drift.json)), 100 trials per size: a version upgrade that costs 5
+  points is caught 93% of the time (likely 86-97%) and 10 points always, the day after it lands, with 2 false
+  alarms in 100 unchanged upgrades. A silent drop under an unchanged name, watched for 28 days, is caught at 5
+  points 77% of the time at 50 runs a day and 100/100 at 100 runs a day, and always at 10 points, with 1 false
+  alarm in 100 at 50 runs a day and none in 100 at 100 a day: **100 of 100 5-point silent drops (96 to 100%) at
+  100 runs a day**. When the inputs themselves get harder (long documents growing from 10% to 50%), the
+  detector still raises 2 false alarms in 100 upgrades and 1 in 100 silent controls, because it compares
+  versions within each input-size band; it catches 81% of 5-point upgrade drops and 65% of silent ones there.
+  Before that change, the same drift raised false alarms in 14 of 20 upgrades and 9 of 20 silent controls.
 - **Speed** ([report](reports/speed.md)): a recommendation for a job with 100,000 runs in under 300 ms, and
   for 500,000 runs about 1 s cold and under 100 ms under live traffic; recording adds about 0.01 ms (p99
   0.2 ms) to the application's own call, whether the API is up or not.
@@ -84,7 +103,7 @@ embedded Postgres.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -c requirements-lock.txt -e ".[dev]"   # the exact versions CI tests
 cp .env.example .env                                  # set DATABASE_URL and SECRET_KEY
 
 alembic upgrade head                                  # create the tables
@@ -93,7 +112,7 @@ python scripts/sync_catalog.py                        # model prices and shutdow
 
 uvicorn agent_memory.api:app --reload                 # the API on http://127.0.0.1:8000
 python -m agent_memory.pipeline.sync_worker           # embeds recorded runs (second terminal)
-python -m agent_memory.scheduler                      # maintenance, regressions, re-tests (third terminal)
+python -m agent_memory.scheduler                      # maintenance, regressions, trials (third terminal)
 
 cd frontend && npm ci && npm run dev                  # the web app on http://localhost:5174
 ```
@@ -136,8 +155,8 @@ spend), and let anyone read it without signing in:
 python scripts/seed_demo.py --database-url "$DATABASE_URL"     # then set DEMO_PROJECT_ID=demo
 ```
 
-Re-tests run on the customer's own provider key, asked for in the web app the first time a re-test needs it
-and stored encrypted with `SECRET_KEY`. Every re-test has a budget, and every project a monthly cap (default
+Trials run on the customer's own provider key, asked for in the web app the first time a trial needs it
+and stored encrypted with `SECRET_KEY`. Every trial has a budget, and every project a monthly cap (default
 $10, counted at list price so it limits free keys too), checked before each call.
 
 Logs are JSON lines carrying `run_id`, `job_id` and `project_id`, so one run can be followed end to end
@@ -155,10 +174,16 @@ Run the tests and lint:
 ```bash
 pytest
 ruff check .
-cd frontend && npm run build
+cd frontend && npm test && npm run build
 ```
 
 Docker is for the server only. See [`deploy/README.md`](deploy/README.md).
+
+## Security notes
+
+- Sign-in uses a signed cookie that is valid for 14 days. Logging out clears your browser's copy but does not revoke it on the server, so a stolen cookie keeps working until it expires. Server-side sessions are planned for later.
+- Changing requests that carry the sign-in cookie are refused with 403 when they come from another site (Origin / Sec-Fetch-Site check). Requests with a project key are not affected.
+- Task summaries mask emails, links, keys, passwords, tokens and long numbers before anything is sent out. Names and street addresses cannot be recognised and are not removed.
 
 ## Contributing
 

@@ -3,10 +3,11 @@ import type {
   ProjectCreateInput,
   ProjectPatchInput,
 } from "../../../shared/api/types";
+import { fetchAllProjects } from "../../workspaces/api/workspacesApi";
 import {
   createProject,
+  deleteProject,
   fetchProject,
-  fetchProjects,
   patchProject,
   regenerateProjectKey,
 } from "../api/projectsApi";
@@ -14,10 +15,11 @@ import {
 export const projectsKey = ["projects"] as const;
 export const projectDetailKey = (id: string) => ["projects", id] as const;
 
-export function useProjects() {
+export function useProjects(enabled = true) {
   return useQuery({
     queryKey: projectsKey,
-    queryFn: fetchProjects,
+    queryFn: fetchAllProjects,
+    enabled,
   });
 }
 
@@ -63,6 +65,18 @@ export function useRegenerateProjectKey() {
     onSuccess: (_data, id) => {
       void queryClient.invalidateQueries({ queryKey: projectsKey });
       void queryClient.invalidateQueries({ queryKey: projectDetailKey(id) });
+    },
+  });
+}
+
+export function useDeleteProject() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => deleteProject(id),
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: projectDetailKey(id) });
+      void queryClient.invalidateQueries({ queryKey: projectsKey });
     },
   });
 }

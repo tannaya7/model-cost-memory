@@ -10,6 +10,12 @@ How long a trial watches matters as much as the detector: the silent-drop test c
 halves of a 28-day window, so a drop is split cleanly only 14 days after it starts. Results are
 reported per observation period, with the days to detect counted from the change.
 
+Workload drift (mentor review 3): inputs can get harder while no model changes, and a detector that
+compares pass rates over time would read that as a regression. With `drift=True` short documents pass
+at 98% and long ones at 80% under every version, and the share of long documents grows from 10% to
+50% over the trial, so the overall pass rate falls by about 7 points with nothing broken. Run with
+drop 0 these are the drift controls: any alert is a false alarm caused by the input mix.
+
 Each trial is its own project, so trials never see each other's runs.
 """
 
@@ -25,28 +31,40 @@ from .harness import Simulator, alerts_of
 from .world import Scenario, SimModel, Version
 
 BASE_RATE = 0.95
+DRIFT_SHORT, DRIFT_LONG = 0.98, 0.80  # with drift: the true rates on short and long documents
+DRIFT_LONG_SHARE = (0.10, 0.50)  # ... and the share of long documents at the start and the end
 
 
 UPGRADE_DAY = 30
 SILENT_DROP_DAY = 20
 
 
-def upgrade_scenario(drop: float, seed: int, *, runs_per_day: int = 50, days_after: int = 14) -> Scenario:
+def _rates(drift: bool) -> tuple[float, float, dict]:
+    if drift:
+        return DRIFT_SHORT, DRIFT_LONG, {"long_share_start": DRIFT_LONG_SHARE[0], "long_share_end": DRIFT_LONG_SHARE[1]}
+    return BASE_RATE, BASE_RATE, {}
+
+
+def upgrade_scenario(drop: float, seed: int, *, runs_per_day: int = 50, days_after: int = 14,
+                     drift: bool = False) -> Scenario:
+    short, long_, mix = _rates(drift)
     big = SimModel("acme-large", 0.03, (
-        Version("acme-large-2026-01-01", 0, BASE_RATE, BASE_RATE),
-        Version("acme-large-2026-02-04", UPGRADE_DAY, BASE_RATE - drop, BASE_RATE - drop),
+        Version("acme-large-2026-01-01", 0, short, long_),
+        Version("acme-large-2026-02-04", UPGRADE_DAY, short - drop, long_ - drop),
     ))
     return Scenario(job="invoice-extract", models=(big,), production="acme-large", days=UPGRADE_DAY + days_after,
-                    runs_per_day=runs_per_day, retest_per_day=0, seed=seed)
+                    runs_per_day=runs_per_day, retest_per_day=0, seed=seed, **mix)
 
 
-def silent_scenario(drop: float, seed: int, *, runs_per_day: int = 50, days_after: int = 14) -> Scenario:
+def silent_scenario(drop: float, seed: int, *, runs_per_day: int = 50, days_after: int = 14,
+                    drift: bool = False) -> Scenario:
+    short, long_, mix = _rates(drift)
     big = SimModel("acme-large", 0.03, (
-        Version("acme-large-2026-01-01", 0, BASE_RATE, BASE_RATE, drop_day=SILENT_DROP_DAY if drop else None,
+        Version("acme-large-2026-01-01", 0, short, long_, drop_day=SILENT_DROP_DAY if drop else None,
                 drop_size=drop),
     ))
     return Scenario(job="invoice-extract", models=(big,), production="acme-large", days=SILENT_DROP_DAY + days_after,
-                    runs_per_day=runs_per_day, retest_per_day=0, seed=seed)
+                    runs_per_day=runs_per_day, retest_per_day=0, seed=seed, **mix)
 
 
 @dataclass
@@ -79,7 +97,7 @@ async def _trial(sessions: async_sessionmaker[AsyncSession], scenario: Scenario,
 async def detection(
     sessions: async_sessionmaker[AsyncSession], *, drops: tuple[float, ...] = (0.0, 0.05, 0.10, 0.15),
     trials: int = 10, kind: str = "VERSION_REGRESSION", settings: Settings | None = None,
-    runs_per_day: int = 50, days_after: int = 14,
+    runs_per_day: int = 50, days_after: int = 14, drift: bool = False,
 ) -> list[DetectionResult]:
     """Detection rate per injected drop; drop 0.0 is the control, whose rate is the false-positive rate."""
     settings = settings or get_settings()
@@ -89,8 +107,8 @@ async def detection(
     for drop in drops:
         r = DetectionResult(kind, drop, trials, 0, days_after=days_after)
         for seed in range(trials):
-            day = await _trial(sessions, build(drop, seed, runs_per_day=runs_per_day, days_after=days_after), kind,
-                               settings)
+            day = await _trial(sessions, build(drop, seed, runs_per_day=runs_per_day, days_after=days_after,
+                                               drift=drift), kind, settings)
             if day is not None:
                 r.flagged += 1
                 r.days_to_detect.append(day - change_day)

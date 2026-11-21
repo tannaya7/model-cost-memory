@@ -48,12 +48,17 @@ async def test_an_unpriced_run_stores_no_cost_and_never_wins_on_cost(client, ses
     detail = (await client.get(f"/v1/runs/{stored.run_id}", headers=headers)).json()
     assert detail["cost_usd"] is None
 
-    session.add_all([run(job, "big", 0.03) for _ in range(400)] + [run(job, "mystery-model", None) for _ in range(400)])
+    # the unpriced model is the newest, so it is the model in use (not left to microsecond ties)
+    session.add_all([run(job, "big", 0.03, age=0.01) for _ in range(400)]
+                    + [run(job, "mystery-model", None) for _ in range(400)])
     await session.commit()
     body = (await client.get("/v1/jobs/invoice/recommendation", headers=headers)).json()
     mystery = next(m for m in body["models"] if m["model"] == "mystery-model")
     assert mystery["mean_cost_usd"] is None and not mystery["eligible"]
-    assert body["recommended"]["model"] == "big"
+    # the model in use has no known price, so nothing is advised: it holds and says why (an unpriced model never
+    # wins on cost, and a cheaper move cannot be judged without knowing what is paid now)
+    assert body["verdict"] == "HOLD"
+    assert any("No price is known" in w for w in body["warnings"])
 
 
 async def test_a_partly_priced_model_is_averaged_over_its_priced_runs_only(client, session, project):

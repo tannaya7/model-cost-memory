@@ -1,5 +1,6 @@
 """The verdict rules, without a database. Model names and prices are made up."""
 
+import pytest
 from datetime import date
 
 from agent_memory.recommend.engine import ModelInput, decide
@@ -74,7 +75,7 @@ def test_cheaper_models_without_enough_evidence_are_re_test_candidates():
     d = decide([model("big", 0.99, 400, 0.03), model("mini", 1.0, 10, 0.001)], "big", **RULES)
     assert d.verdict == "HOLD"
     assert d.retest_candidates == ["mini"]
-    assert d.next_step.startswith("Re-test mini")
+    assert d.next_step.startswith("Start a trial on mini")
 
 
 def test_a_deprecated_recommendation_warns_and_names_the_next_cheapest():
@@ -100,14 +101,14 @@ def test_a_cheaper_model_must_be_shown_within_the_margin_of_the_current_one_befo
     d = decide([model("big", 0.96, 30, 0.03), model("mini", 1.0, 30, 0.001)], "big", **RULES)
     assert d.reference.model == "mini"
     assert (d.verdict, d.recommended.model) == ("HOLD", "big")
-    assert d.warnings == ["Not yet sure mini is within 3 points of big, the model in use; a re-test of mini "
+    assert d.warnings == ["Not yet sure mini is within 3 points of big, the model in use; a trial of mini "
                           "would settle it"]
     assert d.retest_candidates == ["mini"]
-    assert d.next_step == "Re-test mini to settle whether to switch"
+    assert d.next_step == "Start a trial on mini to settle whether to switch"
     # Not "good enough": that is next to itself as the reference, not next to the model in use.
     mini = by_name(d)["mini"]
     assert (mini.status, mini.eligible) == ("UNSURE", False)
-    assert mini.why == "Not yet sure it is within 3 points of big, the model in use; a re-test would settle it"
+    assert mini.why == "Not yet sure it is within 3 points of big, the model in use; a trial would settle it"
 
 
 def test_a_current_model_that_measures_well_below_the_best_asks_for_a_re_test_of_the_best():
@@ -115,7 +116,7 @@ def test_a_current_model_that_measures_well_below_the_best_asks_for_a_re_test_of
     d = decide([model("big", 0.97, 100, 0.03), model("mini", 0.90, 200, 0.001)], "mini", **RULES)
     assert by_name(d)["mini"].status == "UNSURE"
     assert (d.verdict, d.recommended.model) == ("HOLD", "mini")
-    assert d.warnings == ["mini measures 7.0 points below big, not yet proven; a re-test of big will show "
+    assert d.warnings == ["mini measures 7.0 points below big, not yet proven; a trial of big will show "
                           "whether to switch"]
     assert d.retest_candidates == ["big"]
 
@@ -127,11 +128,12 @@ def test_advising_a_switch_needs_99_percent_and_keeping_the_advice_needs_95():
     new = decide(evidence, "big", **RULES, switch_confidence=0.99)
     assert (new.verdict, new.recommended.model) == ("HOLD", "big")
     assert new.warnings == ["mini is likely within 3 points of big, the model in use, but advising a switch needs "
-                            "99% confidence; a re-test of mini would settle it"]
+                            "very high confidence (about 99.5%, one-sided); a trial of mini would settle it"]
     assert new.retest_candidates == ["mini"]
     assert (by_name(new)["mini"].status, by_name(new)["mini"].eligible) == ("UNSURE", False)
-    assert by_name(new)["mini"].why == ("Within 3 points of big at 95%, not yet at the 99% a switch needs; "
-                                        "a re-test would settle it")
+    assert by_name(new)["mini"].why == ("Within 3 points of big with high confidence (about 97.5%, one-sided), not yet the "
+                                        "very high confidence (about 99.5%, one-sided) a switch needs; "
+                                        "a trial would settle it")
 
     kept = decide(evidence, "big", **RULES, switch_confidence=0.99, advised="mini")
     assert (kept.verdict, kept.recommended.model) == ("DOWNGRADE", "mini")
@@ -144,3 +146,41 @@ def test_advising_a_switch_needs_99_percent_and_keeping_the_advice_needs_95():
 def test_a_switch_confidence_no_higher_than_the_confidence_changes_nothing():
     evidence = [model("big", 0.99, 400, 0.03), model("mini", 0.98, 400, 0.001)]
     assert decide(evidence, "big", **RULES, switch_confidence=0.95).verdict == "DOWNGRADE"
+
+
+def test_f8_no_downgrade_when_the_model_in_use_has_no_price():
+    d = decide([model("cur", 0.95, 600, None), model("cheap", 0.95, 600, 0.001)], "cur", **RULES)
+    assert d.verdict == "HOLD" and d.recommended.model == "cur"
+    assert any("No price is known for cur" in w for w in d.warnings)
+
+
+def test_f11_a_negligible_saving_is_not_advised():
+    d = decide([model("cur", 0.99, 3000, 0.0100000), model("cheap", 0.99, 3000, 0.0099999)], "cur", **RULES)
+    assert d.verdict == "HOLD"
+    d2 = decide([model("cur", 0.99, 3000, 0.01), model("cheap", 0.99, 3000, 0.009)], "cur", **RULES)
+    assert d2.verdict == "DOWNGRADE"
+
+
+def test_f12_a_single_model_that_fails_everything_gets_the_right_warning():
+    d = decide([model("only", 0.0, 100, 0.01)], "only", **RULES)
+    assert d.verdict == "HOLD"
+    assert any("passed none" in w for w in d.warnings) and not any("No price is known" in w for w in d.warnings)
+
+
+def test_f9_the_saving_is_the_change_in_the_bill_at_the_same_volume():
+    from agent_memory.recommend.engine import forecast
+    d = decide([model("cur", 0.5, 400, 0.001), model("good", 0.97, 400, 0.01)], "cur", **RULES)
+    assert d.verdict == "SWITCH"
+    f = forecast(d, 1000, confidence=0.95)
+    assert f.monthly_saving_usd == pytest.approx(-9.0)  # the bill rises by 1000 x (0.01 - 0.001)
+    assert f.extra_failures_per_month == pytest.approx(-470.0)
+
+
+def test_f10_volume_is_scaled_for_a_young_job_and_withheld_under_7_days():
+    from datetime import UTC, datetime, timedelta
+    from agent_memory.recommend.engine import monthly_volume
+    now = datetime(2026, 11, 16, tzinfo=UTC)
+    assert monthly_volume(300, now - timedelta(days=3), now) is None  # still learning
+    assert monthly_volume(100, now - timedelta(days=10), now) == 300
+    assert monthly_volume(500, now - timedelta(days=45), now) == 500
+    assert monthly_volume(5, None, now) is None

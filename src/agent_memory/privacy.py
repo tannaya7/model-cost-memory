@@ -48,6 +48,13 @@ def sanitize_tool_calls(calls: list[Any] | None, *, keep_arguments: bool = False
         if name is None and call_id is None:
             continue
         entry: dict[str, Any] = {"name": name, "id": call_id}
+        # Where an MCP call came from, kept as labels only: the server the provider named, that the provider (not just
+        # the tool's name) said so, and whether the call failed. Never the arguments or the result.
+        server = _short(call.get("server"))
+        if server and call.get("source") == "provider":
+            entry["server"], entry["source"] = server, "provider"
+        if isinstance(call.get("failed"), bool):
+            entry["failed"] = call["failed"]
         if keep_arguments:
             arguments = _first(call, _ARGUMENT_KEYS)
             if arguments is not None:

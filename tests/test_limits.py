@@ -21,7 +21,7 @@ def runs(job, model, n, *, cost, hours_ago_max=20, passed=1.0, kind="PRODUCTION"
     """n checked runs spread over the last `hours_ago_max` hours, the newest last."""
     return [dict(
         run_id=uuid.uuid4(), job_id=job.job_id, project_id=job.project_id, prompt=f"{model} {effort} {i}",
-        prompt_hash=prompt_hash(f"{model} {effort} {i}"), model=model, model_version=model, effort=effort,
+        prompt_hash=prompt_hash(f"{model} {effort} {i}", job.project_id), model=model, model_version=model, effort=effort,
         tokens_in=tokens, tokens_out=100, cost_usd=Decimal(str(cost)), run_kind=kind, state="INDEXED",
         outcome="PASS" if i < round(n * passed) else "FAIL",
         created_at=NOW - timedelta(hours=hours_ago_max) + timedelta(seconds=(i + 1) * hours_ago_max * 3600 / (n + 1)),
@@ -63,7 +63,7 @@ async def test_a_limit_used_up_before_it_resets_gets_the_proven_cheaper_model_pe
     [s] = f.suggestions
     assert (s.job, s.current, s.suggested) == ("invoice", "big", "mini")
     assert round(s.reduction, 3) == round(1 - 0.001 / 0.03, 3)
-    assert s.note.startswith("Shown within 3 points of big at 99% confidence")
+    assert s.note.startswith("Shown within 3 points of big at very high confidence (about 99.5%, one-sided)")
     assert f.lasts_after is True
     assert f.message.startswith("At this pace Weekly runs out in ") and f.message.endswith(
         "before it resets. With the suggested changes it lasts until the reset")
@@ -74,7 +74,7 @@ async def test_nothing_is_suggested_while_the_cheaper_model_is_unproven(session)
     f = await forecast(session, weekly(size=Decimal("38")), now=NOW, settings=SETTINGS)
     assert f.state == "AT_RISK"
     [s] = f.suggestions
-    assert s.suggested is None and s.note == "No cheaper option is proven for this job yet; a re-test of mini would tell"
+    assert s.suggested is None and s.note == "No cheaper option is proven for this AI task yet; a trial of mini would tell"
     assert f.lasts_after is None
 
 

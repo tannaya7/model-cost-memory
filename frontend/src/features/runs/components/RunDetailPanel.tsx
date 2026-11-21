@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useModalFocus } from "../../../ui/useModalFocus";
+import { jobTitle } from "../../jobs/jobTitle";
 import { useRunDetail } from "../hooks/useRunDetail";
 import { Badge } from "../../../shared/components/Badge";
 import { Skeleton } from "../../../shared/components/Skeleton";
@@ -33,18 +34,7 @@ export function RunDetailPanel({
   runId: string | null;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    if (!runId) return;
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    }
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [runId, onClose]);
+  const dialogRef = useModalFocus<HTMLDivElement>(!!runId, onClose);
 
   const { data: run, isPending, isError, error } = useRunDetail(runId);
 
@@ -61,10 +51,12 @@ export function RunDetailPanel({
 
       {/* Slide-over Drawer */}
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="run-detail-title"
-        className="relative z-50 flex h-full w-full max-w-2xl flex-col border-l border-rule bg-surface shadow-2xl overflow-y-auto"
+        className="relative z-50 flex h-full w-full max-w-2xl flex-col border-l border-rule bg-surface shadow-2xl overflow-y-auto focus:outline-none"
       >
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-rule bg-surface px-6 py-4">
@@ -151,8 +143,10 @@ export function RunDetailPanel({
               {/* Metadata Grid */}
               <div className="grid grid-cols-2 gap-4 rounded-card border border-rule p-4 text-sm sm:grid-cols-3">
                 <div>
-                  <div className="text-xs font-semibold uppercase tracking-wider text-dim">Job</div>
-                  <div className="mt-1 font-medium text-ink">{run.job}</div>
+                  <div className="text-xs font-semibold uppercase tracking-wider text-dim">AI task</div>
+                  <div className="mt-1 font-medium text-ink" title="Name in your code">
+                    {jobTitle(run.job)} <span className="ml-1 rounded-md border border-rule bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-dim">{run.job}</span>
+                  </div>
                 </div>
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-wider text-dim">Model</div>
@@ -208,15 +202,27 @@ export function RunDetailPanel({
                 </div>
               </div>
 
+              {run.content_removed_at && (
+                <p className="rounded-md border border-rule bg-bg p-3 text-xs text-dim">
+                  The prompt, output and tool calls were removed on{" "}
+                  {new Date(run.content_removed_at).toLocaleDateString()} under this project's retention
+                  setting. The result, cost and tokens are kept.
+                </p>
+              )}
+
               {/* Full Prompt */}
               <div>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-dim">
                   Full Prompt
                 </h3>
                 <div className="rounded-md border border-rule bg-bg p-3">
-                  <pre className="font-mono text-xs text-ink whitespace-pre-wrap break-words">
-                    {run.prompt}
-                  </pre>
+                  {run.prompt != null ? (
+                    <pre className="font-mono text-xs text-ink whitespace-pre-wrap break-words">
+                      {run.prompt}
+                    </pre>
+                  ) : (
+                    <p className="italic text-dim text-xs">Removed under the retention setting</p>
+                  )}
                 </div>
               </div>
 
@@ -231,7 +237,9 @@ export function RunDetailPanel({
                       {formatOutput(run.output)}
                     </pre>
                   ) : (
-                    <p className="italic text-dim text-xs">No output recorded</p>
+                    <p className="italic text-dim text-xs">
+                      {run.content_removed_at ? "Removed under the retention setting" : "No output recorded"}
+                    </p>
                   )}
                 </div>
               </div>

@@ -10,7 +10,7 @@ each with its run count and 95% interval, so a band with five runs is not read a
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,6 +56,51 @@ async def spend_by_job(
 
 
 @dataclass
+class DayPoint:
+    day: date
+    job: str
+    model: str
+    runs: int  # production runs that day
+    passed: int
+    failed: int  # UNKNOWN runs are in runs but in neither passed nor failed
+    spend_usd: float  # priced runs only
+    tokens_in: int = 0  # uncached input
+    tokens_out: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    unpriced_runs: int = 0  # runs with cost_usd NULL (no known price): not in spend_usd
+    failed_spend_usd: float = 0.0  # actual cost of the runs whose outcome is FAIL
+
+
+async def daily(session: AsyncSession, project_id: str, *, days: int = 60, job_id=None,
+                now: datetime | None = None) -> list[DayPoint]:
+    """Production runs, outcomes and spend per UTC day, job and model, oldest first: what the web app
+    draws as quality and spend over time."""
+    since = (now or datetime.now(UTC)) - timedelta(days=days)
+    day = func.date_trunc("day", func.timezone("UTC", Run.created_at)).label("day")
+    query = (
+        select(day, Job.name, Run.model, func.count(Run.run_id),
+               func.count(Run.run_id).filter(Run.outcome == "PASS"),
+               func.count(Run.run_id).filter(Run.outcome == "FAIL"),
+               func.coalesce(func.sum(Run.cost_usd), 0),
+               func.coalesce(func.sum(Run.tokens_in), 0), func.coalesce(func.sum(Run.tokens_out), 0),
+               func.coalesce(func.sum(Run.cache_read_tokens), 0), func.coalesce(func.sum(Run.cache_write_tokens), 0),
+               func.count(Run.run_id).filter(Run.cost_usd.is_(None)),
+               func.coalesce(func.sum(Run.cost_usd).filter(Run.outcome == "FAIL"), 0))
+        .join(Job, Job.job_id == Run.job_id)
+        .where(Run.project_id == project_id, Run.run_kind == "PRODUCTION", Run.created_at >= since)
+        .group_by(day, Job.name, Run.model)
+        .order_by(day, Job.name, Run.model)
+    )
+    if job_id is not None:
+        query = query.where(Run.job_id == job_id)
+    return [DayPoint(day=d.date(), job=j, model=m, runs=n, passed=p, failed=f, spend_usd=float(s),
+                     tokens_in=int(ti), tokens_out=int(to), cache_read_tokens=int(cr), cache_write_tokens=int(cw),
+                     unpriced_runs=int(up), failed_spend_usd=float(fs))
+            for d, j, m, n, p, f, s, ti, to, cr, cw, up, fs in (await session.execute(query)).all()]
+
+
+@dataclass
 class Breakdown:
     model: str
     group: str  # the input-size band or the prompt version
@@ -69,6 +114,8 @@ class Breakdown:
 
 
 def _band(tokens_in: int) -> str:
+    """Band of the whole input size: uncached + cache reads + cache writes (F22), so a heavily cached
+    100k-token prompt is not 'under 8k'."""
     return next(name for name, low, high in BANDS if tokens_in >= low and (high is None or tokens_in < high))
 
 
@@ -91,7 +138,8 @@ async def job_insights(
     since = (now or datetime.now(UTC)) - timedelta(days=days)
     rows = (
         await session.execute(
-            select(Run.model, Run.model_version, Run.tokens_in, Run.prompt_version, Run.outcome, Run.cost_usd)
+            select(Run.model, Run.model_version, Run.tokens_in + Run.cache_read_tokens + Run.cache_write_tokens,
+                   Run.prompt_version, Run.outcome, Run.cost_usd)
             .where(Run.job_id == job.job_id, Run.outcome.in_(("PASS", "FAIL")), Run.invalid_at.is_(None),
                    Run.created_at >= since)
         )
@@ -101,7 +149,7 @@ async def job_insights(
     by_prompt: dict = {}
     for r in rows:
         model = family_key(r.model, r.model_version)
-        for groups, group in ((overall, "all"), (by_band, _band(r.tokens_in)),
+        for groups, group in ((overall, "all"), (by_band, _band(r[2])),
                               (by_prompt, r.prompt_version or "unversioned")):
             runs, passed, cost, priced = groups.get((model, group), (0, 0, 0.0, 0))
             known = r.cost_usd is not None

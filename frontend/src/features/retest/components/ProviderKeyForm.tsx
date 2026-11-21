@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Card } from "../../../shared/components/Card";
+import { useToast } from "../../../ui/Toast";
 import { useSaveProviderKey } from "../hooks/useRetest";
 
 const PROVIDERS = [
@@ -12,6 +13,7 @@ const PROVIDERS = [
 /** Asked for the first time a re-test needs it, never at project creation. */
 export function ProviderKeyForm({ onSaved }: { onSaved: () => void }) {
   const save = useSaveProviderKey();
+  const toast = useToast();
   const [provider, setProvider] = useState("gemini");
   const [customName, setCustomName] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
@@ -23,12 +25,17 @@ export function ProviderKeyForm({ onSaved }: { onSaved: () => void }) {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!canSave) return;
-    await save.mutateAsync({
-      provider: isOther ? customName.trim().toLowerCase() : provider,
-      api_key: apiKey.trim(),
-      base_url: isOther ? baseUrl.trim() : null,
-    });
+    try {
+      await save.mutateAsync({
+        provider: isOther ? customName.trim().toLowerCase() : provider,
+        api_key: apiKey.trim(),
+        base_url: isOther ? baseUrl.trim() : null,
+      });
+    } catch {
+      return; // the error shows under the form and the pasted key stays
+    }
     setApiKey("");
+    toast({ message: "Provider key saved" });
     onSaved();
   }
 
@@ -38,15 +45,16 @@ export function ProviderKeyForm({ onSaved }: { onSaved: () => void }) {
   return (
     <Card className="space-y-4 border-accent/40 p-6">
       <div>
-        <h3 className="text-base font-semibold text-ink">Add the key re-tests should use</h3>
+        <h2 className="text-base font-semibold text-ink">Add the key trials on new models should use</h2>
         <p className="mt-1 text-xs text-dim">
-          Re-tests call the candidate model with your own provider key, so the spending is yours and stays
-          under the monthly cap above. Saving the key is your permission for re-tests to run within that cap,
-          including ones the system starts when a cheaper model appears. A job that has only ever used one
-          model gets one re-test of a cheaper model from this provider as soon as you save, with a small budget ($1 by default). Only
-          models with a known price are re-tested, so the cap always holds. The key is encrypted on the server and
-          only its last four characters are ever shown again. You can remove it at any time.
+          It stays under the monthly budget above. Stored encrypted; only the last 4 characters show. Remove it any time.
         </p>
+        <details className="mt-1 text-xs text-dim">
+          <summary className="cursor-pointer font-semibold text-accent">How trials use this key</summary>
+          <p className="mt-1">
+            A trial replays your past prompts on another model to see if it does as well. It uses your own provider key, so the spending is yours. Saving the key does not start anything. You choose each trial, review what it will send and roughly what it will cost, and confirm it first. Only models with a known price are tried, and the cost is estimated at list prices, so check your provider's own bill.
+          </p>
+        </details>
       </div>
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
         <label className="text-sm text-ink">

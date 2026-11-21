@@ -42,3 +42,19 @@ export function regenerateProjectKey(id: string): Promise<ProjectKeyResult> {
     },
   );
 }
+
+/** Deletes the project and everything recorded under it. `confirm` must repeat the project id. */
+export function deleteProject(id: string): Promise<null> {
+  return apiFetch<null>(
+    `/v1/projects/${encodeURIComponent(id)}?confirm=${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+}
+
+/** Removes the stored inputs of tool calls from every run. Resolves to how many runs were cleared. */
+export function deleteToolInputs(id: string): Promise<{ runs_cleared: number }> {
+  return apiFetch<{ runs_cleared: number }>(
+    `/v1/projects/${encodeURIComponent(id)}/tool-inputs`,
+    { method: "DELETE" },
+  );
+}

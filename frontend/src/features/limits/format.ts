@@ -4,9 +4,9 @@ type Tone = "neutral" | "ok" | "warn" | "bad" | "accent";
 
 export const STATE_LABELS: Record<LimitState, { label: string; tone: Tone }> = {
   OK: { label: "Lasts until reset", tone: "ok" },
-  AT_RISK: { label: "Runs out early", tone: "warn" },
+  AT_RISK: { label: "Will run out before it resets", tone: "warn" },
   EXHAUSTED: { label: "Used up", tone: "bad" },
-  UNKNOWN: { label: "Needs your reading", tone: "neutral" },
+  UNKNOWN: { label: "Enter what your plan shows", tone: "neutral" },
 };
 
 /** "sonnet-5@low" → "sonnet-5 · low effort". */

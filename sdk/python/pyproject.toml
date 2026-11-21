@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcm-recorder"
+version = "0.0.1"
+description = "Sends a copy of each AI call to a Model & Cost Memory dashboard. Never raises, never waits for the network."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["httpx"]
+classifiers = [
+    "Private :: Do Not Upload",  # until the owner chooses the public name and licence: PyPI refuses this
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

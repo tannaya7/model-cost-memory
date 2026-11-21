@@ -46,8 +46,8 @@ standby, so a re-test can never be started twice.
 ```
 freshness            R(t) = e^(-t / S),  S = importance × 30 × version_factor
                      version_factor = 1.00 current, 0.25 superseded (fades ~4× faster)
-weighted pass rate   Σ(R × passed) / Σ R, with S = 30 × version_factor (importance decides archiving
-                     and re-test sampling, never the average: an outcome-dependent weight biases it)
+weighted pass rate   Σ(R × passed) / Σ R, with S = 30 × version_factor (importance decides archiving,
+                     never the average or the re-test sample: an outcome-dependent weight biases both)
 cost per run         usage × catalog price (input, output incl. thinking, cache read, cache write)
 cost per success     mean cost / weighted pass rate
 pass-rate interval   Wilson 95%, over the Kish effective sample size (Σ R)² / Σ R²
@@ -74,14 +74,22 @@ usage limit          window = [resets_at − window_hours, resets_at), rolled fo
                      a one-model limit, the cheapest other option judged good enough
 savings forecast     saving = (cost per success now − recommended) × successes per month;
                      extra failures = (pass rate now − recommended) × runs per month, with its interval
-regression           one-sided two-proportion z-test, the current version against the one it replaced:
-                     p < boundary AND drop ≥ 3 points AND ≥ 30 runs a side. The sweep checks daily,
-                     so the boundary is strict early (z ≥ z₀.₀₀₅ × √(500 / n), but never past
+regression           one-sided two-proportion z-test, the current version against the one it replaced,
+                     within each input-size band (< 8k, 8k-32k, > 32k tokens in) and weighted by the new
+                     version's mix: drop = Σ w_b (p_old,b − p_new,b), var = Σ w_b² p̄_b(1 − p̄_b)(1/n_old,b
+                     + 1/n_new,b), so inputs that merely got longer are not a drop (one band: the plain
+                     test). p < boundary AND drop ≥ 3 points AND ≥ 30 runs a side. The sweep checks
+                     daily, so the boundary is strict early (z ≥ z₀.₀₀₅ × √(500 / n), but never past
                      p < 0.0001) and p < 0.005 from 500 runs on the new version
-silent drop          same version, last 28 days (≥ 20 with runs) split in half: p < 0.001 AND drop ≥ 3
-                     points, plus a standardized one-sided CUSUM over the second half (k = 0.5, h = 4)
-re-test spend        before every call: re-test spend + reserved + this call ≤ budget, and this month's
-                     project re-test spend (at list price) + reserved + this call ≤ the monthly cap
+silent drop          same version, last 28 days (≥ 20 with runs) split in half, compared band by band as
+                     above: p < 0.001 AND drop ≥ 3 points, plus a standardized one-sided CUSUM over the
+                     second half against what the first half's band rates predict for each day's own
+                     mix (k = 0.5, h = 4)
+re-test call         output limit = max(4 × the source run's output, 500 tokens); an answer cut off at it
+                     is UNKNOWN, not FAIL. Prompts sampled uniformly (importance over-sampled failures ~3×)
+re-test spend        each call reserves its worst case (input × price + output limit × price). Before it:
+                     spend + this call > budget (or month + this call > cap): stop; spend + reserved +
+                     this call > budget or cap: wait for a call in flight to settle; otherwise go
 ```
 
 Measured on the simulated-time harness (`scripts/simulate.py`, 100 trials each, 50 runs a day, watched 14
@@ -89,7 +97,10 @@ days after a version change and 28 after a silent drop): version regressions of 
 (likely 86-97%) and of 10 points 100/100, a 10-point one the day after the upgrade, with 2 false alarms in
 100 controls; silent drops of 5 points caught 77/100, of 10 points 100/100, with 1 false alarm in 100. At
 100 runs a day silent 5-point drops are caught 100/100 (median 8 days), so the stated target is 90% once a
-job has about 100 runs a day. An earlier 68% came from trials that ended 14 days after the drop, before the
+job has about 100 runs a day, with no false alarm in 100 controls there. With inputs drifting harder (long
+documents from 10% to 50% of the mix, `--drift`), false alarms stay at 2/100 for upgrades and 1/100 for silent
+controls, and 5-point drops are caught 81/100 and 65/100; comparing all runs together instead of band by band
+false-alarmed in 14/20 and 9/20 of those controls. An earlier 68% came from trials that ended 14 days after the drop, before the
 28-day window could split it cleanly, not from the detector. The earlier rule (a fixed p < 0.05 checked daily, 5-point minimum) looked
 alarm-free over 20 trials, but over 20,000 simulated ones it raised a false alarm on 7% of unchanged
 upgrades. Results in `reports/`.
@@ -109,10 +120,31 @@ which is why a DOWNGRADE now needs that comparison.
 | **Three independent paths** | Each can be slow or fail without dragging the others down |
 | **Swappable storage** | `VectorStoreClient` interface (pgvector now, Chroma as a fallback) |
 
+## Security and abuse limits
+
+| Risk | What stops it |
+|---|---|
+| A webhook or re-test URL pointing inside the server's network (metadata service, database) | `urls.py`: every address the host resolves to must be public, checked when saved and again before each call (DNS rebinding); redirects are not followed. `ALLOW_PRIVATE_URLS=true` lifts it for development or a local Ollama, and is refused on an https server |
+| A flood of requests or huge bodies | `ratelimit.py`: a token bucket per project key (1,200/min) or per IP without one (120/min) on `/v1` and `/auth`; bodies over 5 MB refused (also in Caddy); at most 200,000 runs per project per day |
+| Many people watching the live flow | one shared poller per watched project (`pipeline/flow_hub.py`) instead of a query per viewer per second; 3 live views per IP, 200 in all |
+| The public demo exposing the operator's account | the demo reads only the pages it shows; re-test history, key status and the re-test cap answer 403 |
+| A weak or development configuration on a public server | the API and the scheduler refuse to start when `PUBLIC_URL` is https and `SECRET_KEY` is missing, or with `DEV_LOGIN` or `ALLOW_PRIVATE_URLS` on; a `SECRET_KEY` must be 32+ characters |
+| One key used for two jobs | cookies and stored provider keys use different keys derived from `SECRET_KEY` (HMAC); keys stored before the split still decrypt |
+| A runaway re-test answer or a free quota emptied in a burst | every re-test call has an output limit and reserves its worst case; calls start at least 1 s apart, back off on 429 (Retry-After up to 5 min, with jitter) |
+| Customers' prompts kept forever, or a customer asking for erasure | `retention.py`: a run's prompt, answer, tool calls, answer key and embedding are cleared after the project's `content_retention_days` (90 by default, 1-3650) by a nightly job, keeping the figures the statistics use; `DELETE /v1/projects/{id}` (owner, with `?confirm=`) or `scripts/delete_project.py` removes a project and everything under it in one transaction |
+| Another site framing the app or injecting script | Caddy sends a strict `Content-Security-Policy` (scripts and data from this origin only, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, HSTS and `nosniff` |
+| A database left on a default password | `docker-compose.yml` refuses to start without `POSTGRES_PASSWORD`; the database port is bound to localhost |
+| A dependency changing or turning vulnerable between builds | every Python version is pinned in `requirements-lock.txt` (installed by CI and the image), npm in `package-lock.json`; CI runs `pip-audit` and `npm audit`, and Dependabot proposes updates weekly |
+| A stopped scheduler or failing job going unnoticed | every scheduled job leaves a heartbeat (`heartbeat.py`); `GET /healthz/scheduler` answers 503 when one is overdue, for an uptime monitor, and `OPERATOR_WEBHOOK_URL` hears about each failure |
+| A news feed sending hostile XML, huge bodies or script links | feeds are a fixed list in `news/feeds.py`, never user input; parsed with `defusedxml` (no entity expansion), bodies over 3 MB refused, summaries reduced to plain text, only http(s) links kept; refreshes at most once every 10 minutes |
+| Losing the server and its backups together | `deploy/backup.sh` copies each nightly dump off the machine (`BACKUP_REMOTE`, an rclone crypt remote) and pings `BACKUP_PING_URL`, so a backup that stops is noticed |
+
+The limits live in the one API process's memory; behind several API processes each would count on its own.
+
 ## Data model
 
 The authoritative schema is [`db/schema.sql`](../db/schema.sql): `users`, `projects`, `provider_keys`,
-`jobs`, `retests`, `runs`, `recommendations`, `outbox`, `model_catalog`, `model_prices`, `alerts`, `flow_events`.
+`jobs`, `retests`, `runs`, `recommendations`, `outbox`, `model_catalog`, `model_prices`, `alerts`, `flow_events`, `usage_limits`, `recommendation_summaries`, `scheduler_heartbeats`, `news_items`.
 
 - `recommendations.consolidated_from` links a conclusion to every run behind it.
 - `recommendations.superseded_by_id` links it to the conclusion that replaced it, with a date and
@@ -142,12 +174,20 @@ The authoritative schema is [`db/schema.sql`](../db/schema.sql): `users`, `proje
 - `recommendations.current_model` records what production used when a verdict was made, so history can say what
   was recommended instead of what.
 - `alerts.dedupe_key` (one open alert per finding) and `delivery_attempts` / `next_attempt_at` (webhook retries with
-  backoff). Payloads are signed with `projects.webhook_secret` (HMAC-SHA256, header `X-MCM-Signature`) and carry a
+  backoff, sent in parallel); after 10 failed attempts `delivery_failed_at` records that delivery gave up, and saving a
+  new webhook URL tries again. The reason (`last_error`) stays on the server. Payloads are signed with `projects.webhook_secret` (HMAC-SHA256, header `X-MCM-Signature`) and carry a
   one-line `text`/`content` message, so a Slack, Discord, Google Chat or Mattermost incoming webhook works directly.
-- `retests` records each replay: trigger (`MANUAL`, `NEW_MODEL`, `UNSURE`), budget, spend, progress and why it
-  stopped. `provider_keys` holds the customer's key for re-tests, encrypted with the server's `SECRET_KEY`; only the
-  last four characters are ever shown.
+- `retests` records each replay: trigger (`MANUAL`, `NEW_MODEL`, `UNSURE`, `FIRST_KEY`), budget, spend, progress and
+  why it stopped. `provider_keys` holds the customer's key for re-tests, encrypted with a key derived from the server's
+  `SECRET_KEY` (a different one signs cookies); only the last four characters are ever shown.
+- `recommendation_summaries` stores the optional two-sentence summary once per verdict (job, summary model, prompt
+  version and what the verdict says, not its exact figures), with a server-wide daily limit on calls.
 - `users` and `projects.owner_user_id`: Google sign-in; a signed-in user sees only their own projects.
+- `runs.content_removed_at` marks a run whose prompt, output, tool calls, answer key and embedding were cleared
+  under `projects.content_retention_days`; `runs.prompt` is then null, and re-tests and similar-run search skip it.
+- `scheduler_heartbeats` holds when each scheduled job last succeeded or failed, read by `/healthz/scheduler`.
+- `news_items` holds AI headlines from a fixed list of public feeds (plain-text summaries, http(s) links only),
+  shared by every project and kept 30 days; whether a story names a project's models is worked out when listing.
 - `flow_events` is the live data-flow view's trail (`sdk → api → check → index → consolidate`), written in the same
   transaction as each step and deleted after a day.
 - The schema changes only through Alembic migrations (`migrations/versions/`). `db/schema.sql` is the reference
@@ -163,6 +203,7 @@ The machine-readable contract is [`contract/openapi.json`](../contract/openapi.j
 | Method | Path | Purpose | Built |
 |---|---|---|---|
 | `GET` | `/healthz` | Liveness and database check (no key) | W2 |
+| `GET` | `/healthz/scheduler` | 503 when a scheduled job is overdue; job names and ages only (no key) | W12 |
 | `GET` | `/v1/jobs` | Jobs with run counts, in total and per state | W2 |
 | `POST` | `/v1/jobs` | Define a job and its success check | W3 |
 | `GET` | `/v1/runs` | Recorded runs, newest first, filtered and paged; `?recommendation=` lists a verdict's runs | W2, W8 |
@@ -172,6 +213,7 @@ The machine-readable contract is [`contract/openapi.json`](../contract/openapi.j
 | `GET` | `/v1/models` | Model catalog: price, status and shutdown dates | W6 |
 | `GET` | `/v1/jobs/{job}/recommendation` | Cheapest model that passes, with evidence, forecast and optional summary | W7, W8 |
 | `GET` | `/v1/insights/spend` | Spend by job | W7 |
+| `GET` | `/v1/insights/daily` | Runs, outcomes and spend per day, job and model (`?days=`, `?job=`): the web app's charts over time | W12 |
 | `GET` | `/v1/jobs/{job}/history` | Every verdict, newest first: what changed, when and why (recursive SQL) | W8 |
 | `GET` | `/v1/jobs/{job}/regressions` | The job's alerts (open by default) | W9 |
 | `GET` | `/v1/alerts` | Every job's alerts in the project | W9 |
@@ -190,7 +232,10 @@ The machine-readable contract is [`contract/openapi.json`](../contract/openapi.j
 | `POST` | `/auth/logout` | End the session | W11 |
 | `GET` | `/v1/me` | The signed-in user | W11 |
 | `GET` / `POST` | `/v1/projects` | The user's own projects; create one (its key is returned once) | W11 |
-| `GET` / `PATCH` | `/v1/projects/{id}` | Name, alert webhook, monthly re-test cap, re-test switch | W11 |
+| `GET` / `PATCH` | `/v1/projects/{id}` | Name, alert webhook, monthly re-test cap, re-test switch, days run content is kept | W11, W12 |
+| `DELETE` | `/v1/projects/{id}?confirm={id}` | Delete the project and everything recorded under it | W12 |
+| `GET` | `/v1/news` | Latest AI news from public feeds, with stories naming this project's models marked; `?mine=`, `?source=`, `?model=` (an alert's model), `?job=` (a job's models), `?since=`/`?until=` | W12 |
+| `POST` | `/v1/news/refresh` | Fetch the feeds now, at most once every 10 minutes across everyone | W12 |
 | `POST` | `/v1/projects/{id}/key` | A new project key, shown once; the old one stops working | W11 |
 | `GET` | `/v1/jobs/{job}/insights` | Cost per success per model; pass rate by input size and prompt version | W11 |
 | `GET` | `/v1/flow` | The live data-flow trail, polled | W12 |
@@ -207,6 +252,9 @@ src/agent_memory/
 ├── security.py        project keys, webhook secrets, encryption of stored provider keys
 ├── logging_config.py  structured JSON logs carrying run_id, job_id and project_id
 ├── privacy.py         what is kept about a run: tool names and ids only, unless a project opts in
+├── retention.py       clearing old run content after each project's retention; deleting a project
+├── heartbeat.py       scheduled-job heartbeats, the overdue check and the operator's failure message
+├── news/              AI news: the feed list and safe RSS/Atom parsing, hourly refresh, "affects your models"
 ├── api.py             FastAPI routes (data); auth/routes.py adds sign-in and projects
 ├── ingest.py          write path: jobs, runs, outcomes, late labels (run + outbox row in one transaction)
 ├── projects.py        create a project and its key
@@ -215,23 +263,25 @@ src/agent_memory/
 ├── embeddings.py      MiniLM and hashing embedders behind an LRU cache
 ├── corpus.py          invoice-extraction corpus with exact known answers
 ├── recorder.py        RunRecorder SDK
-├── scheduler.py       maintenance jobs: janitor, decay, consolidation, regression sweep, re-tests, alerts, catalog
+├── scheduler.py       maintenance jobs: janitor, decay, consolidation, regression sweep, re-tests, alerts, catalog, retention, news
 ├── checks/            OutcomeChecker interface; answer key, schema, late label (test command and sandbox: later)
 ├── storage/           vector_store (pgvector); lineage (recursive SQL over superseded_by_id)
 ├── pipeline/          sync_worker, janitor, scoring, decay, consolidation, regression, flow events
 ├── catalog/           model catalog: daily sync from the public price list, manual overrides
 ├── recommend/         stats (intervals, tolerance rule), engine, forecast, cache, optional summary
-├── retest/            budgeted, importance-sampled replay: the only code that spends money
+├── retest/            budgeted, uniformly sampled replay: the only code that spends money
 ├── simulation/        simulated-time harness, regression evaluation, staleness experiment
 ├── auth/              Google sign-in, session cookie, project ownership, the public demo
 ├── insights/          spend and pass-rate breakdowns
 ├── alerts/            alert records, signed webhook delivery with backoff
 └── prompts/           the one prompt file the system owns
-migrations/            Alembic: the only way the schema changes (0001-0008)
+migrations/            Alembic: the only way the schema changes (0001-0016)
 contract/              OpenAPI file and sample responses the web app is built against
 corpus/                the generated invoice corpus
 deploy/                Caddy, backup, restore and deploy files for the server
-frontend/              React web app: feature folders, shared data layer and components
+frontend/              React web app: / landing, /signin, /projects, /projects/new, then /p/<project>/... for one project.
+                       screens/ (Overview, Jobs, a job's workspace, Models, Activity, Settings), ui/ (design
+                       system, charts), features/ (data layer and forms per feature), app/ (frame and routing)
 reports/               measured results: regression detection, silent drops, the staleness experiment
 scripts/               create_project, sync_catalog, build/run_corpus, simulate, staleness_experiment, seed_demo, ...
 db/schema.sql · tests/ · docker-compose.yml · Dockerfile · pyproject.toml
@@ -241,7 +291,7 @@ db/schema.sql · tests/ · docker-compose.yml · Dockerfile · pyproject.toml
 
 Python 3.11 · FastAPI · Pydantic v2 · PostgreSQL + SQLAlchemy 2 + Alembic · pgvector with local
 `all-MiniLM-L6-v2` embeddings · scipy · APScheduler · cachetools · `cryptography` (provider keys) · `openai` client
-for re-tests and demo data against any OpenAI-compatible endpoint (Gemini and Groq free tiers) · `anthropic` for the
-optional summary (Claude Haiku) · React + Vite +
+for re-tests, demo data and the optional summary against any OpenAI-compatible endpoint (Gemini and Groq free
+tiers; the summary defaults to gemini-3.5-flash-lite at minimal thinking) · React + Vite +
 TypeScript web app (TanStack Query, React Router, Recharts) with Google sign-in via `authlib` ·
 Neon (hosted PostgreSQL) for development, docker-compose on one VPS behind Caddy (HTTPS) for production.

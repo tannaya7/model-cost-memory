@@ -1,3 +1,4 @@
+import { useBillingMode } from "../../projects/hooks/useBillingMode";
 import { Link } from "react-router-dom";
 import type { HistoryEntry } from "../../../shared/api/types";
 import { Badge } from "../../../shared/components/Badge";
@@ -27,33 +28,34 @@ function getReasonChip(reason: HistoryEntry["supersession_reason"]) {
     case "MODEL_UPGRADE":
       return <Badge tone="accent">Model upgrade</Badge>;
     case "EVIDENCE_DECAYED":
-      return <Badge tone="neutral">Evidence went stale</Badge>;
+      return <Badge tone="neutral">Older checks, now less reliable</Badge>;
     case "REGRESSION":
-      return <Badge tone="bad">Regression</Badge>;
+      return <Badge tone="bad">Quality drop</Badge>;
     case "MODEL_RETIRED":
       return <Badge tone="warn">Model retired</Badge>;
     case "NEW_EVIDENCE":
-      return <Badge tone="neutral">New evidence</Badge>;
+      return <Badge tone="neutral">New checked answers</Badge>;
     default:
       return null;
   }
 }
 
 export function JobHistoryTimeline({ jobName }: { jobName: string }) {
+  const { mode: billing } = useBillingMode();
   const query = useJobHistory(jobName);
 
   return (
     <QueryState
       query={query}
-      emptyTitle="No recommendation has been made for this job yet."
-      emptyHint="Record runs to trigger model recommendations."
+      emptyTitle="No recommendation has been made for this AI task yet."
+      emptyHint="Our recommendations appear once your app has sent AI calls for this task and their answers have been checked."
     >
       {({ entries: history, versions }) => {
         if (history.length === 0) {
           return (
             <EmptyState
-              title="No recommendation has been made for this job yet."
-              hint="Record runs to trigger model recommendations."
+              title="No recommendation has been made for this AI task yet."
+              hint="Our recommendations appear once your app has sent AI calls for this task and their answers have been checked."
             />
           );
         }
@@ -99,7 +101,7 @@ export function JobHistoryTimeline({ jobName }: { jobName: string }) {
                           getReasonChip(entry.supersession_reason)}
                       </div>
                       <div className="flex items-center gap-2">
-                        {getVerdictChip(entry.verdict)}
+                        {getVerdictChip(entry.verdict, billing === "subscription")}
                       </div>
                     </div>
 
@@ -132,7 +134,7 @@ export function JobHistoryTimeline({ jobName }: { jobName: string }) {
                     {/* Numbers: Pass rate, Cost per success, built from N runs */}
                     <div className="grid grid-cols-1 gap-3 rounded-card border border-rule bg-bg p-3 sm:grid-cols-3">
                       <div>
-                        <div className="text-xs text-dim">Pass rate</div>
+                        <div className="text-xs text-dim">Correct answers</div>
                         <div className="font-mono text-base font-bold text-ink">
                           {entry.weighted_pass_rate !== null
                             ? `${(entry.weighted_pass_rate * 100).toFixed(1)}%`
@@ -140,7 +142,7 @@ export function JobHistoryTimeline({ jobName }: { jobName: string }) {
                         </div>
                       </div>
                       <div>
-                        <div className="text-xs text-dim">Cost / success</div>
+                        <div className="text-xs text-dim">{billing === "per_use" ? "Cost per correct answer" : "Cost per correct answer, at list prices"}</div>
                         <div className="font-mono text-base font-bold text-ink">
                           {entry.cost_per_success_usd !== null
                             ? `$${entry.cost_per_success_usd.toFixed(4)}`
@@ -148,12 +150,12 @@ export function JobHistoryTimeline({ jobName }: { jobName: string }) {
                         </div>
                       </div>
                       <div>
-                        <div className="text-xs text-dim">Evidence</div>
+                        <div className="text-xs text-dim">Checked answers</div>
                         <div className="text-xs font-medium text-ink">
-                          built from {entry.n_runs.toLocaleString()} runs
+                          built from {entry.n_runs.toLocaleString()} AI calls
                         </div>
                         <div className="font-mono text-[11px] text-dim">
-                          weight: {entry.evidence_weight.toFixed(1)}
+                          how much it counts: {entry.evidence_weight.toFixed(1)}
                         </div>
                       </div>
                     </div>
@@ -161,10 +163,10 @@ export function JobHistoryTimeline({ jobName }: { jobName: string }) {
                     {/* Footer link to runs */}
                     <div className="flex justify-end pt-1">
                       <Link
-                        to={`/runs?recommendation=${entry.recommendation_id}`}
+                        to={`?tab=runs&recommendation=${entry.recommendation_id}`}
                         className="text-xs font-semibold text-accent hover:underline"
                       >
-                        See these runs →
+                        See these AI calls →
                       </Link>
                     </div>
                   </Card>
@@ -174,7 +176,7 @@ export function JobHistoryTimeline({ jobName }: { jobName: string }) {
           </div>
 
           <Card className="space-y-3">
-            <h3 className="text-base font-bold tracking-tight text-ink">Model versions this job ran on</h3>
+            <h3 className="text-base font-bold tracking-tight text-ink">Model versions this AI task used</h3>
             <div className="divide-y divide-rule">
               {versions.map((v) => (
                 <div
@@ -183,7 +185,7 @@ export function JobHistoryTimeline({ jobName }: { jobName: string }) {
                 >
                   <span className="font-mono text-ink">{v.model_version}</span>
                   <span className="text-dim">
-                    {v.runs.toLocaleString()} runs · {formatTimestamp(v.first_seen)} to {formatTimestamp(v.last_seen)}
+                    {v.runs.toLocaleString()} AI calls · {formatTimestamp(v.first_seen)} to {formatTimestamp(v.last_seen)}
                   </span>
                 </div>
               ))}

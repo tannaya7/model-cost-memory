@@ -24,7 +24,7 @@ def dev_login(monkeypatch):
 async def test_dev_login_is_off_unless_enabled(client):
     assert (await client.post("/auth/dev/login", json={"email": "a@example.com"})).status_code == 404
     config = (await client.get("/auth/config")).json()
-    assert config == {"google": False, "dev_login": False, "demo_project_id": None}
+    assert config == {"google": False, "dev_login": False, "demo_project_id": None, "auto_replays": False}
 
 
 async def test_google_sign_in_is_not_offered_without_credentials(client):
@@ -119,3 +119,135 @@ async def test_job_insights_break_pass_rate_down_by_input_size_and_prompt_versio
     assert bands["under 8k"]["pass_rate"] == 1.0 and bands["8k to 32k"]["pass_rate"] == 0.5
     assert bands["8k to 32k"]["pass_rate_low"] < 0.5 < bands["8k to 32k"]["pass_rate_high"]
     assert {b["group"] for b in body["by_prompt_version"]} == {"v1", "v2"}
+
+
+async def test_a_person_can_remember_which_first_visit_guides_they_saw(client, dev_login):
+    await dev_login(client, "ana@example.com")
+    assert (await client.get("/v1/me")).json()["ui_flags"] == {}
+    saved = await client.patch("/v1/me/ui-flags", json={"tour_seen": True})
+    assert saved.status_code == 200 and saved.json()["ui_flags"] == {"tour_seen": True}
+    again = await client.patch("/v1/me/ui-flags", json={"first_results_seen": True})
+    assert again.json()["ui_flags"] == {"tour_seen": True, "first_results_seen": True}
+    assert (await client.get("/v1/me")).json()["ui_flags"] == {"tour_seen": True, "first_results_seen": True}
+    replay = await client.patch("/v1/me/ui-flags", json={"tour_seen": False})
+    assert replay.json()["ui_flags"] == {"tour_seen": False, "first_results_seen": True}
+
+
+async def test_only_the_two_guide_flags_can_be_saved_and_only_as_true_or_false(client, dev_login):
+    await dev_login(client, "ana@example.com")
+    for bad in ({"theme": True}, {"tour_seen": "yes"}, {"tour_seen": 1}, {"tour_seen": {"a": 1}}):
+        assert (await client.patch("/v1/me/ui-flags", json=bad)).status_code == 422, bad
+    assert (await client.get("/v1/me")).json()["ui_flags"] == {}
+
+
+async def test_the_flags_belong_to_the_account_and_need_a_sign_in(client, dev_login):
+    assert (await client.patch("/v1/me/ui-flags", json={"tour_seen": True})).status_code == 401
+    await dev_login(client, "ana@example.com")
+    await client.patch("/v1/me/ui-flags", json={"tour_seen": True})
+    await client.post("/auth/logout")
+    await dev_login(client, "ben@example.com")
+    assert (await client.get("/v1/me")).json()["ui_flags"] == {}
+
+
+async def test_tool_inputs_are_off_by_default_and_the_owner_can_switch_them(client, dev_login):
+    await dev_login(client, "ana@example.com")
+    pid = (await client.post("/v1/projects", json={"name": "Demo"})).json()["project"]["project_id"]
+    assert (await client.get(f"/v1/projects/{pid}")).json()["store_tool_arguments"] is False
+    on = await client.patch(f"/v1/projects/{pid}", json={"store_tool_arguments": True})
+    assert on.json()["store_tool_arguments"] is True
+    # an unrelated change leaves the switch alone
+    assert (await client.patch(f"/v1/projects/{pid}", json={"name": "Renamed"})).json()["store_tool_arguments"] is True
+    assert (await client.patch(f"/v1/projects/{pid}", json={"store_tool_arguments": False})).json()["store_tool_arguments"] is False
+    assert (await client.patch(f"/v1/projects/{pid}", json={"store_tool_arguments": "maybe"})).status_code == 422
+
+
+async def test_only_the_owner_changes_or_clears_tool_inputs(client, dev_login):
+    await dev_login(client, "ana@example.com")
+    pid = (await client.post("/v1/projects", json={"name": "Demo"})).json()["project"]["project_id"]
+    await client.post("/auth/logout")
+    assert (await client.patch(f"/v1/projects/{pid}", json={"store_tool_arguments": True})).status_code == 401
+    assert (await client.delete(f"/v1/projects/{pid}/tool-inputs")).status_code == 401
+    await dev_login(client, "ben@example.com")
+    assert (await client.patch(f"/v1/projects/{pid}", json={"store_tool_arguments": True})).status_code in (403, 404)
+    assert (await client.delete(f"/v1/projects/{pid}/tool-inputs")).status_code in (403, 404)
+
+
+async def test_deleting_tool_inputs_keeps_names_and_other_runs(client, dev_login, session):
+    me = await dev_login(client, "ana@example.com")
+    assert me
+    pid = (await client.post("/v1/projects", json={"name": "Demo"})).json()["project"]["project_id"]
+    other, _ = await create_project(session, "someone-else")
+    job = Job(project_id=pid, name="a", check_kind="ANSWER_KEY", check_config={"fields": ["t"]})
+    other_job = Job(project_id="someone-else", name="a", check_kind="ANSWER_KEY", check_config={"fields": ["t"]})
+    session.add_all([job, other_job])
+    await session.flush()
+    kept = [{"name": "lookup", "id": "c1", "arguments": {"q": "secret"}}, {"name": "send", "id": "c2"}]
+
+    def run(job_id, project_id, calls):
+        return Run(run_id=uuid.uuid4(), job_id=job_id, project_id=project_id, prompt="p", prompt_hash="h", model="m",
+                   model_version="m-1", tokens_in=1, outcome="PASS", cost_usd=0.001, state="INDEXED", tool_calls=calls)
+
+    mine, theirs, plain = run(job.job_id, pid, kept), run(other_job.job_id, "someone-else", kept), run(job.job_id, pid, [{"name": "x", "id": "c3"}])
+    session.add_all([mine, theirs, plain])
+    await session.commit()
+    done = await client.delete(f"/v1/projects/{pid}/tool-inputs")
+    assert done.status_code == 200 and done.json() == {"runs_cleared": 1}
+    await session.refresh(mine), await session.refresh(theirs), await session.refresh(plain)
+    assert mine.tool_calls == [{"name": "lookup", "id": "c1"}, {"name": "send", "id": "c2"}]
+    assert theirs.tool_calls == kept and plain.tool_calls == [{"name": "x", "id": "c3"}]
+
+
+async def test_billing_mode_defaults_to_per_use_and_the_owner_can_change_it(client, dev_login):
+    await dev_login(client, "ana@example.com")
+    made = (await client.post("/v1/projects", json={"name": "Demo"})).json()["project"]
+    pid = made["project_id"]
+    assert made["billing_mode"] == "per_use"  # existing behaviour is unchanged unless someone opts in
+    assert (await client.get(f"/v1/projects/{pid}")).json()["billing_mode"] == "per_use"
+    assert (await client.patch(f"/v1/projects/{pid}", json={"billing_mode": "subscription"})).json()["billing_mode"] == "subscription"
+    # an unrelated change leaves it alone
+    assert (await client.patch(f"/v1/projects/{pid}", json={"name": "Renamed"})).json()["billing_mode"] == "subscription"
+    assert (await client.patch(f"/v1/projects/{pid}", json={"billing_mode": "both"})).json()["billing_mode"] == "both"
+    assert [p["billing_mode"] for p in (await client.get("/v1/projects")).json()] == ["both"]
+    assert (await client.patch(f"/v1/projects/{pid}", json={"billing_mode": "free"})).status_code == 422
+    assert (await client.patch(f"/v1/projects/{pid}", json={"billing_mode": None})).json()["billing_mode"] == "both"
+
+
+async def test_a_project_can_be_created_with_a_billing_mode(client, dev_login):
+    await dev_login(client, "ana@example.com")
+    made = await client.post("/v1/projects", json={"name": "Sub", "billing_mode": "subscription"})
+    assert made.json()["project"]["billing_mode"] == "subscription"
+    assert (await client.post("/v1/projects", json={"name": "Bad", "billing_mode": "x"})).status_code == 422
+
+
+async def test_only_the_owner_changes_the_billing_mode(client, dev_login):
+    await dev_login(client, "ana@example.com")
+    pid = (await client.post("/v1/projects", json={"name": "Demo"})).json()["project"]["project_id"]
+    await client.post("/auth/logout")
+    assert (await client.patch(f"/v1/projects/{pid}", json={"billing_mode": "both"})).status_code == 401
+    await dev_login(client, "ben@example.com")
+    assert (await client.patch(f"/v1/projects/{pid}", json={"billing_mode": "both"})).status_code in (403, 404)
+
+
+async def test_f22_input_size_band_counts_cached_tokens(client, session):
+    project, key = await create_project(session, "bands")
+    job = Job(project_id="bands", name="doc", check_kind="ANSWER_KEY", check_config={"fields": ["t"]})
+    session.add(job)
+    await session.flush()
+    session.add(Run(
+        run_id=uuid.uuid4(), job_id=job.job_id, project_id="bands", prompt="p", prompt_hash="h", model="mini",
+        model_version="mini-2026-09", tokens_in=500, cache_read_tokens=100_000, outcome="PASS", cost_usd=0.002,
+        state="INDEXED", created_at=datetime.now(UTC) - timedelta(hours=1),
+    ))
+    await session.commit()
+    body = (await client.get("/v1/jobs/doc/insights", headers={"X-API-Key": key})).json()
+    assert [b["group"] for b in body["by_input_size"]] != ["under 8k"]
+
+
+async def test_the_welcome_flag_is_saved_per_account_and_nothing_else_is_accepted(client, dev_login):
+    await dev_login(client, "new@example.com")
+    assert (await client.get("/v1/me")).json()["ui_flags"] == {}
+    saved = await client.patch("/v1/me/ui-flags", json={"welcome_seen": True})
+    assert saved.status_code == 200 and saved.json()["ui_flags"] == {"welcome_seen": True}
+    assert (await client.patch("/v1/me/ui-flags", json={"name": "x"})).status_code == 422
+    await dev_login(client, "other@example.com")
+    assert (await client.get("/v1/me")).json()["ui_flags"] == {}

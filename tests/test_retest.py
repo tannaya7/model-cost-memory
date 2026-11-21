@@ -27,30 +27,37 @@ from agent_memory.retest.runner import (
 )
 from agent_memory.security import decrypt, generate_key, hash_key
 
-SETTINGS = Settings(secret_key="test-secret", retest_concurrency=2, retest_default_sample=20)
+SETTINGS = Settings(secret_key="test-secret", retest_concurrency=2, retest_default_sample=20, auto_replays=True)  # these tests exercise the automatic triggers
 
 
 class FakeProvider:
     """Answers with the right total `accuracy` of the time, like a model would."""
 
-    def __init__(self, accuracy=1.0, fail_after=None):
+    def __init__(self, accuracy=1.0, fail_after=None, cut_off_every=None):
         self.accuracy, self.fail_after, self.calls = accuracy, fail_after, 0
-        self.efforts = []
+        self.cut_off_every = cut_off_every
+        self.efforts, self.max_tokens = [], []
 
-    async def complete(self, model, prompt, effort=None):
+    async def complete(self, model, prompt, effort=None, max_tokens=None):
         self.calls += 1
         self.efforts.append(effort)
+        self.max_tokens.append(max_tokens)
         if self.fail_after is not None and self.calls > self.fail_after:
             raise RateLimited("429")
+        if self.cut_off_every and self.calls % self.cut_off_every == 0:  # ran out of output room
+            return {"model": f"{model}-2026-10-01", "usage": {"prompt_tokens": 1000, "completion_tokens": max_tokens},
+                    "choices": [{"message": {"content": '{"total": 10'}, "finish_reason": "length"}]}
         right = (self.calls % 10) < self.accuracy * 10  # e.g. 0.9: every tenth answer is wrong
         return {"model": f"{model}-2026-10-01", "usage": {"prompt_tokens": 1000, "completion_tokens": 100},
-                "choices": [{"message": {"content": '{"total": %s}' % (100.0 if right else 1.0)}}]}
+                "choices": [{"message": {"content": '{"total": %s}' % (100.0 if right else 1.0)},
+                             "finish_reason": "stop"}]}
 
 
 @pytest.fixture
 async def world(session):
     key = generate_key()
-    session.add(Project(project_id="demo", api_key_hash=hash_key(key), retest_monthly_cap_usd=Decimal("10")))
+    session.add(Project(project_id="demo", api_key_hash=hash_key(key), retest_monthly_cap_usd=Decimal("10"),
+                        auto_retests=True))  # these tests exercise the automatic triggers, which are opt-in
     session.add(CatalogEntry(model="mini", model_version="mini", provider="acme", price_in_per_mtok=Decimal("1"),
                              price_out_per_mtok=Decimal("2")))  # $0.0012 per replayed run
     await session.flush()
@@ -61,7 +68,7 @@ async def world(session):
     for i in range(60):
         session.add(Run(
             run_id=uuid.uuid4(), job_id=job.job_id, project_id="demo", prompt=f"invoice {i}",
-            prompt_hash=prompt_hash(f"invoice {i}"),
+            prompt_hash=prompt_hash(f"invoice {i}", "demo"),
             model="big", model_version="big-2026-09", outcome="PASS", cost_usd=0.03, state="INDEXED",
             tokens_in=1000, tokens_out=100, expected={"total": 100.0},
             importance_score=3.0 if i < 10 else 1.0, created_at=datetime.now(UTC) - timedelta(hours=i),
@@ -105,26 +112,28 @@ async def test_a_re_test_replays_runs_records_them_and_stays_within_budget(engin
 
 
 async def test_the_budget_stops_a_re_test_before_it_is_exceeded(engine, session, world):
+    # A run costs $0.0012, but a call may answer up to its 500-token output limit, $0.002, and that worst
+    # case is what is reserved. After 3 runs ($0.0036) a 4th could reach $0.0056, over $0.005: stop.
     _, project, job = world
-    retest = await enqueue(session, project, job, "mini", 0.005, "MANUAL")  # room for 4 runs at $0.0012
+    retest = await enqueue(session, project, job, "mini", 0.005, "MANUAL")
     await session.commit()
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     done = await run_retest(sessions, retest.retest_id, settings=SETTINGS, client_factory=factory(FakeProvider()),
                             sample_size=20)
-    assert done.status == "STOPPED_BUDGET" and done.runs_done == 4
+    assert done.status == "STOPPED_BUDGET" and done.runs_done == 3
     assert Decimal(done.spent_usd) <= Decimal("0.005")
 
 
 async def test_the_monthly_cap_stops_a_re_test(engine, session, world):
     _, project, job = world
-    project.retest_monthly_cap_usd = Decimal("0.01")  # whole cents; room for 8 runs at $0.0012
+    project.retest_monthly_cap_usd = Decimal("0.01")  # whole cents: 7 runs, then an 8th could reach $0.0104
     await session.commit()
     retest = await enqueue(session, project, job, "mini", 1.0, "MANUAL")
     await session.commit()
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     done = await run_retest(sessions, retest.retest_id, settings=SETTINGS, client_factory=factory(FakeProvider()),
                             sample_size=20)
-    assert done.status == "STOPPED_CAP" and done.runs_done == 8
+    assert done.status == "STOPPED_CAP" and done.runs_done == 7
 
 
 async def test_a_provider_that_keeps_rate_limiting_fails_with_partial_results(engine, session, world):
@@ -150,11 +159,16 @@ async def test_a_prompt_is_never_replayed_twice_on_the_same_model(engine, sessio
     assert len(await sample_sources(session, job, "mini", 60)) == 40
 
 
-async def test_sampling_prefers_important_runs(session, world):
+async def test_sampling_is_uniform_so_failures_do_not_make_a_candidate_look_worse(session, world):
+    # 10 of the 60 runs are "important" (as failed runs are). Importance-weighted sampling picked them
+    # about three times too often, so the replayed prompts were harder than production's.
     _, _, job = world
-    picked = await sample_sources(session, job, "mini", 10, seed=7)
-    important = sum(int(r.prompt.split()[1]) < 10 for r in picked)
-    assert important >= 4  # 10 of 60 runs weigh 3x: far more than the 1-2 a uniform draw would give
+    counts = []
+    for seed in range(200):
+        picked = await sample_sources(session, job, "mini", 10, seed=seed)
+        assert len({r.prompt_hash for r in picked}) == 10  # without replacement
+        counts.append(sum(int(r.prompt.split()[1]) < 10 for r in picked))
+    assert 1.4 < sum(counts) / len(counts) < 1.95  # uniform: 10 x 10/60 = 1.67 on average
 
 
 @pytest.mark.parametrize(
@@ -173,14 +187,23 @@ async def test_re_tests_refuse_to_start_without_consent(session, world, change, 
     assert exc.value.code == code
 
 
+async def confirmed(client, headers, **body):
+    """The two steps a person takes: preview (no provider call), then start with its confirmation."""
+    preview = (await client.post("/v1/jobs/invoice/retest/preview", headers=headers, json=body)).json()
+    assert preview["can_start"] is True, preview
+    return {**body, "confirmation": preview["confirmation"]}
+
+
 async def test_without_a_provider_key_the_web_app_is_told_to_ask_for_it(client, session, world):
     key, _, _ = world
     await session.delete(await session.get(ProviderKey, "demo"))
     await session.commit()
+    preview = (await client.post("/v1/jobs/invoice/retest/preview", headers={"X-API-Key": key},
+                                 json={"candidate_model": "mini", "budget_usd": 1})).json()
+    assert preview["can_start"] is False and preview["blocked"]["code"] == "provider_key_required"
     response = await client.post("/v1/jobs/invoice/retest", headers={"X-API-Key": key},
-                                 json={"candidate_model": "mini", "budget_usd": 1})
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "provider_key_required"
+                                 json={"candidate_model": "mini", "budget_usd": 1, "confirmation": "x" * 40})
+    assert response.status_code == 409  # no confirmation is valid, so nothing starts
 
 
 async def test_the_api_queues_a_re_test_and_reports_progress_and_limits(client, engine, world):
@@ -189,11 +212,10 @@ async def test_the_api_queues_a_re_test_and_reports_progress_and_limits(client, 
     assert (await client.post("/v1/jobs/invoice/retest", headers=headers,
                               json={"candidate_model": "mini", "budget_usd": 0})).status_code == 422
     queued = (await client.post("/v1/jobs/invoice/retest", headers=headers,
-                                json={"candidate_model": "mini", "budget_usd": 1, "sample_size": 10})).json()
+                                json=await confirmed(client, headers, candidate_model="mini", budget_usd=1, sample_size=10))).json()
     assert (queued["status"], queued["runs_planned"], queued["trigger"]) == ("QUEUED", 10, "MANUAL")
-    again = await client.post("/v1/jobs/invoice/retest", headers=headers,
-                              json={"candidate_model": "mini", "budget_usd": 1})
-    assert again.json()["detail"]["code"] == "already_running"
+    again = await client.post("/v1/jobs/invoice/retest/preview", headers=headers, json={"candidate_model": "mini", "budget_usd": 1})
+    assert again.json()["blocked"]["code"] == "already_running"
 
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     assert await run_queued(sessions, settings=SETTINGS, client_factory=factory(FakeProvider())) == 1
@@ -301,7 +323,7 @@ async def test_a_job_that_already_compares_models_gets_no_first_key_re_test(sess
     _, project, job = world
     for i in range(40):
         session.add(Run(run_id=uuid.uuid4(), job_id=job.job_id, project_id="demo", prompt=f"retest {i}",
-                        prompt_hash=prompt_hash(f"retest {i}"), model="mini", model_version="mini", outcome="PASS",
+                        prompt_hash=prompt_hash(f"retest {i}", "demo"), model="mini", model_version="mini", outcome="PASS",
                         cost_usd=0.001, state="INDEXED", run_kind="RETEST"))
     session.add(ProviderPrice(model="acme-small", provider="acme", price_in_per_mtok=Decimal("10"),
                               price_out_per_mtok=Decimal("20")))
@@ -324,3 +346,85 @@ async def test_a_model_at_a_reasoning_effort_is_re_tested_at_that_effort(engine,
     # The same prompts may still be replayed on mini at another effort, never again at this one.
     assert len(await sample_sources(session, job, "mini@low", 60)) == 55
     assert len(await sample_sources(session, job, "mini@high", 60)) == 60
+
+
+async def test_every_call_has_an_output_limit_and_a_cut_off_answer_is_not_a_failure(engine, session, world):
+    _, project, job = world
+    retest = await enqueue(session, project, job, "mini", 1.0, "MANUAL")
+    await session.commit()
+    provider = FakeProvider(cut_off_every=5)
+    done = await run_retest(async_sessionmaker(engine, expire_on_commit=False), retest.retest_id,
+                            settings=SETTINGS, client_factory=factory(provider), sample_size=10)
+    assert set(provider.max_tokens) == {500}  # 4 x the original 100 tokens, raised to the 500 floor
+    assert (done.runs_done, done.passed, done.failed) == (10, 8, 0)  # two cut off: neither pass nor fail
+    session.expunge_all()
+    replayed = (await session.execute(select(Run).where(Run.retest_id == retest.retest_id))).scalars().all()
+    cut = [r for r in replayed if r.outcome == "UNKNOWN"]
+    assert len(cut) == 2 and all("output limit of 500 tokens" in r.outcome_reason for r in cut)
+
+
+def test_the_output_limit_is_four_times_the_original_answer_and_at_least_500_tokens():
+    from agent_memory.retest.runner import output_limit
+
+    assert (output_limit(100), output_limit(2000), output_limit(None)) == (500, 8000, 500)
+
+
+async def test_a_waiting_call_runs_once_the_call_in_flight_has_cost_less_than_reserved(engine, session, world):
+    # Concurrency 2, budget $0.0045 holds two worst cases ($0.004) in flight, so a third call
+    # must wait for both to settle ($0.0024 spent) and then fits; a 4th could not. Without waiting: 2 runs.
+    _, project, job = world
+    retest = await enqueue(session, project, job, "mini", 0.0045, "MANUAL")
+    await session.commit()
+    done = await run_retest(async_sessionmaker(engine, expire_on_commit=False), retest.retest_id,
+                            settings=SETTINGS, client_factory=factory(FakeProvider()), sample_size=20)
+    assert done.status == "STOPPED_BUDGET" and done.runs_done == 3
+    assert Decimal(done.spent_usd) == Decimal("0.003600")
+
+
+async def test_a_re_test_endpoint_that_now_resolves_to_a_private_address_is_never_called(engine, session, world,
+                                                                                          monkeypatch):
+    from agent_memory import urls
+
+    _, project, job = world
+    retest = await enqueue(session, project, job, "mini", 1.0, "MANUAL")
+    await session.commit()
+
+    async def rebound(host, port):  # the name was public when saved, and now points inside
+        return ["10.0.0.5"]
+
+    monkeypatch.setattr(urls, "_resolve", rebound)
+    provider = FakeProvider()
+    done = await run_retest(async_sessionmaker(engine, expire_on_commit=False), retest.retest_id,
+                            settings=SETTINGS, client_factory=factory(provider), sample_size=5)
+    assert (done.status, provider.calls) == ("FAILED", 0) and "private" in done.message
+
+
+async def test_a_private_base_url_is_refused_unless_the_server_allows_it(session, world):
+    with pytest.raises(ValueError, match="private"):
+        await keys.set_key(session, "demo", provider="local", api_key="sk-local-1234",
+                           base_url="http://127.0.0.1:11434/v1", settings=SETTINGS)
+    dev = Settings(secret_key="test-secret", allow_private_urls=True)
+    row = await keys.set_key(session, "demo", provider="local", api_key="sk-local-1234",
+                             base_url="http://127.0.0.1:11434/v1", settings=dev)
+    assert row.base_url == "http://127.0.0.1:11434/v1"
+
+
+async def test_a_trial_skips_prompts_the_candidate_already_answered_in_the_apps_own_calls(engine, session, world):
+    """The expensive model's past calls are the baseline and are never run again; prompts the cheap model already answered for real
+    are not replayed either, because their results are already counted. Only the gap is filled."""
+    _, project, job = world
+    for i in range(15):  # the app already sent these 15 prompts to the candidate "mini" in production
+        session.add(Run(run_id=uuid.uuid4(), job_id=job.job_id, project_id="demo", prompt=f"invoice {i}", prompt_hash=prompt_hash(f"invoice {i}", "demo"),
+                        model="mini", model_version="mini-2026-09", outcome="PASS", cost_usd=0.001, state="INDEXED", tokens_in=1000, tokens_out=100,
+                        expected={"total": 100.0}, created_at=datetime.now(UTC) - timedelta(hours=100 + i)))
+    await session.commit()
+    retest = await enqueue(session, project, job, "mini", 1.0, "MANUAL")
+    await session.commit()
+    provider = FakeProvider()
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    done = await run_retest(sessions, retest.retest_id, settings=SETTINGS, client_factory=factory(provider), sample_size=60)
+    assert done.runs_planned == 45 and provider.calls == 45  # 60 past prompts, minus the 15 the cheap model already answered
+    session.expunge_all()
+    replayed = set((await session.execute(select(Run.prompt).where(Run.retest_id == retest.retest_id))).scalars())
+    assert not any(f"invoice {i}" in replayed for i in range(15))
+    assert all(f"invoice {i}" in replayed for i in range(15, 60))

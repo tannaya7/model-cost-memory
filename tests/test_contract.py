@@ -66,7 +66,7 @@ def test_openapi_lists_the_week_ten_endpoints(built):
 def test_openapi_lists_the_week_eleven_endpoints(built):
     paths = json.loads(built["openapi.json"])["paths"]
     assert {"/auth/config", "/auth/google/login", "/auth/google/callback", "/auth/logout", "/v1/me", "/v1/projects",
-            "/v1/projects/{project_id}", "/v1/projects/{project_id}/key", "/v1/jobs/{job}/insights"} <= set(paths)
+            "/v1/projects/{project_id}", "/v1/projects/{project_id}/key", "/v1/jobs/{job}/insights", "/v1/me/ui-flags"} <= set(paths)
 
 
 def test_openapi_lists_the_week_twelve_endpoints(built):

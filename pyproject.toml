@@ -22,11 +22,11 @@ dependencies = [
     "apscheduler",
     "cachetools",
     "httpx",
-    "anthropic",
-    "openai",
+    "openai",         # re-tests, demo data and the optional summary (any OpenAI-compatible endpoint)
     "cryptography",   # stored provider keys are encrypted (re-tests)
     "authlib",        # Google sign-in
     "itsdangerous",   # signed session cookie
+    "defusedxml",     # AI news feeds are parsed without entity expansion or external entities
 ]
 
 [project.optional-dependencies]

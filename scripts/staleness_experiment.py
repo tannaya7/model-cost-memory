@@ -150,7 +150,7 @@ def report(results: dict, args) -> str:
     for c in drift[0].checkpoints:
         mark = lambda x: f"{x} ✓" if x == c.truth else f"{x} ✗"  # noqa: E731
         lines.append(f"| {c.day} | {c.truth} | " + " | ".join(mark(getattr(c, key)) for key, _ in METHODS) + " |")
-    lines += ["", "Reproduce with `python scripts/staleness_experiment.py --seeds 5`. Simulated data; the engine, "
+    lines += ["", f"Reproduce with `python scripts/staleness_experiment.py --seeds {len(drift)}`. Simulated data; the engine, "
               "decay, consolidation and regression code are the production code, run with simulated time.", ""]
     return "\n".join(lines)
 

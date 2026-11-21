@@ -65,7 +65,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Google Login */
+        /**
+         * Google Login
+         * @description Send the person to Google. With `switch`, Google always shows its account chooser, so a person with two emails can pick the
+         *     other one. Nothing is signed out here: the new sign-in replaces this browser's session, and other devices stay as they are.
+         */
         get: operations["google_login_auth_google_login_get"];
         put?: never;
         post?: never;
@@ -84,7 +88,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Logout */
+        /**
+         * Logout
+         * @description End this session and every copy of its cookie: the counter rises, so a cookie someone else holds stops working too. The same
+         *     counter signs the person out on their other devices; they sign in again there.
+         */
         post: operations["logout_auth_logout_post"];
         delete?: never;
         options?: never;
@@ -101,6 +109,27 @@ export interface paths {
         };
         /** Healthz */
         get: operations["healthz_healthz_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/healthz/scheduler": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Scheduler Health
+         * @description Is the scheduler keeping up? 503 when any job has had no success within its allowance, so an
+         *     uptime monitor can alert on it. Shows job names and ages only, never error text.
+         */
+        get: operations["scheduler_health_healthz_scheduler_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -179,9 +208,358 @@ export interface paths {
         /**
          * Stream Flow
          * @description Server-Sent Events: each run's steps as they happen. The browser reconnects by itself and
-         *     resumes from Last-Event-ID. Read-only, one short query a second, no WebSockets.
+         *     resumes from Last-Event-ID. Read-only, no WebSockets. Everyone watching a project shares one
+         *     poller (pipeline/flow_hub.py); at most STREAMS_PER_IP connections per IP (429 beyond).
          */
         get: operations["stream_flow_v1_flow_stream_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/agent-task": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Task
+         * @description One task as a tree: each recorded call with its parent and children, unlinked and unstructured calls apart, totals that count
+         *     each call once, and any possible repeated call with the calls themselves as evidence. Scoped to this project: another project's
+         *     trace id is a 404.
+         */
+        get: operations["get_agent_task_v1_insights_agent_task_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/agent-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Tasks
+         * @description The project's largest tasks (calls sharing a trace id), with what each measured, how much of its structure is known, any
+         *     possible repeated call at the chosen threshold, and cohorts of equivalent tasks. Analysis only: nothing is stopped, cancelled
+         *     or reconfigured. A repeated call is a possibility, never a verdict: polling and retries repeat on purpose.
+         */
+        get: operations["get_agent_tasks_v1_insights_agent_tasks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Insights
+         * @description Tokens and spend per agent, the ten heaviest traces (with a retry-loop flag), and what tool
+         *     definitions add to each call. Production runs only.
+         */
+        get: operations["get_agent_insights_v1_insights_agents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Changes
+         * @description What changed between the last `days` whole days and the same number of days before: calls, tokens, cached share,
+         *     repeated calls, model mix, task mix and spend, with coverage and missing data, plus what else the product recorded in
+         *     the window (a new prompt version, a new model, a list-price change). Observation and context are kept apart; nothing
+         *     here is a cause. Deterministic: no model writes any of it.
+         */
+        get: operations["get_changes_v1_insights_changes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/cost-receipt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Cost Receipt
+         * @description How the spend figure is worked out: currency and period, passed / failed / unchecked / left-out calls,
+         *     how many are unpriced, the dated list prices used, and cost per correct answer with its formula.
+         *     List prices at the time of each call: an estimate, not an invoice.
+         */
+        get: operations["get_cost_receipt_v1_insights_cost_receipt_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Coverage
+         * @description How complete and reliable the records Model & Cost Memory RECEIVED are: attempts, usage, prices, checks, duplicates and flagged
+         *     calls, each with its denominator and the reason it is doubtful. It cannot see calls that never reached this product. Read-only.
+         */
+        get: operations["get_coverage_v1_insights_coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/daily": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Daily
+         * @description Production runs, outcomes and spend per UTC day, job and model, oldest first: quality and spend
+         *     over time. Days without runs are absent.
+         */
+        get: operations["get_daily_v1_insights_daily_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Csv
+         * @description The project's daily figures as a CSV file, for admins and owners: one row per day, AI task and model, for exactly the period and
+         *     filters asked for. Aggregates and labels only: no prompt or answer text, no keys, no people. Each row carries its period, filters,
+         *     units and cost basis. Text values a spreadsheet could run as a formula are prefixed with an apostrophe; `X-Export-Neutralized` says how many.
+         */
+        get: operations["export_csv_v1_insights_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/features": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Feature Breakdown
+         * @description Calls, tokens, list-price cost and checked answers for each feature label your app sent, with the calls that carried no
+         *     label shown as their own row. The labels are your app's own words: not verified, not a chargeback record. Analysis only.
+         */
+        get: operations["get_feature_breakdown_v1_insights_features_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/features/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Features Csv
+         * @description Cost by feature label as a CSV file, for admins and owners: one row per label, with calls, tokens, list-price cost, unpriced calls and
+         *     cost per correct answer. Labels are your app's own words and are not verified. Aggregates only: no prompts, answers, keys or people.
+         */
+        get: operations["export_features_csv_v1_insights_features_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/planner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Planner
+         * @description What a task might cost at traffic levels you type, from its own recorded calls: list-price scenarios with a range where the data
+         *     supports one. Not a bill or a forecast. Nothing is sent to a provider and nothing is changed.
+         */
+        get: operations["get_planner_v1_insights_planner_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/planner/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Planner Csv
+         * @description The planner's current result as a CSV file, for admins and owners: one row per model and scenario, with the assumptions, the history
+         *     period, the price versions used and the not-a-bill wording on every row. Unknown figures are empty, never 0. No prompt or answer text.
+         */
+        get: operations["export_planner_csv_v1_insights_planner_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/projection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Projection
+         * @description This month's spend so far and a month-end forecast, kept apart. The forecast is a range, says "not enough
+         *     history" instead of guessing from a short or sparse history, and names the timezone, the month's first and last
+         *     day, how many calls have no price, and what can make the figures late. The same figures drive the budget alerts.
+         *     Alert-only: nothing is blocked.
+         */
+        get: operations["get_projection_v1_insights_projection_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/prompt-versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Prompt Versions
+         * @description One job's prompt versions side by side: calls, tokens, cached share, list-price cost and checked answers.
+         *     Versions are the `prompt_version` values you sent, or, when you sent none, detected from where the start of
+         *     the stored prompt text changed and stayed changed. Production runs only. Shows what changed, not why.
+         */
+        get: operations["get_prompt_versions_v1_insights_prompt_versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/prompts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Prompt Insights
+         * @description Where the tokens went: the biggest contributors by share of billed tokens, with call counts and
+         *     per-call averages, what each total is made of (only where the provider reports it) and how much of a
+         *     prompt is identical in every call. Production runs, over the exact period returned. Token sums cover
+         *     every call; the repeated-text figures are an estimate from the newest calls whose text is still stored.
+         */
+        get: operations["get_prompt_insights_v1_insights_prompts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/insights/savings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Savings
+         * @description After you changed the model a task runs on: the observed change in cost per correct answer (it can be negative) and, kept apart,
+         *     an estimated counterfactual. Needs 14 comparable days on each side, enough checked calls and a like-for-like prompt mix, else it says
+         *     "not enough comparable data". Recommendations, "promising" labels and trials are never counted. Analysis only: nothing is changed.
+         */
+        get: operations["get_savings_v1_insights_savings_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -210,6 +588,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/insights/tool-servers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Tool Servers
+         * @description MCP and tool-server calls recorded in this project, by server and tool, with the tasks they came from, how often, how long the
+         *     requests took and the usage of those whole requests. A server is `provider_reported` only when the provider's own response named
+         *     it; a tool name that merely looks like mcp__server__tool is `likely`. No provider reports tokens per tool, so none is claimed.
+         *     Analysis only: nothing is called, blocked or changed.
+         */
+        get: operations["get_tool_servers_v1_insights_tool_servers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/invites/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Invite
+         * @description Join a company with an invite link. The signed-in address must be the one invited. Joining never moves
+         *     your personal projects. If you left or were removed before, this starts a new membership with the invited role.
+         */
+        post: operations["accept_invite_v1_invites_accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/jobs": {
         parameters: {
             query?: never;
@@ -232,6 +654,27 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Job Endpoint
+         * @description Change a job's description. The name and the check settings never change (the name is what your
+         *     code sends, and the check decides pass or fail).
+         */
+        patch: operations["patch_job_endpoint_v1_jobs__job__patch"];
         trace?: never;
     };
     "/v1/jobs/{job}/history": {
@@ -270,6 +713,28 @@ export interface paths {
          *     each with its run count and 95% interval.
          */
         get: operations["get_job_insights_v1_jobs__job__insights_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Task Profile
+         * @description What the recorded calls prove about a task: models, tool use, typical size (measured, no AI). With
+         *     fewer than 25 calls only the count is given. Also the optional AI summary's state; the summary is
+         *     written only when the project switched it on.
+         */
+        get: operations["get_task_profile_v1_jobs__job__profile_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -333,11 +798,36 @@ export interface paths {
          * Start Retest
          * @description Queue a re-test: replay sampled past runs on `candidate_model`, spending at most `budget_usd`.
          *
+         *     Needs the single-use `confirmation` from `POST /v1/jobs/{job}/retest/preview` of exactly these values: nothing is sent to
+         *     a provider before a person has seen what would be sent and confirmed it.
+         *
          *     409 with `{"code", "message"}` when it cannot start; `code` is one of consent_off, project_off,
          *     not_checkable, provider_key_required (ask for the key, then try again), cap_reached, already_running.
          *     Poll `GET /v1/jobs/{job}/retest/{id}` for progress.
          */
         post: operations["start_retest_v1_jobs__job__retest_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job}/retest/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Retest
+         * @description What a replay would send, to whom, and what it could cost, before anything is called. Makes no provider call and
+         *     changes nothing. When it can start, the answer holds a single-use confirmation for exactly these values; starting the
+         *     replay needs it, and it expires after a few minutes.
+         */
+        post: operations["preview_retest_v1_jobs__job__retest_preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -364,6 +854,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/jobs/{job}/retest/{retest_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop Retest
+         * @description Stop a trial. One that has not started is closed at once and sends nothing. One that is running starts no new call; the calls
+         *     already in flight finish (they are already paid for) and every result so far is kept. Asking twice is harmless.
+         */
+        post: operations["stop_retest_v1_jobs__job__retest__retest_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/jobs/{job}/retests": {
         parameters: {
             query?: never;
@@ -379,6 +890,26 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Task Summary
+         * @description Delete the stored AI summary of this task. It is not written again unless the sample calls change.
+         */
+        delete: operations["delete_task_summary_v1_jobs__job__summary_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -454,10 +985,36 @@ export interface paths {
         get: operations["me_v1_me_get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete My Account
+         * @description Delete your account and your personal projects with everything recorded under them. Companies you were in keep
+         *     their projects and lose only you. Refused while you are the only owner of a company: hand it over or delete it first.
+         */
+        delete: operations["delete_my_account_v1_me_delete"];
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/me/ui-flags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Ui Flags
+         * @description Remember which first-visit guides this person has seen. Only tour_seen and first_results_seen, as
+         *     true or false; any other key or value is refused. Only the flags sent change.
+         */
+        patch: operations["patch_ui_flags_v1_me_ui_flags_patch"];
         trace?: never;
     };
     "/v1/models": {
@@ -480,6 +1037,395 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/news": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get News
+         * @description The latest AI news from public feeds (refreshed hourly), newest first. Stories that name a watched
+         *     model carry it in `affects`: the project's models from the last 90 days, one job's with `job`, or one
+         *     `model`. With `job` or `model` only those stories are returned.
+         */
+        get: operations["get_news_v1_news_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/news/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh News
+         * @description Fetch the feeds now, unless they were fetched in the last 10 minutes (shared by everyone), in
+         *     which case nothing is fetched and `refreshed` is false.
+         */
+        post: operations["refresh_news_v1_news_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/notices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Notices
+         * @description Deprecation and shutdown notices from the providers' own pages for the models this project ran in the last 30
+         *     days. Each has a checked-at date, the provider's own wording and a link to its exact section. Information only:
+         *     nothing is changed or switched. A notice about a provider's own API is not applied to calls served by another host,
+         *     which sets its own dates.
+         */
+        get: operations["get_notices_v1_notices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organisations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Organisation
+         * @description Create a company. You become its owner. Your personal projects stay where they are.
+         */
+        post: operations["create_organisation_v1_organisations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organisations/{org_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Organisation
+         * @description Owner only. A company with projects cannot be deleted: its projects are never moved or deleted silently.
+         */
+        delete: operations["delete_organisation_v1_organisations__org_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organisations/{org_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit Trail
+         * @description The company's audit trail, newest first: who did what and when. Labels and ids only, never prompt or run text.
+         */
+        get: operations["audit_trail_v1_organisations__org_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organisations/{org_id}/invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Invites */
+        get: operations["list_invites_v1_organisations__org_id__invites_get"];
+        put?: never;
+        /**
+         * Create Invite
+         * @description Invite one email address. No email is sent: the link is shown once for you to pass on yourself.
+         */
+        post: operations["create_invite_v1_organisations__org_id__invites_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organisations/{org_id}/invites/{invite_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Withdraw Invite */
+        delete: operations["withdraw_invite_v1_organisations__org_id__invites__invite_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organisations/{org_id}/leave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Leave Organisation
+         * @description Leave a company. Your personal projects are untouched; the company keeps its projects. The last owner cannot leave.
+         */
+        post: operations["leave_organisation_v1_organisations__org_id__leave_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organisations/{org_id}/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Me In Company
+         * @description Your own role, job role and notice state in this company. Nobody else's.
+         */
+        get: operations["me_in_company_v1_organisations__org_id__me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organisations/{org_id}/me/job-role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Job Role
+         * @description Say what kind of work you do, or clear it (null). Always your own: nothing in the request can name someone else.
+         */
+        put: operations["set_job_role_v1_organisations__org_id__me_job_role_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organisations/{org_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Members */
+        get: operations["list_members_v1_organisations__org_id__members_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organisations/{org_id}/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Member
+         * @description End someone's membership. They lose access to the company's projects at once and keep their personal ones.
+         *     The company's projects and their keys stay as they are: rotate a project key if the person had seen it.
+         */
+        delete: operations["remove_member_v1_organisations__org_id__members__user_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Change Role
+         * @description Owners change any role. Admins may only move members and viewers between those two roles.
+         */
+        patch: operations["change_role_v1_organisations__org_id__members__user_id__patch"];
+        trace?: never;
+    };
+    "/v1/organisations/{org_id}/notice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Notice
+         * @description The company's privacy notice as it applies to you, whether you have acknowledged this version, and (for admins) how many have.
+         */
+        get: operations["get_notice_v1_organisations__org_id__notice_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organisations/{org_id}/notice/ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Acknowledge Notice
+         * @description Record that you were shown this version. Only for yourself, only for the current version. Access does not depend on it.
+         */
+        post: operations["acknowledge_notice_v1_organisations__org_id__notice_ack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organisations/{org_id}/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Overview
+         * @description Counts, tokens and list-price cost across the company's projects, by project, task and model and over time.
+         *     Aggregates only: no prompt or answer text and no per-person figures exist in it. Only projects the caller may
+         *     open are included, each checked on its own.
+         */
+        get: operations["overview_v1_organisations__org_id__overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organisations/{org_id}/overview/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Overview
+         * @description The company overview as a CSV file, for admins and owners. The same numbers as the screen, for the same projects, with no text and
+         *     no person in it. Each row says its period, units and cost basis. Text values a spreadsheet could run as a formula are neutralized.
+         */
+        get: operations["export_overview_v1_organisations__org_id__overview_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/organisations/{org_id}/rollups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rollups
+         * @description How many members declared each job role, for groups of MIN_GROUP or more only. No names, no spend, no usage.
+         */
+        get: operations["rollups_v1_organisations__org_id__rollups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Permission Matrix
+         * @description What each role may do, for companies and for projects. The same table the server enforces.
+         */
+        get: operations["permission_matrix_v1_permissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects": {
         parameters: {
             query?: never;
@@ -487,12 +1433,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Projects */
+        /**
+         * List Projects
+         * @description The projects in one workspace: your personal ones by default, or those of a company you are in.
+         */
         get: operations["list_projects_v1_projects_get"];
         put?: never;
         /**
          * New Project
-         * @description Create a project you own. Its key is in the response once; copy it into the SDK.
+         * @description Create a project in your personal workspace, or in a company where you are a member or higher.
+         *     Its key is in the response once; copy it into the SDK.
          */
         post: operations["new_project_v1_projects_post"];
         delete?: never;
@@ -512,13 +1462,20 @@ export interface paths {
         get: operations["get_project_v1_projects__project_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Project Endpoint
+         * @description Delete the project and everything recorded under it: jobs, runs with their prompts and answers,
+         *     re-tests, recommendations, alerts, the stored provider key and usage limits. It cannot be undone,
+         *     and the project key stops working at once.
+         */
+        delete: operations["delete_project_endpoint_v1_projects__project_id__delete"];
         options?: never;
         head?: never;
         /**
          * Patch Project
-         * @description Change the name, the alert webhook (https only; null removes it), the monthly re-test cap or
-         *     the project-wide re-test switch. Only the fields sent change.
+         * @description Change the name, the alert webhook (https only; null removes it), the monthly re-test cap, the
+         *     project-wide re-test switch or how long run content is kept. Only the fields sent change. A shorter
+         *     retention applies at the next daily clean-up.
          */
         patch: operations["patch_project_v1_projects__project_id__patch"];
         trace?: never;
@@ -535,6 +1492,27 @@ export interface paths {
         /** New Project Key */
         post: operations["new_project_key_v1_projects__project_id__key_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/tool-inputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Tool Inputs
+         * @description Remove the stored inputs of tool calls from every run of this project. Tool names, ids, counts, costs
+         *     and everything else stay. It does not change the switch: new inputs are kept again if it is on.
+         */
+        delete: operations["delete_tool_inputs_v1_projects__project_id__tool_inputs_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -574,7 +1552,8 @@ export interface paths {
         };
         /**
          * Get Retest Limits
-         * @description This month's re-test cap, what is spent, and whether the provider key has been given.
+         * @description This month's re-test cap, what is spent, and whether the provider key has been given. Only people who may
+         *     change the key see its last four characters; everyone else sees that one is stored.
          */
         get: operations["get_retest_limits_v1_retest_limits_get"];
         put?: never;
@@ -601,6 +1580,7 @@ export interface paths {
         /**
          * Record Run Endpoint
          * @description Record one model call. Safe to retry: the same `run_id` is only ever stored once.
+         *     A project may record at most RUNS_PER_DAY_PER_PROJECT runs per UTC day (429 after that).
          */
         post: operations["record_run_endpoint_v1_runs_post"];
         delete?: never;
@@ -649,10 +1629,219 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/task-summary-consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Task Summary Consent
+         * @description Switch the AI-written task summaries on or off for this project. Off by default; while off, no
+         *     sample prompt is ever sent to an outside AI service. Only the signed-in owner may change it (a project
+         *     key, which an SDK holds, is refused), and switching it off deletes the project's stored summaries.
+         */
+        put: operations["put_task_summary_consent_v1_task_summary_consent_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workspaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Workspaces
+         * @description Your personal workspace first, then every company you are an active member of.
+         */
+        get: operations["list_workspaces_v1_workspaces_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AgentInsightsOut */
+        AgentInsightsOut: {
+            /** Agents */
+            agents: components["schemas"]["AgentUsageOut"][];
+            kinds: components["schemas"]["UsageKindsOut"];
+            /** Tools */
+            tools: components["schemas"]["ToolsUsageOut"][];
+            /**
+             * Traces
+             * @description Top 10 traces by total tokens
+             */
+            traces: components["schemas"]["TraceUsageOut"][];
+        };
+        /** AgentTaskOut */
+        AgentTaskOut: {
+            /** Agents */
+            agents: string[];
+            /**
+             * First At
+             * Format: date-time
+             */
+            first_at: string;
+            /** Jobs */
+            jobs: string[];
+            /**
+             * Last At
+             * Format: date-time
+             */
+            last_at: string;
+            /** Method */
+            method: string[];
+            /** Models */
+            models: string[];
+            /** Nodes */
+            nodes: components["schemas"]["TaskNodeOut"][];
+            /** Notes */
+            notes: string[];
+            repeated: components["schemas"]["RepeatedCallOut"] | null;
+            structure: components["schemas"]["TaskStructureOut"];
+            totals: components["schemas"]["TaskTotalsOut"];
+            /** Trace Id */
+            trace_id: string;
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** AgentTaskSummaryOut */
+        AgentTaskSummaryOut: {
+            /** Agents */
+            agents: string[];
+            /**
+             * First At
+             * Format: date-time
+             */
+            first_at: string;
+            /** Jobs */
+            jobs: string[];
+            /**
+             * Last At
+             * Format: date-time
+             */
+            last_at: string;
+            /** Models */
+            models: string[];
+            /** Notes */
+            notes: string[];
+            /**
+             * Repeated Step
+             * @description What possibly repeated, when a possible repeated call was found at the chosen threshold
+             */
+            repeated_step: string | null;
+            /** Repeated Times */
+            repeated_times: number | null;
+            structure: components["schemas"]["TaskStructureOut"];
+            totals: components["schemas"]["TaskTotalsOut"];
+            /** Trace Id */
+            trace_id: string;
+        };
+        /** AgentTasksOut */
+        AgentTasksOut: {
+            /** Cohorts */
+            cohorts: components["schemas"]["CohortOut"][];
+            /** Days */
+            days: number;
+            /** Method */
+            method: string[];
+            /** Min Cohort */
+            min_cohort: number;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "per_use" | "subscription" | "both";
+            /** Notes */
+            notes: string[];
+            /** Repeat Choices */
+            repeat_choices: number[];
+            /** Repeats */
+            repeats: number;
+            /** Tasks */
+            tasks: components["schemas"]["AgentTaskSummaryOut"][];
+            /** Window */
+            window: number;
+            /** Window Choices */
+            window_choices: number[];
+        };
+        /** AgentUsageOut */
+        AgentUsageOut: {
+            /**
+             * Agent
+             * @description The agent or role; runs that named none are 'unlabelled'
+             */
+            agent: string;
+            /** Cache Read Tokens */
+            cache_read_tokens: number;
+            /**
+             * Models
+             * @description Models this agent called
+             */
+            models?: string[];
+            /** Runs */
+            runs: number;
+            /**
+             * Share
+             * @description Share of the project's total tokens in the window, 0..1
+             */
+            share: number;
+            /**
+             * Spend Usd
+             * @description Priced runs only
+             */
+            spend_usd: number;
+            /**
+             * Steps Per Task
+             * @description Calls per trace id; null without trace ids
+             */
+            steps_per_task?: number | null;
+            /** Tokens In */
+            tokens_in: number;
+            /** Tokens Out */
+            tokens_out: number;
+            /**
+             * Tool Servers
+             * @description Server names read from mcp__server__tool names
+             */
+            tool_servers?: string[];
+            /**
+             * Tool Source
+             * @description 'mcp' only when tool names look like mcp__server__tool; 'tool_list' for other tools; null when none
+             */
+            tool_source?: string | null;
+            /**
+             * Top Tools
+             * @description Most used tools by name
+             */
+            top_tools?: components["schemas"]["ToolCountOut"][];
+            /**
+             * Uses Tools
+             * @description Tool definitions were sent or tool calls made (certain)
+             * @default false
+             */
+            uses_tools: boolean;
+            /**
+             * Works Like Agent
+             * @description 'yes' (calls share a trace id and tool use repeats), 'probably' (no trace id), or null
+             */
+            works_like_agent?: string | null;
+        };
         /**
          * AlertOut
          * @description A regression, silent drop or deprecation that needs a person's attention.
@@ -676,8 +1865,13 @@ export interface components {
             /** Delivery Attempts */
             delivery_attempts: number;
             /**
+             * Delivery Failed At
+             * @description When webhook delivery gave up after its last retry; saving a new webhook URL tries again. Null while it is delivered or still being tried
+             */
+            delivery_failed_at?: string | null;
+            /**
              * Detail
-             * @description VERSION_REGRESSION: model, old_version, new_version, old_pass_rate, new_pass_rate, n_old, n_new, drop, p_value, failing_run_ids. SILENT_DROP: model, model_version, before_pass_rate, after_pass_rate, n_before, n_after, drop, p_value. MODEL_DEPRECATED: model, model_version, status.
+             * @description VERSION_REGRESSION: model, old_version, new_version, old_pass_rate, new_pass_rate, n_old, n_new, drop, p_value, failing_run_ids. SILENT_DROP: model, model_version, before_pass_rate, after_pass_rate, n_before, n_after, drop, p_value. MODEL_DEPRECATED: model, model_version, status. TOKEN_BURST: tokens_last_hour, usual_tokens_per_hour, top_job, top_job_tokens. BUDGET: level (85, 95 or PROJECTED), month, budget_usd, spent_usd, projected_usd. TRIAL_BUDGET: level (85 or 95), month, cap_usd, spent_usd. MODEL_RETIRING: model, status, shutdown_date (the earliest possible date: check your provider's notice).
              */
             detail: {
                 [key: string]: unknown;
@@ -688,7 +1882,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "VERSION_REGRESSION" | "SILENT_DROP" | "MODEL_DEPRECATED";
+            kind: "VERSION_REGRESSION" | "SILENT_DROP" | "MODEL_DEPRECATED" | "TOKEN_BURST" | "BUDGET" | "TRIAL_BUDGET" | "MODEL_RETIRING" | "MODEL_NOTICE";
             /** Resolved At */
             resolved_at: string | null;
             /**
@@ -697,8 +1891,40 @@ export interface components {
              */
             summary: string;
         };
+        /** AssumptionOut */
+        AssumptionOut: {
+            /** Name */
+            name: string;
+            /** Source */
+            source: string;
+            /** Value */
+            value: string;
+        };
+        /** AttributionRow */
+        AttributionRow: {
+            /** Coverage Share */
+            coverage_share: number | null;
+            /** Detail */
+            detail: string;
+            /**
+             * Dimension
+             * @enum {string}
+             */
+            dimension: "project" | "task" | "model" | "agent" | "task_trace" | "person";
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "verified" | "caller_supplied" | "not_recorded";
+        };
         /** AuthConfig */
         AuthConfig: {
+            /**
+             * Auto Replays
+             * @description This server allows automatic replays (off unless the operator turns them on)
+             * @default false
+             */
+            auto_replays: boolean;
             /**
              * Demo Project Id
              * @description A project anyone may read without signing in
@@ -714,6 +1940,15 @@ export interface components {
              * @description Google sign-in is configured on this server
              */
             google: boolean;
+        };
+        /** BasisRow */
+        BasisRow: {
+            /** Label */
+            label: string;
+            /** Runs */
+            runs: number;
+            /** Status */
+            status: string;
         };
         /** BreakdownOut */
         BreakdownOut: {
@@ -742,12 +1977,764 @@ export interface components {
             /** Runs */
             runs: number;
         };
+        /** CatalogInfoOut */
+        CatalogInfoOut: {
+            /**
+             * Last Synced At
+             * @description When the catalog last confirmed any price from its source
+             */
+            last_synced_at: string | null;
+            /** Note */
+            note: string;
+            /** Source */
+            source: string;
+        };
+        /** Cause */
+        Cause: {
+            /** Code */
+            code: string;
+            /** Examples */
+            examples: components["schemas"]["Example"][];
+            /** Label */
+            label: string;
+            /** Runs */
+            runs: number;
+        };
+        /** ChangePeriodOut */
+        ChangePeriodOut: {
+            /** Cache Read Tokens */
+            cache_read_tokens: number;
+            /** Calls */
+            calls: number;
+            /**
+             * Calls With Task Id
+             * @description Calls that carry a task id; only these can show a repeated call
+             */
+            calls_with_task_id: number;
+            /**
+             * Calls With Usage
+             * @description Calls that report token counts; the rest are left out of the token figures
+             */
+            calls_with_usage: number;
+            /** Days */
+            days: number;
+            /** Days With Calls */
+            days_with_calls: number;
+            /**
+             * End
+             * Format: date
+             * @description The day after the last whole day (exclusive); today is never included
+             */
+            end: string;
+            /** Priced Calls */
+            priced_calls: number;
+            /**
+             * Spend Usd
+             * @description Spend on priced calls; null on a subscription project, which has no dollar figures
+             */
+            spend_usd: number | null;
+            /**
+             * Start
+             * Format: date
+             * @description First whole UTC day of the period
+             */
+            start: string;
+            /** Tokens In */
+            tokens_in: number;
+            /** Tokens Out */
+            tokens_out: number;
+        };
+        /** ChangesOut */
+        ChangesOut: {
+            /**
+             * Basis
+             * @description What these figures are and are not
+             */
+            basis: string;
+            /**
+             * Comparable
+             * @description False when either period has too few calls for a percentage change
+             */
+            comparable: boolean;
+            current: components["schemas"]["ChangePeriodOut"];
+            /** Days */
+            days: number;
+            /** Events */
+            events: components["schemas"]["ContextEventOut"][];
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "per_use" | "subscription" | "both";
+            /** Model Mix */
+            model_mix: components["schemas"]["MixRowOut"][];
+            /**
+             * Not Recorded
+             * @description Kinds of change this cannot see
+             */
+            not_recorded: string[];
+            /**
+             * Notes
+             * @description Coverage and missing data, in plain words
+             */
+            notes: string[];
+            /** Observations */
+            observations: components["schemas"]["ObservationOut"][];
+            previous: components["schemas"]["ChangePeriodOut"];
+            /** Splits */
+            splits: components["schemas"]["SplitOut"][];
+            /** Task Mix */
+            task_mix: components["schemas"]["MixRowOut"][];
+        };
+        /**
+         * CheckBasisOut
+         * @description Where pass/fail came from. An LLM judge is not a check: a model-graded label is an opinion, not ground truth.
+         */
+        CheckBasisOut: {
+            /**
+             * Kind
+             * @description deterministic: a fixed rule decided (answer key, format, test command). human_label: reported by the app
+             * @enum {string}
+             */
+            kind: "deterministic" | "human_label";
+            /** Label */
+            label: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * CohortOut
+         * @description Equivalent tasks only: the same AI task and the same models. Measured medians in this project, never a multiplier.
+         */
+        CohortOut: {
+            /** Job */
+            job: string;
+            /** Models */
+            models: string[];
+            multi_agent: components["schemas"]["CohortSideOut"];
+            single_agent: components["schemas"]["CohortSideOut"];
+        };
+        /** CohortSideOut */
+        CohortSideOut: {
+            cost_usd: components["schemas"]["SpreadOut"] | null;
+            tokens: components["schemas"]["SpreadOut"];
+        };
+        /** CompanyCoverage */
+        CompanyCoverage: {
+            /** Agent Label Share */
+            agent_label_share: number | null;
+            /** Calls */
+            calls: number;
+            /** Calls In Money Projects */
+            calls_in_money_projects: number;
+            /** Calls Priced */
+            calls_priced: number;
+            /** Calls Reporting Tokens */
+            calls_reporting_tokens: number;
+            /** Calls With Agent Label */
+            calls_with_agent_label: number;
+            /** Calls With Task Id */
+            calls_with_task_id: number;
+            /** Calls Without Token Counts */
+            calls_without_token_counts: number;
+            /** Task Id Share */
+            task_id_share: number | null;
+            /** Token Report Share */
+            token_report_share: number | null;
+        };
+        /** CompanyDay */
+        CompanyDay: {
+            /**
+             * Billable Usd
+             * @description Pay-per-use projects only
+             */
+            billable_usd: number;
+            /** Calls */
+            calls: number;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Tokens */
+            tokens: number;
+        };
+        /** CompanyModeRow */
+        CompanyModeRow: {
+            /** Calls */
+            calls: number;
+            /** Projects */
+            projects: number;
+            /** Tokens */
+            tokens: number;
+            /** Unpriced Calls */
+            unpriced_calls: number;
+            /** Usd */
+            usd: number | null;
+        };
+        /** CompanyModelRow */
+        CompanyModelRow: {
+            /** Calls */
+            calls: number;
+            /** Cost Usd */
+            cost_usd: number;
+            /** Flat Plan Calls */
+            flat_plan_calls: number;
+            /**
+             * Folded Groups
+             * @description How many small models an 'Other' row stands for
+             */
+            folded_groups?: number | null;
+            /**
+             * Label Source
+             * @constant
+             */
+            label_source: "caller_supplied";
+            /** Model */
+            model: string;
+            /** Tokens */
+            tokens: number;
+            /** Unpriced Calls */
+            unpriced_calls: number;
+        };
+        /** CompanyNoticeOut */
+        CompanyNoticeOut: {
+            /**
+             * Acknowledged
+             * @description Whether you were shown this version and recorded it. Not a consent
+             */
+            acknowledged: boolean;
+            /** Acknowledged At */
+            acknowledged_at: string | null;
+            /**
+             * Min Group Size
+             * @description Smallest group any rollup shows. Our design choice, not a standard
+             */
+            min_group_size: number;
+            /**
+             * Required For Access
+             * @description Access never depends on acknowledging
+             * @default false
+             * @constant
+             */
+            required_for_access: false;
+            /** Sections */
+            sections: components["schemas"]["NoticeSection"][];
+            /**
+             * Status Counts
+             * @description Admins only: how many acknowledged, as counts
+             */
+            status_counts: {
+                [key: string]: number;
+            } | null;
+            /** Version */
+            version: string;
+        };
+        /** CompanyOverviewOut */
+        CompanyOverviewOut: {
+            /** Attribution */
+            attribution: components["schemas"]["AttributionRow"][];
+            /** By Mode */
+            by_mode: {
+                [key: string]: components["schemas"]["CompanyModeRow"];
+            };
+            /**
+             * Chargeback Grade
+             * @default false
+             * @constant
+             */
+            chargeback_grade: false;
+            coverage: components["schemas"]["CompanyCoverage"];
+            /** Days */
+            days: number;
+            /**
+             * Members
+             * @description A count only. No person is listed and no per-person figure exists
+             */
+            members: number;
+            /** Models */
+            models: components["schemas"]["CompanyModelRow"][];
+            /** Name */
+            name: string;
+            /** Notes */
+            notes: string[];
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Projects */
+            projects: components["schemas"]["CompanyProjectRow"][];
+            /**
+             * Projects Shown
+             * @description Projects your role may open. Others are not counted or hinted at
+             */
+            projects_shown: number;
+            /**
+             * Since
+             * Format: date-time
+             */
+            since: string;
+            /** Tasks */
+            tasks: components["schemas"]["CompanyTaskRow"][];
+            totals: components["schemas"]["CompanyTotals"];
+            /** Trend */
+            trend: components["schemas"]["CompanyDay"][];
+            /**
+             * Until
+             * Format: date-time
+             */
+            until: string;
+            /**
+             * Your Role
+             * @enum {string}
+             */
+            your_role: "owner" | "admin" | "member" | "viewer";
+        };
+        /** CompanyProjectRow */
+        CompanyProjectRow: {
+            /** Calls */
+            calls: number;
+            /** Calls Reporting Tokens */
+            calls_reporting_tokens: number;
+            /**
+             * Cost Kind
+             * @enum {string}
+             */
+            cost_kind: "billable_list_price" | "list_price_may_include_flat_plan" | "none_flat_plan";
+            /**
+             * Cost Usd
+             * @description List-price calculation, not an invoice. Null for flat-plan projects
+             */
+            cost_usd: number | null;
+            /** Name */
+            name: string;
+            /**
+             * Pay Mode
+             * @enum {string}
+             */
+            pay_mode: "per_use" | "subscription" | "both";
+            /** Project Id */
+            project_id: string;
+            /** Slug */
+            slug: string;
+            /** Tokens */
+            tokens: number;
+            /**
+             * Unpriced Calls
+             * @description Calls with no known price: their cost is unknown, never counted as free
+             */
+            unpriced_calls: number;
+        };
+        /** CompanyTaskRow */
+        CompanyTaskRow: {
+            /** Calls */
+            calls: number;
+            /** Cost Usd */
+            cost_usd: number | null;
+            /**
+             * Folded Groups
+             * @description How many small groups an 'Other' row stands for
+             */
+            folded_groups?: number | null;
+            /**
+             * Label Source
+             * @constant
+             */
+            label_source: "caller_supplied";
+            /** Pay Mode */
+            pay_mode: ("per_use" | "subscription" | "both") | null;
+            /** Project */
+            project: string | null;
+            /** Project Id */
+            project_id: string | null;
+            /**
+             * Task
+             * @description Chosen by the calling app: a caller-supplied label, not a verified identity
+             */
+            task: string;
+            /** Tokens */
+            tokens: number;
+            /** Unpriced Calls */
+            unpriced_calls: number;
+        };
+        /** CompanyTotals */
+        CompanyTotals: {
+            /** Billable Basis */
+            billable_basis: string;
+            /**
+             * Billable Usd
+             * @description Pay-per-use projects only. Calculated at list price, not an invoice
+             */
+            billable_usd: number;
+            /**
+             * Calls
+             * @description Counted
+             */
+            calls: number;
+            /** Has Data */
+            has_data: boolean;
+            /**
+             * Mixed Mode Usd
+             * @description List-price dollars of mixed-mode projects, kept apart from the billable total
+             */
+            mixed_mode_usd: number;
+            /**
+             * Tokens
+             * @description Counted, from calls that report token counts
+             */
+            tokens: number;
+            /**
+             * Unpriced Calls
+             * @description Calls whose price is unknown: their cost is not counted, not treated as free
+             */
+            unpriced_calls: number;
+        };
+        /**
+         * ContextEventOut
+         * @description Something the product recorded in the window. It is never a cause.
+         */
+        ContextEventOut: {
+            /** Evidence */
+            evidence: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "prompt_version" | "new_model" | "price_change";
+            /** Label */
+            label: string;
+            /**
+             * Link
+             * @description same_time: it happened in the same period. concentrated: the calls on it differ in the same direction as the overall change. Neither shows it caused the change
+             * @enum {string}
+             */
+            link: "same_time" | "concentrated";
+            /**
+             * On
+             * Format: date
+             */
+            on: string;
+            /**
+             * Relates To
+             * @description Which observations it coincides with
+             */
+            relates_to: string[];
+        };
+        /** CostBasisOut */
+        CostBasisOut: {
+            /** Label */
+            label: string;
+            /** Runs */
+            runs: number;
+            /**
+             * Spend Usd
+             * @description Null for runs with no known cost: an unknown, never zero
+             */
+            spend_usd: number | null;
+            /** Status */
+            status: string;
+        };
+        /**
+         * CostReceiptOut
+         * @description How a spend figure was worked out: currency, period, which calls were counted and which were left out,
+         *     the dated list prices used, and a cost per correct answer with its formula. List prices, not an invoice.
+         */
+        CostReceiptOut: {
+            /** Basis */
+            basis: components["schemas"]["CostBasisOut"][];
+            cost_per_success: components["schemas"]["agent_memory__schemas__CostPerSuccessOut"] | null;
+            /** Currency */
+            currency: string;
+            /**
+             * Excluded
+             * @description Calls left out of the checks (archived, or the answer was invalidated)
+             */
+            excluded: number;
+            /** Failed */
+            failed: number;
+            /** Jobs */
+            jobs: components["schemas"]["JobReceiptOut"][];
+            /** Notes */
+            notes: string[];
+            /** Partly Priced Runs */
+            partly_priced_runs: number;
+            /** Passed */
+            passed: number;
+            /** Period Days */
+            period_days: number;
+            /**
+             * Period End
+             * Format: date-time
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date-time
+             */
+            period_start: string;
+            /** Price Versions */
+            price_versions: components["schemas"]["PriceVersionUsedOut"][];
+            /** Price Versions Checked At */
+            price_versions_checked_at: string | null;
+            /** Price Versions Oldest Effective */
+            price_versions_oldest_effective: string | null;
+            /** Runs */
+            runs: number;
+            /**
+             * Spend On Failed Checks Usd
+             * @description Cost of calls whose check failed; a check can be a deliberate test
+             */
+            spend_on_failed_checks_usd: number;
+            /**
+             * Spend Usd
+             * @description Priced calls only; see unpriced_runs
+             */
+            spend_usd: number;
+            /** Timezone */
+            timezone: string;
+            /**
+             * Unchecked
+             * @description Calls with no pass/fail result yet
+             */
+            unchecked: number;
+            /** Unpriced Note */
+            unpriced_note: string | null;
+            /** Unpriced Runs */
+            unpriced_runs: number;
+        };
+        /** CoverageOut */
+        CoverageOut: {
+            /**
+             * Attempts
+             * @description Physical API attempts recorded in the period (denominator for most shares below)
+             */
+            attempts: number;
+            /** Basis */
+            basis: components["schemas"]["BasisRow"][];
+            /** @description Cost sent by the app itself, not calculated here */
+            caller_cost: components["schemas"]["Share"];
+            /** Cannot Measure */
+            cannot_measure: string[];
+            /** Causes */
+            causes: components["schemas"]["Cause"][];
+            /** @description Passed or failed an explicit check */
+            checked: components["schemas"]["Share"];
+            /**
+             * Duplicates Ignored
+             * @description Re-sent copies of an already-recorded call that were ignored; null when a filter makes it unavailable
+             */
+            duplicates_ignored: number | null;
+            /** Duplicates Note */
+            duplicates_note: string;
+            /**
+             * Excluded Attempts
+             * @description Archived, failed-to-record or invalid attempts: counted here and left out of the quality counts
+             */
+            excluded_attempts: number;
+            /**
+             * Extra Attempts
+             * @description Attempts beyond the first in tasks that made several
+             */
+            extra_attempts: number;
+            /** Failed */
+            failed: number;
+            /** Filters */
+            filters: {
+                [key: string]: string | null;
+            };
+            /** @description Attempts with at least one data-quality flag */
+            flagged: components["schemas"]["Share"];
+            /** Logical Tasks */
+            logical_tasks: number;
+            model_known: components["schemas"]["Share"];
+            model_unknown: components["schemas"]["Share"];
+            no_usage_block: components["schemas"]["Share"];
+            /** Notes */
+            notes: string[];
+            /** Passed */
+            passed: number;
+            /** Period Days */
+            period_days: number;
+            /**
+             * Period End
+             * Format: date-time
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date-time
+             */
+            period_start: string;
+            /** @description Calculated from reported usage and a dated list price (including partly priced) */
+            priced: components["schemas"]["Share"];
+            /** Providers */
+            providers: components["schemas"]["ProviderRow"][];
+            /** Scope */
+            scope: string;
+            /** Tasks With Several Attempts */
+            tasks_with_several_attempts: number;
+            /** Timezone */
+            timezone: string;
+            /** @description No pass/fail result yet */
+            unchecked: components["schemas"]["Share"];
+            /** @description No cost: unknown, never zero */
+            unpriced: components["schemas"]["Share"];
+            usage_layout_unknown: components["schemas"]["Share"];
+            usage_reported: components["schemas"]["Share"];
+        };
+        /** DayPointOut */
+        DayPointOut: {
+            /**
+             * Cache Read Tokens
+             * @description Input tokens read from the prompt cache
+             * @default 0
+             */
+            cache_read_tokens: number;
+            /**
+             * Cache Write Tokens
+             * @description Input tokens written to the prompt cache
+             * @default 0
+             */
+            cache_write_tokens: number;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /**
+             * Failed
+             * @description UNKNOWN runs count in runs but in neither passed nor failed
+             */
+            failed: number;
+            /**
+             * Failed Spend Usd
+             * @description Actual cost of the priced runs whose check failed
+             * @default 0
+             */
+            failed_spend_usd: number;
+            /** Job */
+            job: string;
+            /** Model */
+            model: string;
+            /** Passed */
+            passed: number;
+            /**
+             * Runs
+             * @description Production runs that day
+             */
+            runs: number;
+            /**
+             * Spend Usd
+             * @description Priced runs only
+             */
+            spend_usd: number;
+            /**
+             * Tokens In
+             * @description Uncached input tokens, summed over the group's runs
+             * @default 0
+             */
+            tokens_in: number;
+            /**
+             * Tokens Out
+             * @description Output tokens, summed over the group's runs
+             * @default 0
+             */
+            tokens_out: number;
+            /**
+             * Unpriced Runs
+             * @description Runs with no known price (cost unknown): not in spend_usd
+             * @default 0
+             */
+            unpriced_runs: number;
+        };
         /** DevLogin */
         DevLogin: {
             /** Email */
             email: string;
             /** Name */
             name?: string | null;
+        };
+        /**
+         * DifferenceOut
+         * @description This model's pass rate minus the model in use, with the engine's own Newcombe interval and verdict on it.
+         *     The compare chart draws exactly these numbers; it never recomputes them.
+         */
+        DifferenceOut: {
+            /**
+             * Against
+             * @description The model in use that it is compared with
+             */
+            against: string;
+            /**
+             * Confidence
+             * @description Confidence of the interval: the level a move needs (switch_confidence)
+             */
+            confidence: number;
+            /**
+             * Gap Points
+             * @description This model minus the model in use, in percentage points
+             */
+            gap_points: number;
+            /** High Points */
+            high_points: number;
+            /** Low Points */
+            low_points: number;
+            /**
+             * Margin Points
+             * @description How much worse it may be and still qualify, in points
+             */
+            margin_points: number;
+            /**
+             * Method
+             * @description The models answered different requests
+             * @default unpaired
+             * @constant
+             */
+            method: "unpaired";
+            /**
+             * Status
+             * @description The tolerance rule applied to this interval: at most margin worse / not yet sure / clearly worse
+             * @enum {string}
+             */
+            status: "GOOD_ENOUGH" | "UNSURE" | "CLEARLY_WORSE";
+        };
+        /** EventOut */
+        EventOut: {
+            /** Action */
+            action: string;
+            /** Actor */
+            actor: string | null;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Detail */
+            detail: {
+                [key: string]: unknown;
+            };
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Target */
+            target: string | null;
+        };
+        /** Example */
+        Example: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Model */
+            model: string;
+            /** Provider */
+            provider: string | null;
+            /** Run Id */
+            run_id: string;
         };
         /** FailingRunOut */
         FailingRunOut: {
@@ -767,6 +2754,103 @@ export interface components {
              * Format: uuid
              */
             run_id: string;
+        };
+        /** FeatureBreakdownOut */
+        FeatureBreakdownOut: {
+            /** Currency */
+            currency: string;
+            /** Labelled Runs */
+            labelled_runs: number;
+            /**
+             * Labelled Share
+             * @description Part of the calls that carried a label; null with no calls
+             */
+            labelled_share: number | null;
+            /** Notes */
+            notes: string[];
+            /** Period Days */
+            period_days: number;
+            /**
+             * Period End
+             * Format: date-time
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date-time
+             */
+            period_start: string;
+            /** Rows */
+            rows: components["schemas"]["FeatureRowOut"][];
+            /** Timezone */
+            timezone: string;
+            /** Total Runs */
+            total_runs: number;
+            /**
+             * Truncated
+             * @description More distinct labels exist than were read; the smallest are not in any row
+             */
+            truncated: boolean;
+        };
+        /** FeatureRowOut */
+        FeatureRowOut: {
+            cost_per_success: components["schemas"]["agent_memory__schemas__CostPerSuccessOut"];
+            /**
+             * Excluded
+             * @description Calls left out of the checks (archived, failed to record, or marked invalid)
+             */
+            excluded: number;
+            /** Failed */
+            failed: number;
+            /**
+             * Feature
+             * @description The label your app sent; null for calls that carried none, and for the folded 'Other labels' row
+             */
+            feature: string | null;
+            /**
+             * Folded Labels
+             * @description How many labels an 'Other labels' row stands for
+             */
+            folded_labels?: number | null;
+            /**
+             * Label
+             * @description What to show: the label, 'Unlabelled' or 'Other labels'
+             */
+            label: string;
+            /**
+             * No Usage Runs
+             * @description Calls whose response carried no usage block: their tokens are unknown, not zero
+             */
+            no_usage_runs: number;
+            /** Passed */
+            passed: number;
+            /** Runs */
+            runs: number;
+            /**
+             * Share Of Spend
+             * @description This row's part of all priced spend in the period; null when there is none
+             */
+            share_of_spend: number | null;
+            /**
+             * Spend Usd
+             * @description List-price estimate over the priced calls only
+             */
+            spend_usd: number;
+            /**
+             * Tokens
+             * @description Input, output, cache reads and writes, summed over the calls whose response reported usage
+             */
+            tokens: number;
+            /**
+             * Unchecked
+             * @description Calls with no pass/fail result yet: never counted as passes
+             */
+            unchecked: number;
+            /**
+             * Unpriced Runs
+             * @description Calls with no known price: left out of spend_usd
+             */
+            unpriced_runs: number;
         };
         /**
          * FlowEventOut
@@ -816,12 +2900,12 @@ export interface components {
             extra_failures_per_month: number;
             /**
              * Monthly Saving Usd
-             * @description Negative means switching costs more
+             * @description Change of the monthly bill at the same call volume: runs_per_month x (average cost per call now - on the recommended model). Negative means switching costs more
              */
             monthly_saving_usd: number;
             /**
              * Runs Per Month
-             * @description Production runs in the last 30 days
+             * @description Production runs in the last 30 days on the model in use (not the candidate), the volume the saving is priced on
              */
             runs_per_month: number;
         };
@@ -907,6 +2991,66 @@ export interface components {
              * @description Every model version this job has run on
              */
             versions: components["schemas"]["ModelVersionSeen"][];
+        };
+        /** InviteAccept */
+        InviteAccept: {
+            /** Token */
+            token: string;
+        };
+        /** InviteCreate */
+        InviteCreate: {
+            /** Email */
+            email: string;
+            /**
+             * Role
+             * @default member
+             * @enum {string}
+             */
+            role: "admin" | "member" | "viewer";
+        };
+        /** InviteCreated */
+        InviteCreated: {
+            invite: components["schemas"]["InviteOut"];
+            /**
+             * Link
+             * @description Path to send the person to. No email is sent for you
+             */
+            link: string;
+            /**
+             * Token
+             * @description Shown once; only a hash is stored
+             */
+            token: string;
+        };
+        /** InviteOut */
+        InviteOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Email */
+            email: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Invite Id
+             * Format: uuid
+             */
+            invite_id: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "admin" | "member" | "viewer";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "used" | "expired" | "withdrawn";
         };
         /**
          * JobCreate
@@ -994,6 +3138,45 @@ export interface components {
             };
         };
         /**
+         * JobPatch
+         * @description Change a job's description. Name and check settings cannot be changed.
+         */
+        JobPatch: {
+            /**
+             * Description
+             * @description Null or an empty string clears it
+             */
+            description?: string | null;
+        };
+        /** JobReceiptOut */
+        JobReceiptOut: {
+            cost_per_success: components["schemas"]["agent_memory__schemas__CostPerSuccessOut"];
+            /** Excluded */
+            excluded: number;
+            /** Failed */
+            failed: number;
+            /** Job */
+            job: string;
+            /** Passed */
+            passed: number;
+            /** Runs */
+            runs: number;
+            /** Spend Usd */
+            spend_usd: number;
+            /** Unchecked */
+            unchecked: number;
+            /** Unpriced Runs */
+            unpriced_runs: number;
+        };
+        /** JobRolePut */
+        JobRolePut: {
+            /**
+             * Job Role
+             * @description Your own optional job role from the fixed list, or null to clear it
+             */
+            job_role: ("engineering" | "product" | "data_science" | "operations" | "support" | "finance" | "legal" | "other") | null;
+        };
+        /**
          * LabelCreate
          * @description A late outcome for a run that was stored UNKNOWN.
          */
@@ -1033,6 +3216,224 @@ export interface components {
              */
             suggested: string | null;
         };
+        /** LoopOut */
+        LoopOut: {
+            /**
+             * Cost Usd
+             * @description Priced cost of the repeated steps
+             */
+            cost_usd: number;
+            /**
+             * Repeats
+             * @description Times it repeated within a window of 7 steps
+             */
+            repeats: number;
+            /**
+             * Step
+             * @description What repeated, in words
+             */
+            step: string;
+            /**
+             * Uses Arguments
+             * @description False: matched on tool name and identical prompt, because arguments are not stored
+             */
+            uses_arguments: boolean;
+        };
+        /** McpOwnToolsOut */
+        McpOwnToolsOut: {
+            /** Calls */
+            calls: number;
+            /** Requests */
+            requests: number;
+            /** Tools */
+            tools: components["schemas"]["McpToolOut"][];
+        };
+        /**
+         * McpServerOut
+         * @description One tool server. Counts are exact; usage is the whole request's, shared with everything in it, never the tool's own.
+         */
+        McpServerOut: {
+            /** Calls */
+            calls: number;
+            /**
+             * Certainty
+             * @description provider_reported: the provider's own response named the server. likely: only a tool name looks like mcp__server__tool (a hint, not proof). mixed: both
+             * @enum {string}
+             */
+            certainty: "provider_reported" | "likely" | "mixed";
+            /**
+             * Failed Calls
+             * @description Calls the provider said failed; only calls whose result told us are included
+             */
+            failed_calls: number;
+            /**
+             * Failure Known Calls
+             * @description Calls whose result said whether they failed
+             */
+            failure_known_calls: number;
+            /**
+             * First Seen
+             * Format: date-time
+             */
+            first_seen: string;
+            /**
+             * Last Seen
+             * Format: date-time
+             */
+            last_seen: string;
+            /** Providers */
+            providers: string[];
+            /** Request Cache Read Tokens */
+            request_cache_read_tokens: number;
+            /**
+             * Request Cost Usd
+             * @description Recorded cost of those whole requests (priced ones); null on a subscription project
+             */
+            request_cost_usd: number | null;
+            /**
+             * Request Time Ms
+             * @description Median time of those requests. A tool call's own duration is not reported
+             */
+            request_time_ms: number | null;
+            /**
+             * Request Tokens In
+             * @description Input tokens of those whole requests, not of the tool
+             */
+            request_tokens_in: number;
+            /** Request Tokens Out */
+            request_tokens_out: number;
+            /**
+             * Requests
+             * @description Distinct requests that made at least one call to this server
+             */
+            requests: number;
+            /** Server */
+            server: string;
+            /**
+             * Task Runs
+             * @description Distinct task runs (trace ids) among those requests
+             */
+            task_runs: number;
+            /**
+             * Tasks
+             * @description AI tasks the calls came from, with their call counts
+             */
+            tasks: components["schemas"]["McpToolOut"][];
+            /** Tools */
+            tools: components["schemas"]["McpToolOut"][];
+            /** Unpriced Requests */
+            unpriced_requests: number;
+        };
+        /**
+         * McpSupportOut
+         * @description What a provider tells us about MCP calls, and what stays unsupported or unknown.
+         */
+        McpSupportOut: {
+            /** Checked On */
+            checked_on: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Limits */
+            limits: string[];
+            /**
+             * Native
+             * @enum {string}
+             */
+            native: "supported" | "partly" | "unknown";
+            /** Not Reported By Provider */
+            not_reported_by_provider: string[];
+            /** Seen As */
+            seen_as: string;
+            /** Sources */
+            sources: string[];
+            /** We Do Not Read */
+            we_do_not_read: string[];
+            /** We Read */
+            we_read: string[];
+        };
+        /** McpToolOut */
+        McpToolOut: {
+            /** Calls */
+            calls: number;
+            /** Name */
+            name: string;
+        };
+        /** McpTotalsOut */
+        McpTotalsOut: {
+            /** Cache Read Tokens */
+            cache_read_tokens: number;
+            /** Cost Usd */
+            cost_usd: number | null;
+            /**
+             * Requests
+             * @description Distinct requests that called any MCP server: each counted once
+             */
+            requests: number;
+            /**
+             * Requests With Several Servers
+             * @description Requests shared between servers, so the rows add up to more than this
+             */
+            requests_with_several_servers: number;
+            /** Tokens In */
+            tokens_in: number;
+            /** Tokens Out */
+            tokens_out: number;
+            /** Unpriced Requests */
+            unpriced_requests: number;
+        };
+        /** MemberOut */
+        MemberOut: {
+            /**
+             * Email
+             * @description Only admins and owners see addresses
+             */
+            email: string | null;
+            /**
+             * Joined At
+             * Format: date-time
+             */
+            joined_at: string;
+            /** Name */
+            name: string | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "member" | "viewer";
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /** MemberRolePatch */
+        MemberRolePatch: {
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "member" | "viewer";
+        };
+        /** MixRowOut */
+        MixRowOut: {
+            /** After Share */
+            after_share: number | null;
+            /**
+             * Before Share
+             * @description Share of calls, percent
+             */
+            before_share: number | null;
+            /** Calls After */
+            calls_after: number;
+            /** Calls Before */
+            calls_before: number;
+            /** Change Points */
+            change_points: number | null;
+            /** Name */
+            name: string;
+        };
         /**
          * ModelEvidenceOut
          * @description What the runs say about one model in this job, and how the tolerance rule judged it.
@@ -1044,6 +3445,16 @@ export interface components {
              * @enum {string}
              */
             catalog_status: "ACTIVE" | "DEPRECATED" | "RETIRED" | "UNKNOWN";
+            /**
+             * Cost P50 Usd
+             * @description Typical call cost (median), last 60 days, most-used version
+             */
+            cost_p50_usd?: number | null;
+            /**
+             * Cost P90 Usd
+             * @description Expensive tail: 1 call in 10 costs at least this
+             */
+            cost_p90_usd?: number | null;
             /**
              * Cost Per Success Usd
              * @description Mean cost divided by pass rate
@@ -1096,6 +3507,16 @@ export interface components {
              * @description Lower end of the pass-rate interval
              */
             pass_rate_low: number | null;
+            /**
+             * Priced Runs
+             * @description Checked runs with a known cost; null when not measured
+             */
+            priced_runs?: number | null;
+            /**
+             * Retest Runs
+             * @description Checked runs that were trials (your own past prompts replayed)
+             */
+            retest_runs?: number | null;
             /** Shutdown Date */
             shutdown_date: string | null;
             /**
@@ -1103,6 +3524,13 @@ export interface components {
              * @enum {string}
              */
             status: "GOOD_ENOUGH" | "UNSURE" | "CLEARLY_WORSE" | "BELOW_FLOOR" | "RETIRED";
+            /**
+             * Unpriced Runs
+             * @description Checked runs whose cost is unknown: not in the cost figures
+             */
+            unpriced_runs?: number | null;
+            /** @description Null for the model in use itself, when there is no model in use, or with no checked answers */
+            vs_current?: components["schemas"]["DifferenceOut"] | null;
             /** Weighted Pass Rate */
             weighted_pass_rate: number | null;
             /** Why */
@@ -1134,6 +3562,7 @@ export interface components {
             price_out_per_mtok: number | null;
             /** Provider */
             provider: string;
+            reference: components["schemas"]["ModelReferenceOut"];
             /**
              * Shutdown Date
              * @description Announced shutdown, set while DEPRECATED
@@ -1159,13 +3588,93 @@ export interface components {
         };
         /** ModelPage */
         ModelPage: {
+            catalog: components["schemas"]["CatalogInfoOut"];
             /** Items */
             items: components["schemas"]["ModelOut"][];
+            /** Kind Note */
+            kind_note: string;
             /**
              * Next Cursor
              * @description Pass as ?cursor= for the next page; null on the last page
              */
             next_cursor: string | null;
+            /** Official Sources */
+            official_sources: components["schemas"]["PriceSourceOut"][];
+        };
+        /** ModelPlan */
+        ModelPlan: {
+            cost_per_success: components["schemas"]["agent_memory__insights__planner__CostPerSuccessOut"];
+            /** Excluded */
+            excluded: number;
+            /** Failed */
+            failed: number;
+            /**
+             * Filtered Out
+             * @description Used calls removed by the visible far-out filter
+             */
+            filtered_out: number;
+            /** First Call */
+            first_call: string | null;
+            /**
+             * Flagged Included
+             * @description Used calls that carry a doubtful-total flag but were kept
+             */
+            flagged_included: number;
+            /** Last Call */
+            last_call: string | null;
+            /**
+             * Left Out
+             * @description Calls not used in the estimate, by reason
+             */
+            left_out: {
+                [key: string]: number;
+            };
+            /** Max Call Usd */
+            max_call_usd: number | null;
+            /** Mean Call Unfiltered Usd */
+            mean_call_unfiltered_usd: number | null;
+            /** Mean Call Usd */
+            mean_call_usd: number | null;
+            /** Mean Input Side Usd */
+            mean_input_side_usd: number | null;
+            /** Mean Output Side Usd */
+            mean_output_side_usd: number | null;
+            /** Mean Tokens In */
+            mean_tokens_in: number | null;
+            /** Mean Tokens Out */
+            mean_tokens_out: number | null;
+            /** Median Call Usd */
+            median_call_usd: number | null;
+            /** Model */
+            model: string;
+            /** Observed Calls */
+            observed_calls: number;
+            /** P90 Call Usd */
+            p90_call_usd: number | null;
+            /** Passed */
+            passed: number;
+            /** Provider */
+            provider: string | null;
+            /** Scenarios */
+            scenarios: components["schemas"]["ScenarioOut"][];
+            /**
+             * Status
+             * @description ESTIMATE | ESTIMATE_NO_RANGE | NOT_ENOUGH_DATA
+             */
+            status: string;
+            /** Status Text */
+            status_text: string;
+            /** Unchecked */
+            unchecked: number;
+            /**
+             * Uneven
+             * @description Call costs are very uneven, so the range may understate the real spread
+             */
+            uneven: boolean;
+            /** Used Calls */
+            used_calls: number;
+            /** Versions Used */
+            versions_used: components["schemas"]["VersionUsedOut"][];
         };
         /** ModelRef */
         ModelRef: {
@@ -1179,6 +3688,79 @@ export interface components {
              * @description The version in use now
              */
             model_version: string;
+        };
+        /**
+         * ModelReferenceOut
+         * @description Where a model's price and links come from. Reference information only: no ranking, no benchmark, no claim about how
+         *     the model performs on anyone's work. Unknown is shown as unknown, never guessed.
+         */
+        ModelReferenceOut: {
+            /**
+             * Catalog Source
+             * @description Where the catalog's own number comes from
+             */
+            catalog_source: string;
+            /**
+             * Catalog Synced At
+             * @description When the catalog last confirmed this price from its source
+             */
+            catalog_synced_at: string | null;
+            /**
+             * Deprecations Url
+             * @description The maker's own deprecation page
+             */
+            deprecations_url: string | null;
+            /**
+             * Docs Url
+             * @description The maker's own page about its models
+             */
+            docs_url: string | null;
+            /**
+             * Kind
+             * @description Only API models you can call are listed. Coding tools and subscription apps such as Cursor or Copilot are not API endpoints, so they are never listed or ranked here
+             * @constant
+             */
+            kind: "api_model";
+            /**
+             * Maker
+             * @description Whose own pages the links go to; null when we read none for this model
+             */
+            maker: string | null;
+            /**
+             * Official Input Per Mtok
+             * @description What the maker's page states, when it states one number
+             */
+            official_input_per_mtok: number | null;
+            /** Official Output Per Mtok */
+            official_output_per_mtok: number | null;
+            /**
+             * Price Basis
+             * @description What the price is and is not
+             */
+            price_basis: string;
+            /**
+             * Price Check
+             * @description The catalog price compared with what the maker's own pricing page states
+             * @enum {string}
+             */
+            price_check: "confirmed" | "differs" | "not_readable" | "not_listed" | "other_host" | "not_checked";
+            /** Price Check Note */
+            price_check_note: string;
+            /**
+             * Price Check Stale
+             * @description True when that reading is more than 7 days old
+             */
+            price_check_stale: boolean;
+            /**
+             * Price Checked At
+             * @description When the maker's pricing page was last read successfully
+             */
+            price_checked_at: string | null;
+            /**
+             * Pricing Url
+             * @description The maker's own pricing page
+             */
+            pricing_url: string | null;
         };
         /** ModelVersionSeen */
         ModelVersionSeen: {
@@ -1199,10 +3781,510 @@ export interface components {
             /** Runs */
             runs: number;
         };
-        /** ProjectCreate */
-        ProjectCreate: {
+        /** NewsItemOut */
+        NewsItemOut: {
+            /**
+             * Affects
+             * @description This project's models the story names; empty if none
+             */
+            affects: string[];
+            /** Item Id */
+            item_id: string;
+            /**
+             * Kind
+             * @description lab: a model maker's own announcement; press: AI reporting; community: blogs and forums
+             * @enum {string}
+             */
+            kind: "lab" | "press" | "community";
+            /**
+             * Link
+             * @description The story itself (http or https)
+             */
+            link: string;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /**
+             * Source
+             * @description Who published it, e.g. 'OpenAI' or 'Hacker News'
+             */
+            source: string;
+            /**
+             * Summary
+             * @description Plain text, at most about 400 characters; never HTML
+             */
+            summary: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * NewsOut
+         * @description The latest AI news, newest first, with the stories that name this project's models marked.
+         */
+        NewsOut: {
+            /** Items */
+            items: components["schemas"]["NewsItemOut"][];
+            /**
+             * Next Refresh At
+             * @description The earliest a refresh fetches again
+             */
+            next_refresh_at: string | null;
+            /**
+             * Sources
+             * @description Every feed the news comes from
+             */
+            sources: components["schemas"]["NewsSourceOut"][];
+            /**
+             * Updated At
+             * @description When the feeds were last fetched; null if never
+             */
+            updated_at: string | null;
+            /**
+             * Your Models
+             * @description The models the stories were matched against: the project's from the last 90 days, the job's with `job`, or the one `model` asked about
+             */
+            your_models: string[];
+        };
+        /** NewsRefreshOut */
+        NewsRefreshOut: {
+            /**
+             * Added
+             * @description New stories stored by this refresh
+             */
+            added: number;
+            /** Failed Sources */
+            failed_sources: string[];
+            /** Next Refresh At */
+            next_refresh_at: string | null;
+            /**
+             * Refreshed
+             * @description False when the last fetch was too recent, or every feed failed
+             */
+            refreshed: boolean;
+            /** Updated At */
+            updated_at: string | null;
+        };
+        /** NewsSourceOut */
+        NewsSourceOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "lab" | "press" | "community";
+            /** Source */
+            source: string;
+        };
+        /** NoticeAck */
+        NoticeAck: {
+            /** Version */
+            version: string;
+        };
+        /** NoticeElsewhereOut */
+        NoticeElsewhereOut: {
+            /** Model */
+            model: string;
+            /** Notice Url */
+            notice_url: string;
+            /** Provider Name */
+            provider_name: string;
+        };
+        /**
+         * NoticeOut
+         * @description What a provider's own page says about a model this project uses. Information only: nothing is changed.
+         */
+        NoticeOut: {
+            /**
+             * Checked At
+             * Format: date-time
+             * @description When our reading of that page last succeeded
+             */
+            checked_at: string;
+            /**
+             * Date Wording
+             * @description How the provider words that date: a notice with 'earliest possible' or 'not sooner than' is never a promised date
+             * @enum {string}
+             */
+            date_wording: "not_sooner_than" | "tentative" | "earliest_possible" | "scheduled";
+            /** Deprecated On */
+            deprecated_on: string | null;
+            /**
+             * Informational
+             * @default true
+             */
+            informational: boolean;
+            /**
+             * Listed Date
+             * @description The date the page lists, as the provider wrote it; null when it lists none
+             */
+            listed_date: string | null;
+            /**
+             * Model
+             * @description The provider's own model id: matched exactly, never by family
+             */
+            model: string;
+            /**
+             * Notice Id
+             * Format: uuid
+             */
+            notice_id: string;
+            /**
+             * Notice Url
+             * @description The exact section of the provider's page that holds the notice
+             */
+            notice_url: string;
+            /** Provider */
+            provider: string;
+            /** Provider Name */
+            provider_name: string;
+            /**
+             * Replacement
+             * @description What the provider lists as a replacement. Informational: we never switch anything
+             */
+            replacement: string | null;
+            /** Section */
+            section: string | null;
+            /**
+             * Served By Known
+             * @description True when the project's calls name this provider; false when they name none, so a partner platform cannot be ruled out
+             */
+            served_by_known: boolean;
+            /** Source Name */
+            source_name: string;
+            /**
+             * Stale Note
+             * @description Set when the reading is more than 7 days old
+             */
+            stale_note: string | null;
+            /**
+             * Status
+             * @description The provider's own word for it: Active, Deprecated, Retired, Scheduled or Shutdown
+             */
+            status: string;
+            /**
+             * Text
+             * @description The notice in the provider's own terms, as one sentence
+             */
+            text: string;
+        };
+        /** NoticeSection */
+        NoticeSection: {
+            /** Body */
+            body: string[];
+            /** Heading */
+            heading: string;
+        };
+        /** NoticeSourceOut */
+        NoticeSourceOut: {
+            /**
+             * Covers
+             * @description What the page says about other platforms, such as cloud partners, whose dates can differ
+             */
+            covers: string;
+            /** Detail */
+            detail: string | null;
+            /** Last Checked At */
+            last_checked_at: string | null;
+            /**
+             * Last Ok At
+             * @description When it was last read successfully: the checked-at date of its notices
+             */
+            last_ok_at: string | null;
             /** Name */
             name: string;
+            /** Notice Count */
+            notice_count: number;
+            /** Provider */
+            provider: string;
+            /** Source Id */
+            source_id: string;
+            /**
+             * Stale
+             * @description True when the last good reading is more than 7 days old
+             */
+            stale: boolean;
+            /**
+             * Status
+             * @description NEVER: not read yet. UNREADABLE: fetched but nothing could be read (its layout may have changed). FETCH_FAILED: the page could not be fetched. Notices from a source never read are not shown
+             * @enum {string}
+             */
+            status: "NEVER" | "OK" | "UNREADABLE" | "FETCH_FAILED";
+            /** Url */
+            url: string;
+        };
+        /** NoticesOut */
+        NoticesOut: {
+            /**
+             * Hosted Elsewhere
+             * @description Notices about models this project runs, not applied because its calls name another host, which sets its own dates
+             */
+            hosted_elsewhere: components["schemas"]["NoticeElsewhereOut"][];
+            /** Note */
+            note: string;
+            /** Notices */
+            notices: components["schemas"]["NoticeOut"][];
+            /** Sources */
+            sources: components["schemas"]["NoticeSourceOut"][];
+        };
+        /**
+         * ObservationOut
+         * @description A measured difference. It says what changed, never why.
+         */
+        ObservationOut: {
+            /** After */
+            after: number | null;
+            /**
+             * Before
+             * @description Null when not measurable in the earlier period
+             */
+            before: number | null;
+            /**
+             * Change
+             * @description after minus before; for a share, in percentage points
+             */
+            change: number | null;
+            /**
+             * Change Pct
+             * @description Null for a share, and when the earlier period is too small for a percentage
+             */
+            change_pct: number | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Note */
+            note?: string | null;
+            /**
+             * Size
+             * @description notable: at least 20% (5 points for a share) with enough calls. unknown: too few calls to say
+             * @enum {string}
+             */
+            size: "notable" | "small" | "unknown";
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "count" | "tokens" | "share" | "usd";
+        };
+        /** OrgCreate */
+        OrgCreate: {
+            /** Name */
+            name: string;
+        };
+        /** OrgOut */
+        OrgOut: {
+            /** Name */
+            name: string;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "member" | "viewer";
+        };
+        /**
+         * PairedOut
+         * @description The same prompts answered by both models (re-tests replay real prompts), compared as pairs (Newcombe 1998, method 10).
+         */
+        PairedOut: {
+            /** Both Passed */
+            both_passed: number;
+            /** Candidate */
+            candidate: string;
+            /** Current */
+            current: string;
+            /**
+             * Gap Points
+             * @description Candidate minus model in use, in percentage points
+             */
+            gap_points: number;
+            /** High Points */
+            high_points: number;
+            /** Low Points */
+            low_points: number;
+            /** N Prompts */
+            n_prompts: number;
+            /** Neither Passed */
+            neither_passed: number;
+            /** Only Candidate Passed */
+            only_candidate_passed: number;
+            /** Only Current Passed */
+            only_current_passed: number;
+        };
+        /** PlannerOut */
+        PlannerOut: {
+            /** Assumptions */
+            assumptions: components["schemas"]["AssumptionOut"][];
+            /** Check Kind */
+            check_kind: string;
+            /** Currency */
+            currency: string;
+            /** Disclaimer */
+            disclaimer: string;
+            /** Job */
+            job: string;
+            /** Models */
+            models: components["schemas"]["ModelPlan"][];
+            /**
+             * Not Tested
+             * @description Models recorded elsewhere in this project but not on this task
+             */
+            not_tested: string[];
+            /** Notes */
+            notes: string[];
+            /**
+             * Observed Retry Rate
+             * @description Measured extra attempts per task from your task ids; null when you send none
+             */
+            observed_retry_rate: number | null;
+            /** Period Days */
+            period_days: number;
+            /**
+             * Period End
+             * Format: date-time
+             */
+            period_end: string;
+            /** Period Label */
+            period_label: string;
+            /**
+             * Period Start
+             * Format: date-time
+             */
+            period_start: string;
+            /** Success Definition */
+            success_definition: string;
+            /** Timezone */
+            timezone: string;
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** PreviewCost */
+        PreviewCost: {
+            /** Budget Usd */
+            budget_usd: number;
+            /** Estimated From */
+            estimated_from: string;
+            /** High Usd */
+            high_usd: number;
+            /** Low Usd */
+            low_usd: number;
+            /** Monthly Cap Remaining Usd */
+            monthly_cap_remaining_usd: number;
+            /** Note */
+            note: string;
+            /** Worst Case Usd */
+            worst_case_usd: number;
+        };
+        /** PreviewDataRow */
+        PreviewDataRow: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "sent" | "stays" | "never" | "received";
+            /** What */
+            what: string;
+            /** Where */
+            where: string;
+        };
+        /** PreviewExamples */
+        PreviewExamples: {
+            /** Available */
+            available: number;
+            /**
+             * Left Out For Tool Use
+             * @description Distinct prompts left out because their runs used tools (not replayed in v1)
+             */
+            left_out_for_tool_use: number;
+            /** Planned */
+            planned: number;
+        };
+        /** PriceSourceOut */
+        PriceSourceOut: {
+            /** Detail */
+            detail: string | null;
+            /** Last Checked At */
+            last_checked_at: string | null;
+            /** Last Ok At */
+            last_ok_at: string | null;
+            /** Model Count */
+            model_count: number;
+            /** Name */
+            name: string;
+            /** Provider */
+            provider: string;
+            /** Source Id */
+            source_id: string;
+            /**
+             * Stale
+             * @description Last good reading is more than 7 days old
+             */
+            stale: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "NEVER" | "OK" | "UNREADABLE" | "FETCH_FAILED";
+            /** Url */
+            url: string;
+        };
+        /** PriceVersionUsedOut */
+        PriceVersionUsedOut: {
+            /** Applicability */
+            applicability: string | null;
+            /**
+             * Checked At
+             * @description When the price was last looked at; null for a hand-entered price
+             */
+            checked_at: string | null;
+            /**
+             * Effective From
+             * Format: date-time
+             */
+            effective_from: string;
+            /** Effective To */
+            effective_to: string | null;
+            /** Input Per Mtok */
+            input_per_mtok: number;
+            /** Model */
+            model: string;
+            /** Output Per Mtok */
+            output_per_mtok: number;
+            /** Provider */
+            provider: string;
+            /** Runs */
+            runs: number;
+            /**
+             * Source Kind
+             * @description SYNC, MANUAL (entered by hand) or BACKFILL (the price when versions began)
+             */
+            source_kind: string;
+            /** Source Url */
+            source_url: string | null;
+            /** Spend Usd */
+            spend_usd: number;
+            /** Version Id */
+            version_id: string;
+        };
+        /** ProjectCreate */
+        ProjectCreate: {
+            /**
+             * Billing Mode
+             * @description Optional; defaults to per_use
+             */
+            billing_mode?: ("per_use" | "subscription" | "both") | null;
+            /** Name */
+            name: string;
+            /**
+             * Organisation Id
+             * @description Create it in this company instead of your personal workspace (needs the member role or higher)
+             */
+            organisation_id?: string | null;
         };
         /** ProjectCreated */
         ProjectCreated: {
@@ -1224,6 +4306,58 @@ export interface components {
         /** ProjectOut */
         ProjectOut: {
             /**
+             * Ai Summary Consent
+             * @description The computed figures (never prompts or answers) of recommendations may be sent to an outside AI to write a two-sentence summary. Off unless the owner turns it on
+             * @default false
+             */
+            ai_summary_consent: boolean;
+            /**
+             * Ai Summary Host
+             * @description The service the figures would go to, or null when this server has no summary service
+             */
+            ai_summary_host?: string | null;
+            /**
+             * Auto Retests
+             * @description Automatic paid replays (a new model, an unsure engine, a first key) are on. Off unless an admin turned them on
+             */
+            auto_retests?: boolean | null;
+            /**
+             * Billing Mode
+             * @description How this project pays for AI: per_use (each call costs money), subscription (a flat fee with a usage allowance) or both
+             * @default per_use
+             * @enum {string}
+             */
+            billing_mode: "per_use" | "subscription" | "both";
+            /**
+             * Budget Alert Levels
+             * @description Percentages of the monthly budget that raise an in-app alert
+             */
+            budget_alert_levels?: number[];
+            /**
+             * Budget Alert Projected
+             * @description Raise a warning when the low end of the forecast is above the budget
+             * @default true
+             */
+            budget_alert_projected: boolean;
+            /**
+             * Budget Alert Webhook
+             * @description Also send budget alerts to the webhook. Off unless the owner turns it on
+             * @default false
+             */
+            budget_alert_webhook: boolean;
+            /**
+             * Budget Timezone
+             * @description The timezone (an IANA name such as Europe/Berlin) the budget month and its days are counted in
+             * @default UTC
+             */
+            budget_timezone: string;
+            /**
+             * Content Retention Days
+             * @description Days a run keeps its prompt, output, tool calls and answer key; the figures stay
+             * @default 90
+             */
+            content_retention_days: number;
+            /**
              * Created At
              * Format: date-time
              */
@@ -1233,14 +4367,46 @@ export interface components {
              * @description The first characters of the live project key
              */
             key_prefix: string | null;
+            /**
+             * Monthly Budget Usd
+             * @description Optional monthly AI spend budget in USD. Soft: alerts at 85% and 95% of actual spend and when the month is projected to go over; nothing is ever blocked
+             */
+            monthly_budget_usd?: number | null;
             /** Name */
             name: string;
+            /**
+             * Notice Alert Webhook
+             * @description Also send model notices (deprecation and shutdown notices from the providers' own pages) to the webhook. Off unless the owner turns it on
+             * @default false
+             */
+            notice_alert_webhook: boolean;
+            /**
+             * Organisation Id
+             * @description Null for a personal project; the company's id otherwise
+             */
+            organisation_id?: string | null;
             /** Project Id */
             project_id: string;
             /** Retest Allowed */
             retest_allowed: boolean;
             /** Retest Monthly Cap Usd */
             retest_monthly_cap_usd: number;
+            /**
+             * Role
+             * @description The caller's role here. Below admin, webhook and key details are left out
+             */
+            role?: ("owner" | "admin" | "member" | "viewer") | null;
+            /**
+             * Slug
+             * @description Short readable name used in the web address (/p/production). Stable and unique per owner; the API still takes project_id
+             */
+            slug: string;
+            /**
+             * Store Tool Arguments
+             * @description Whether this project keeps the inputs of tool calls (off by default; they can hold private data). Used only to notice an agent repeating the same step
+             * @default false
+             */
+            store_tool_arguments: boolean;
             /**
              * Webhook Secret
              * @description Verify X-MCM-Signature on webhook payloads with it
@@ -1251,17 +4417,515 @@ export interface components {
         };
         /** ProjectPatch */
         ProjectPatch: {
+            /**
+             * Ai Summary Consent
+             * @description Allow the computed figures of recommendations to be sent to an outside AI for a summary. Off by default
+             */
+            ai_summary_consent?: boolean | null;
+            /**
+             * Auto Retests
+             * @description Turn automatic paid replays on or off. They are off unless an admin turns them on
+             */
+            auto_retests?: boolean | null;
+            /**
+             * Billing Mode
+             * @description How you pay for AI: per_use, subscription or both. Changes wording and which alerts fire; no stored figure changes
+             */
+            billing_mode?: ("per_use" | "subscription" | "both") | null;
+            /**
+             * Budget Alert Levels
+             * @description Percentages (1 to 100, at most 6) of the budget that raise an in-app alert
+             */
+            budget_alert_levels?: number[] | null;
+            /**
+             * Budget Alert Projected
+             * @description Raise a warning when even the low end of the forecast is above the budget
+             */
+            budget_alert_projected?: boolean | null;
+            /**
+             * Budget Alert Webhook
+             * @description Also send budget alerts to your webhook (needs a webhook address). Off by default
+             */
+            budget_alert_webhook?: boolean | null;
+            /**
+             * Budget Timezone
+             * @description An IANA timezone name, for example Europe/Berlin. The budget month and its days are counted in it
+             */
+            budget_timezone?: string | null;
+            /**
+             * Content Retention Days
+             * @description Days a run keeps its prompt, output, tool calls and answer key (1 to 3650)
+             */
+            content_retention_days?: number | null;
+            /**
+             * Monthly Budget Usd
+             * @description Monthly AI spend budget in USD (above 0, up to 10,000,000); send null to clear
+             */
+            monthly_budget_usd?: number | null;
             /** Name */
             name?: string | null;
+            /**
+             * Notice Alert Webhook
+             * @description Also send model notices to your webhook (needs a webhook address). Off by default
+             */
+            notice_alert_webhook?: boolean | null;
             /** Retest Allowed */
             retest_allowed?: boolean | null;
             /** Retest Monthly Cap Usd */
             retest_monthly_cap_usd?: number | null;
             /**
+             * Store Tool Arguments
+             * @description Keep the inputs of tool calls from now on (true) or stop storing new ones (false). Already-stored inputs stay until deleted or the retention period ends
+             */
+            store_tool_arguments?: boolean | null;
+            /**
              * Webhook Url
              * @description Must be https; send null to remove
              */
             webhook_url?: string | null;
+        };
+        /** ProjectionDayOut */
+        ProjectionDayOut: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /**
+             * Spend Usd
+             * @description Priced spend on that full local day
+             */
+            spend_usd: number;
+        };
+        /**
+         * ProjectionOut
+         * @description The month's spend so far (a fact about recorded calls) and a forecast for the month's end (an estimate), kept
+         *     apart. Alert-only: nothing is ever blocked. List prices in US dollars, not an invoice.
+         */
+        ProjectionOut: {
+            /**
+             * Active Days
+             * @description Of the last 7 full days, how many had priced spend
+             */
+            active_days: number;
+            /**
+             * Actual Usd
+             * @description Spent so far this month on calls with a known price. A fact, not a forecast
+             */
+            actual_usd: number;
+            /** Budget Usd */
+            budget_usd: number | null;
+            /** Currency */
+            currency: string;
+            /**
+             * Data Note
+             * @description What the figures count and what can be missing or late
+             */
+            data_note: string;
+            /**
+             * Data Through
+             * @description When the newest call was recorded
+             */
+            data_through: string | null;
+            /** Day Of Month */
+            day_of_month: number;
+            /** Days In Month */
+            days_in_month: number;
+            /**
+             * Days Left
+             * @description Days still to come, the rest of today included as a fraction
+             */
+            days_left: number;
+            /**
+             * First Day
+             * Format: date
+             */
+            first_day: string;
+            /**
+             * History Days
+             * @description Full days since the first priced call
+             */
+            history_days: number;
+            /**
+             * Last Day
+             * Format: date
+             */
+            last_day: string;
+            /**
+             * Month
+             * @description The calendar month, for example 2028-02
+             */
+            month: string;
+            /**
+             * Period End
+             * Format: date-time
+             * @description First moment of the next month, as UTC
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date-time
+             * @description First moment of the month, as UTC
+             */
+            period_start: string;
+            /** Projected High Usd */
+            projected_high_usd: number | null;
+            /** Projected Likely Usd */
+            projected_likely_usd: number | null;
+            /**
+             * Projected Low Usd
+             * @description Forecast, low end. Null when there is no forecast
+             */
+            projected_low_usd: number | null;
+            /**
+             * Reason
+             * @description Why there is no forecast: too_new (under 7 full days of history), sparse (priced spend on fewer than 5 of the last 7 days) or no_recent_calls (nothing recorded for 48 hours)
+             */
+            reason: ("too_new" | "sparse" | "no_recent_calls") | null;
+            /** Recent Days */
+            recent_days: components["schemas"]["ProjectionDayOut"][];
+            /**
+             * Rule
+             * @description The forecast rule in plain words
+             */
+            rule: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "ok" | "not_enough_history" | "paused" | "no_spend";
+            /**
+             * Timezone
+             * @description The timezone the month and its days are counted in
+             */
+            timezone: string;
+            /**
+             * Unpriced Runs
+             * @description Calls this month with no known price: in no figure here, never counted as free
+             */
+            unpriced_runs: number;
+            /**
+             * Used Share
+             * @description actual_usd divided by the budget
+             */
+            used_share: number | null;
+            /**
+             * Vs Budget
+             * @description over: even the low end of the forecast is above the budget (this is what the warning needs). may_go_over: only the high end is. under: the whole range is below
+             */
+            vs_budget: ("over" | "may_go_over" | "under") | null;
+        };
+        /**
+         * PromisingOut
+         * @description 'Worth a trial': a cheaper model that looks close to the model in use but is not proven. Never advice.
+         */
+        PromisingOut: {
+            /**
+             * Current
+             * @description The model in use that it was compared with
+             */
+            current: string;
+            /**
+             * Gap Points
+             * @description Observed candidate minus model in use, in percentage points
+             */
+            gap_points: number;
+            /**
+             * High Points
+             * @description Upper end of the range of that gap, in points
+             */
+            high_points: number;
+            /**
+             * Low Points
+             * @description Lower end of the range of that gap, in points (one-sided 95% bound)
+             */
+            low_points: number;
+            /** Model */
+            model: string;
+            /**
+             * More Needed
+             * @description About this many more checked answers on the candidate before a switch could be recommended
+             */
+            more_needed: number | null;
+        };
+        /** PromptComparisonOut */
+        PromptComparisonOut: {
+            /** Newer */
+            newer: string;
+            /** Older */
+            older: string;
+            /**
+             * Side By Side
+             * @description True when the two versions' time ranges overlap
+             */
+            side_by_side: boolean;
+            /**
+             * Summary
+             * @description Facts only; no verdict and no cause
+             */
+            summary: string;
+        };
+        /** PromptGroupOut */
+        PromptGroupOut: {
+            /**
+             * Agent
+             * @description The agent name your code sent, when grouped by agent
+             */
+            agent?: string | null;
+            /** Avg Tokens In */
+            avg_tokens_in: number;
+            /** Avg Tokens Out */
+            avg_tokens_out: number;
+            /**
+             * Breakdown
+             * @description What the total is made of, each part measured, not reported, or unknown
+             */
+            breakdown?: components["schemas"]["TokenPartOut"][];
+            /**
+             * Cache Read Share
+             * @description cache_read / (cache_read + tokens_in); null when both are 0
+             */
+            cache_read_share: number | null;
+            /** Cache Read Tokens */
+            cache_read_tokens: number;
+            /** Cache Write Tokens */
+            cache_write_tokens: number;
+            /** Calls */
+            calls: number;
+            /**
+             * Cost Share
+             * @description Of the project's priced cost in the period, 0..1; null when that is 0
+             */
+            cost_share?: number | null;
+            /**
+             * Group By
+             * @default task_version
+             * @enum {string}
+             */
+            group_by: "task_version" | "task" | "agent" | "prompt_version" | "template";
+            /**
+             * Grouping Basis
+             * @description untagged: the calls carry no version or agent label, so this grouping is an estimate. No prompt text and no fingerprint of it is used to group
+             * @default named_by_your_code
+             * @enum {string}
+             */
+            grouping_basis: "named_by_your_code" | "untagged";
+            /**
+             * Job
+             * @description The task's name; empty when the grouping spans tasks
+             */
+            job: string;
+            /**
+             * Label
+             * @description What this row is: a task and version, a task, an agent or a version
+             * @default
+             */
+            label: string;
+            /**
+             * Ledger Calls
+             * @description Calls whose provider usage layout was recorded
+             * @default 0
+             */
+            ledger_calls: number;
+            /**
+             * Legacy Calls
+             * @description Calls recorded before the usage ledger existed
+             * @default 0
+             */
+            legacy_calls: number;
+            /**
+             * No Usage Calls
+             * @description Calls whose response carried no usage block (tokens unknown)
+             * @default 0
+             */
+            no_usage_calls: number;
+            /**
+             * Priced Calls
+             * @description Calls in this row with a known cost
+             * @default 0
+             */
+            priced_calls: number;
+            /**
+             * Prompt Version
+             * @description Null groups all unversioned calls of the job
+             */
+            prompt_version: string | null;
+            /**
+             * Repeated End Share
+             * @description Estimated share of the prompt that ends identically in every sampled call
+             */
+            repeated_end_share: number | null;
+            /**
+             * Repeated Start Preview
+             * @description Masked first 120 characters of the repeated start. Only returned when show_text=true; null otherwise
+             */
+            repeated_start_preview: string | null;
+            /**
+             * Repeated Start Share
+             * @description Estimated share of the prompt that starts identically in every sampled call
+             */
+            repeated_start_share: number | null;
+            /**
+             * Share
+             * @description Of the project's total tokens in the window, 0..1
+             */
+            share: number;
+            /**
+             * Spend Usd
+             * @description List-price cost of the priced calls in this row. Null when none is priced: an unknown, never 0. Not an invoice
+             */
+            spend_usd?: number | null;
+            /**
+             * Text Calls
+             * @description Calls in the period whose prompt text is still stored
+             * @default 0
+             */
+            text_calls: number;
+            /**
+             * Text Note
+             * @description Why the repeated-text split is missing, when it is
+             */
+            text_note?: string | null;
+            /**
+             * Text Samples
+             * @description Newest calls with stored prompt text that were compared (at most 50). An estimate
+             */
+            text_samples: number;
+            /** Tokens In */
+            tokens_in: number;
+            /** Tokens Out */
+            tokens_out: number;
+            /**
+             * Total Tokens
+             * @description tokens_in + tokens_out + cache_read_tokens + cache_write_tokens
+             */
+            total_tokens: number;
+            /**
+             * Unpriced Calls
+             * @description Calls in this row with no known cost: in no sum
+             * @default 0
+             */
+            unpriced_calls: number;
+        };
+        /** PromptVersionOut */
+        PromptVersionOut: {
+            /**
+             * Cache Read Share
+             * @description cache_read / (cache_read + tokens_in); null when both are 0
+             */
+            cache_read_share: number | null;
+            /** Calls */
+            calls: number;
+            /**
+             * Checked
+             * @description Calls whose answer was checked (correct or wrong)
+             */
+            checked: number;
+            /**
+             * Correct Rate
+             * @description Null below 25 checked answers
+             */
+            correct_rate: number | null;
+            /**
+             * Cost Per Call
+             * @description List-price cost, priced calls only; null when none were priced
+             */
+            cost_per_call: number | null;
+            /**
+             * First Seen
+             * Format: date-time
+             */
+            first_seen: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tagged" | "detected" | "untagged";
+            /** Label */
+            label: string;
+            /**
+             * Last Seen
+             * Format: date-time
+             */
+            last_seen: string;
+            /** Priced Calls */
+            priced_calls: number;
+            /** Rate High */
+            rate_high: number | null;
+            /** Rate Low */
+            rate_low: number | null;
+            /**
+             * Start Preview
+             * @description Detected versions only: the start of the prompt (120 characters)
+             */
+            start_preview: string | null;
+            /**
+             * Typical Tokens In
+             * @description Median input tokens per call
+             */
+            typical_tokens_in: number;
+            /**
+             * Typical Tokens Out
+             * @description Median output tokens per call
+             */
+            typical_tokens_out: number;
+            /** Unpriced Calls */
+            unpriced_calls: number;
+        };
+        /** PromptVersionsOut */
+        PromptVersionsOut: {
+            comparison: components["schemas"]["PromptComparisonOut"] | null;
+            /** Days */
+            days: number;
+            /** Job */
+            job: string;
+            /** Reason */
+            reason: ("no_calls" | "text_not_kept" | "no_change" | "unstable") | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "tagged" | "detected" | "none";
+            /** Versions */
+            versions: components["schemas"]["PromptVersionOut"][];
+        };
+        /** PromptsOut */
+        PromptsOut: {
+            /** Days */
+            days: number;
+            /**
+             * Group By
+             * @default task_version
+             * @enum {string}
+             */
+            group_by: "task_version" | "task" | "agent" | "prompt_version" | "template";
+            /**
+             * Grouping Note
+             * @default
+             */
+            grouping_note: string;
+            /** Groups */
+            groups: components["schemas"]["PromptGroupOut"][];
+            /** Period End */
+            period_end?: string | null;
+            /** Period Start */
+            period_start?: string | null;
+            /**
+             * Timezone
+             * @default UTC
+             */
+            timezone: string;
+            /**
+             * Total Calls
+             * @description Production calls in the period, all groups
+             * @default 0
+             */
+            total_calls: number;
+            /**
+             * Total Tokens
+             * @description Billed tokens of every production call in the period (not a sample)
+             */
+            total_tokens: number;
         };
         /**
          * ProviderKeyIn
@@ -1298,8 +4962,33 @@ export interface components {
             /** Provider */
             provider: string;
         };
+        /** ProviderRow */
+        ProviderRow: {
+            /**
+             * Field Notes
+             * @description What this provider's usage fields mean here (included in or additional to others)
+             */
+            field_notes: {
+                [key: string]: string;
+            };
+            /** Provider */
+            provider: string | null;
+            /** Runs */
+            runs: number;
+            /** Usage Shape */
+            usage_shape: string | null;
+        };
         /** RecommendationEvidence */
         RecommendationEvidence: {
+            /** @description What decided pass or fail for this task */
+            check?: components["schemas"]["CheckBasisOut"] | null;
+            /**
+             * Comparison
+             * @description unpaired: the models answered different requests (Newcombe two-sample interval, used for the verdict). paired: also available for prompts both models answered
+             * @default unpaired
+             * @enum {string}
+             */
+            comparison: "unpaired" | "paired";
             /** Evidence Weight */
             evidence_weight: number;
             /**
@@ -1310,10 +4999,40 @@ export interface components {
             /** Floor */
             floor: number;
             /**
+             * Limitations
+             * @description What this evidence cannot tell you
+             */
+            limitations?: string[];
+            /**
              * N Runs
              * @description Checked runs counted across every model
              */
             n_runs: number;
+            /** @description Informational; the verdict uses the unpaired rule */
+            paired?: components["schemas"]["PairedOut"] | null;
+            /**
+             * State
+             * @description Whether the evidence supports an answer. Never a verdict, never a saving
+             * @default enough
+             * @enum {string}
+             */
+            state: "enough" | "not_enough" | "not_comparable" | "no_recommendation";
+            /**
+             * State Note
+             * @description One plain sentence for the state
+             * @default
+             */
+            state_note: string;
+            /**
+             * Window From
+             * @description First checked answer counted
+             */
+            window_from?: string | null;
+            /**
+             * Window To
+             * @description Last checked answer counted
+             */
+            window_to?: string | null;
         };
         /**
          * RecommendationOut
@@ -1341,6 +5060,8 @@ export interface components {
              * @description Progress toward the evidence floor, 0..1; below 1 only when insufficient
              */
             progress: number;
+            /** @description Set only for HOLD, never together with a proven model; never counted as a saving */
+            promising?: components["schemas"]["PromisingOut"] | null;
             recommended: components["schemas"]["ModelRef"] | null;
             /**
              * Reference
@@ -1349,7 +5070,7 @@ export interface components {
             reference: string | null;
             /**
              * Retest Candidates
-             * @description Models a re-test would settle: cheaper ones that could qualify, or the best model when the current one measures worse but that is not proven yet
+             * @description Models a trial would settle: cheaper ones that could qualify, or the best model when the current one measures worse but that is not proven yet
              */
             retest_candidates: string[];
             rules: components["schemas"]["RecommendationRules"];
@@ -1363,6 +5084,8 @@ export interface components {
              * @description Git blob hash of the prompt file used
              */
             summary_prompt_version?: string | null;
+            /** @description Set for INSUFFICIENT_EVIDENCE when two models can be compared */
+            sure_enough?: components["schemas"]["SureEnoughOut"] | null;
             /**
              * Verdict
              * @enum {string}
@@ -1391,14 +5114,101 @@ export interface components {
              */
             switch_confidence: number;
         };
+        /** RepeatedCallItemOut */
+        RepeatedCallItemOut: {
+            /** Agent */
+            agent: string | null;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Cost Usd */
+            cost_usd: number | null;
+            /**
+             * Failed
+             * @description Recorded as failed; null when not recorded
+             */
+            failed: boolean | null;
+            /**
+             * Gap Seconds
+             * @description Seconds since the previous call of the same kind
+             */
+            gap_seconds: number | null;
+            /**
+             * In Window
+             * @description Inside the stretch that reached the threshold
+             */
+            in_window: boolean;
+            /** Model */
+            model: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Tokens */
+            tokens: number;
+        };
+        /**
+         * RepeatedCallOut
+         * @description A possible repeated call. Never a verdict: polling and retries repeat on purpose.
+         */
+        RepeatedCallOut: {
+            /**
+             * Basis
+             * @description What 'the same' was compared on
+             * @enum {string}
+             */
+            basis: "arguments" | "prompt";
+            /** Calls */
+            calls: components["schemas"]["RepeatedCallItemOut"][];
+            /**
+             * Cost Usd
+             * @description Recorded cost of these calls; not a claim that it was wasted
+             */
+            cost_usd: number | null;
+            /** Distinct Results */
+            distinct_results: number | null;
+            /** Failed Calls */
+            failed_calls: number;
+            /** Hints */
+            hints: string[];
+            /**
+             * In Window
+             * @description Times in the stretch that reached the threshold
+             */
+            in_window: number;
+            /**
+             * Label
+             * @default possible_repeated_call
+             * @constant
+             */
+            label: "possible_repeated_call";
+            /** Median Gap Seconds */
+            median_gap_seconds: number | null;
+            /**
+             * Repeats
+             * @description Times in the whole task
+             */
+            repeats: number;
+            /** Results Stored */
+            results_stored: boolean;
+            /** Step */
+            step: string;
+            /** Threshold */
+            threshold: number;
+            /** Window */
+            window: number;
+        };
         /**
          * RetestCreate
-         * @description Replay past runs of this job on a candidate model, spending at most `budget_usd`.
+         * @description Replay past runs of this job on a candidate model, spending at most `budget_usd`, after you confirmed a preview.
          */
         RetestCreate: {
             /**
              * Budget Usd
-             * @description Required: the re-test stops before going over it
+             * @description The replay stops before going over it
              */
             budget_usd: number;
             /**
@@ -1406,6 +5216,11 @@ export interface components {
              * @description The model name to call
              */
             candidate_model: string;
+            /**
+             * Confirmation
+             * @description The single-use confirmation a preview of exactly these values returned
+             */
+            confirmation: string;
             /**
              * Sample Size
              * @description Prompts to replay (default 50)
@@ -1437,10 +5252,24 @@ export interface components {
             /** Cap Remaining Usd */
             cap_remaining_usd: number;
             /**
+             * Confirmed At
+             * @description When a person confirmed the preview. Null for an automatic, opt-in replay
+             */
+            confirmed_at?: string | null;
+            /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Evaluator
+             * @description ANSWER_KEY or SCHEMA: the task's own check
+             */
+            evaluator?: string | null;
+            /** Evidence */
+            evidence?: ("enough" | "inconclusive") | null;
+            /** Evidence Note */
+            evidence_note?: string | null;
             /** Failed */
             failed: number;
             /** Finished At */
@@ -1453,8 +5282,24 @@ export interface components {
             monthly_cap_usd: number;
             /** Pass Rate */
             pass_rate: number | null;
+            /** Pass Rate High */
+            pass_rate_high?: number | null;
+            /**
+             * Pass Rate Low
+             * @description Lower end of the 95% range for the pass rate
+             */
+            pass_rate_low?: number | null;
             /** Passed */
             passed: number;
+            /**
+             * Price Basis
+             * @description The list price the cost was worked out from. Not an invoice
+             */
+            price_basis?: {
+                [key: string]: unknown;
+            } | null;
+            /** Provider Host */
+            provider_host?: string | null;
             /**
              * Retest Id
              * Format: uuid
@@ -1464,6 +5309,11 @@ export interface components {
             runs_done: number;
             /** Runs Planned */
             runs_planned: number;
+            /**
+             * Sample Size
+             * @description How many past runs were replayed (their ids are kept, never their text)
+             */
+            sample_size?: number | null;
             /** Spent Usd */
             spent_usd: number;
             /** Started At */
@@ -1472,12 +5322,130 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "QUEUED" | "RUNNING" | "DONE" | "STOPPED_BUDGET" | "STOPPED_CAP" | "FAILED";
+            status: "QUEUED" | "RUNNING" | "DONE" | "STOPPED_BUDGET" | "STOPPED_CAP" | "STOPPED_USER" | "FAILED";
+            /**
+             * Stopping
+             * @description A person pressed Stop and the calls already in flight are finishing
+             * @default false
+             */
+            stopping: boolean;
             /**
              * Trigger
              * @enum {string}
              */
             trigger: "MANUAL" | "NEW_MODEL" | "UNSURE" | "FIRST_KEY";
+        };
+        /** RetestPreviewOut */
+        RetestPreviewOut: {
+            /**
+             * Blocked
+             * @description Why it cannot start: code and message
+             */
+            blocked: {
+                [key: string]: string;
+            } | null;
+            /** Budget Usd */
+            budget_usd: number;
+            /** Can Start */
+            can_start: boolean;
+            /** Candidate Model */
+            candidate_model: string;
+            /** Confirm Minutes */
+            confirm_minutes: number;
+            /**
+             * Confirmation
+             * @description Single use, bound to exactly these values; returned only when it can start
+             */
+            confirmation: string | null;
+            cost?: components["schemas"]["PreviewCost"] | null;
+            /** Data */
+            data?: components["schemas"]["PreviewDataRow"][];
+            /** Destination Host */
+            destination_host?: string | null;
+            /** Evaluator */
+            evaluator: string;
+            /** Evaluator Kind */
+            evaluator_kind: string;
+            examples?: components["schemas"]["PreviewExamples"] | null;
+            /** Expires At */
+            expires_at: string | null;
+            /** Job */
+            job: string;
+            /** Price Basis */
+            price_basis?: {
+                [key: string]: unknown;
+            } | null;
+            /** Provider */
+            provider?: string | null;
+            /** Retention Note */
+            retention_note?: string | null;
+            /** Sample Size Requested */
+            sample_size_requested: number;
+            /**
+             * Statements
+             * @description What will not change: live traffic, source code, your project
+             */
+            statements: string[];
+        };
+        /**
+         * RetestPreviewRequest
+         * @description Ask what a replay would send, where, and cost, before any paid call. Makes no provider call and changes nothing.
+         */
+        RetestPreviewRequest: {
+            /**
+             * Budget Usd
+             * @description The replay stops before going over it
+             */
+            budget_usd: number;
+            /**
+             * Candidate Model
+             * @description The model name to call
+             */
+            candidate_model: string;
+            /**
+             * Sample Size
+             * @description Prompts to replay (default 50)
+             */
+            sample_size?: number | null;
+        };
+        /** RollupGroup */
+        RollupGroup: {
+            /**
+             * Job Role
+             * @enum {string}
+             */
+            job_role: "engineering" | "product" | "data_science" | "operations" | "support" | "finance" | "legal" | "other";
+            /** Label */
+            label: string;
+            /** Members */
+            members: number;
+        };
+        /** RollupOut */
+        RollupOut: {
+            /** Declared Share */
+            declared_share?: number | null;
+            /** Groups */
+            groups: components["schemas"]["RollupGroup"][];
+            /** Members */
+            members: number;
+            /** Min Group Size */
+            min_group_size: number;
+            /**
+             * Not Shown
+             * @description Members in groups too small to show, or who chose no role, together
+             */
+            not_shown: number;
+            /** Reason */
+            reason: string;
+            /** Shown */
+            shown: boolean;
+            /**
+             * Usage By Role
+             * @description Always null: usage or cost by role is not available
+             */
+            usage_by_role: null;
+            /** Usage By Role Note */
+            usage_by_role_note: string;
         };
         /** RunAccepted */
         RunAccepted: {
@@ -1502,10 +5470,21 @@ export interface components {
          */
         RunCreate: {
             /**
+             * Agent
+             * @description Which agent or role made the call
+             */
+            agent?: string | null;
+            /**
              * Cache Read Tokens
              * @default 0
              */
             cache_read_tokens: number;
+            /**
+             * Cache Write 1H Tokens
+             * @description The part of cache_write_tokens written to the 1-hour cache (priced higher than the 5-minute cache). Used for the cost only; not stored
+             * @default 0
+             */
+            cache_write_1h_tokens: number;
             /**
              * Cache Write Tokens
              * @default 0
@@ -1523,11 +5502,16 @@ export interface components {
             effort?: string | null;
             /**
              * Expected
-             * @description The correct values for an ANSWER_KEY job, used to check this run. Stored only when the job has re-test consent, so a re-test can check the replayed run against the same answers
+             * @description The correct values for an ANSWER_KEY job, used to check this run. Stored only when the job has trial consent, so a trial can check the replayed run against the same answers
              */
             expected?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Feature
+             * @description Your own name for the feature or workflow this call serves, for example support_summary. Optional. It is your label: not verified, not an identity and not an invoice-grade chargeback record. Letters, digits, spaces and . _ - only
+             */
+            feature?: string | null;
             /**
              * Job
              * @description Name of an existing job in this project
@@ -1547,6 +5531,11 @@ export interface components {
             model_version: string;
             /** Output */
             output?: string | null;
+            /**
+             * Parent Span Id
+             * @description The span_id of the call that started this one (optional)
+             */
+            parent_span_id?: string | null;
             /** Prompt */
             prompt: string;
             /** Prompt Version */
@@ -1557,10 +5546,20 @@ export interface components {
              */
             provider?: string | null;
             /**
+             * Reasoning Tokens
+             * @description Reasoning/thinking tokens when the provider reports them separately. Already inside tokens_out for OpenAI and DeepSeek, and added into tokens_out for Gemini. Null = not reported
+             */
+            reasoning_tokens?: number | null;
+            /**
              * Run Id
              * Format: uuid
              */
             run_id: string;
+            /**
+             * Span Id
+             * @description This call's own id within its task (optional)
+             */
+            span_id?: string | null;
             /**
              * Tokens In
              * @description Uncached input tokens
@@ -1580,19 +5579,56 @@ export interface components {
             tool_calls?: {
                 [key: string]: unknown;
             }[] | null;
+            /**
+             * Tool Use Input Tokens
+             * @description Gemini only: tokens of tool results handed back to the model. How they are billed is not documented, so they are NOT in tokens_in and NOT priced. Null = not reported
+             */
+            tool_use_input_tokens?: number | null;
+            /**
+             * Tools Tokens
+             * @description Estimated tokens of the tool definitions sent with the call
+             */
+            tools_tokens?: number | null;
+            /**
+             * Trace Id
+             * @description One id shared by every call that serves the same user task
+             */
+            trace_id?: string | null;
+            /**
+             * Usage Raw
+             * @description The provider's usage block reduced to numbers (and the service tier, region and speed labels), kept so a figure can be audited later. No prompt or answer text
+             */
+            usage_raw?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Usage Shape
+             * @description Which provider usage layout the SDK read. 'none' means the response carried no usage block: the token counts are then unknown, not zero. Absent for older SDKs and for counts given by hand
+             */
+            usage_shape?: ("anthropic_messages" | "openai_responses" | "openai_chat" | "deepseek_chat" | "gemini" | "none") | null;
         };
         /**
          * RunDetail
          * @description One run in full, for the detail panel.
          */
         RunDetail: {
+            /**
+             * Agent
+             * @description Which agent or role made the call, if the SDK said
+             */
+            agent?: string | null;
             /** Cache Read Tokens */
             cache_read_tokens: number;
             /** Cache Write Tokens */
             cache_write_tokens: number;
             /**
+             * Content Removed At
+             * @description When the prompt, output, tool calls and answer key were cleared under the project's retention; the figures are kept
+             */
+            content_removed_at?: string | null;
+            /**
              * Cost Usd
-             * @description Null when the model has no catalog price and none was sent
+             * @description Null when the model has no catalog price and none was sent, or no usage was reported
              */
             cost_usd: number | null;
             /**
@@ -1603,8 +5639,13 @@ export interface components {
             /** Effort */
             effort?: string | null;
             /**
+             * Feature
+             * @description The label your app sent for the feature or workflow, if any. Not verified
+             */
+            feature?: string | null;
+            /**
              * Importance Score
-             * @description How much the run matters (failures and costly runs more): what decides archiving and re-test sampling
+             * @description How much the run matters (failures and costly runs more): what decides archiving and trial sampling
              * @default 1
              */
             importance_score: number;
@@ -1635,18 +5676,33 @@ export interface components {
             output: string | null;
             /**
              * Output Preview
-             * @description First 200 characters of the output
+             * @description Same for the output
              */
             output_preview: string | null;
+            /**
+             * Parent Span Id
+             * @description The span_id of the call that started this one, if the app sent one
+             */
+            parent_span_id?: string | null;
+            /**
+             * Price Status
+             * @description Why the run is or is not priced: PRICED, PARTLY_PRICED (a price-changing label such as a priority tier was reported that is not modelled), CALLER_COST (the cost came from the caller), NO_USAGE, or UNPRICED_* (unknown model, price not yet in force, price expired). Null = recorded before price versions existed. List prices, not an invoice
+             */
+            price_status?: string | null;
             /** Prompt */
-            prompt: string;
+            prompt: string | null;
             /**
              * Prompt Preview
-             * @description First 200 characters of the prompt
+             * @description First 240 characters of the prompt, whitespace collapsed, ending in an ellipsis when cut; null once retention cleared it
              */
-            prompt_preview: string;
+            prompt_preview: string | null;
             /** Prompt Version */
             prompt_version: string | null;
+            /**
+             * Reasoning Tokens
+             * @description Reasoning tokens when reported separately; null = not reported
+             */
+            reasoning_tokens?: number | null;
             /**
              * Run Id
              * Format: uuid
@@ -1656,7 +5712,12 @@ export interface components {
              * Run Kind
              * @enum {string}
              */
-            run_kind: "PRODUCTION" | "SHADOW" | "RETEST";
+            run_kind: "PRODUCTION" | "RETEST";
+            /**
+             * Span Id
+             * @description This call's own id within its task, if the app sent one
+             */
+            span_id?: string | null;
             /**
              * State
              * @enum {string}
@@ -1666,10 +5727,35 @@ export interface components {
             tokens_in: number;
             /** Tokens Out */
             tokens_out: number;
+            /**
+             * Tool Call Count
+             * @description Tool calls the response made
+             */
+            tool_call_count?: number | null;
             /** Tool Calls */
             tool_calls: {
                 [key: string]: unknown;
             }[] | null;
+            /**
+             * Tool Use Input Tokens
+             * @description Gemini tool-result input tokens, not priced; null = not reported
+             */
+            tool_use_input_tokens?: number | null;
+            /**
+             * Tools Tokens
+             * @description Estimated tokens of the tool definitions sent
+             */
+            tools_tokens?: number | null;
+            /**
+             * Trace Id
+             * @description Shared by every call serving the same user task
+             */
+            trace_id?: string | null;
+            /**
+             * Usage Shape
+             * @description Provider usage layout the SDK read; 'none' = no usage block, counts unknown
+             */
+            usage_shape?: string | null;
             /**
              * Weight
              * @description How much it counts in the recommendation now: e^(-age/S), S shorter once its version is replaced
@@ -1681,13 +5767,23 @@ export interface components {
          * @description One recorded run, as a table row. Full prompt and output come from the run detail.
          */
         RunOut: {
+            /**
+             * Agent
+             * @description Which agent or role made the call, if the SDK said
+             */
+            agent?: string | null;
             /** Cache Read Tokens */
             cache_read_tokens: number;
             /** Cache Write Tokens */
             cache_write_tokens: number;
             /**
+             * Content Removed At
+             * @description When the prompt, output, tool calls and answer key were cleared under the project's retention; the figures are kept
+             */
+            content_removed_at?: string | null;
+            /**
              * Cost Usd
-             * @description Null when the model has no catalog price and none was sent
+             * @description Null when the model has no catalog price and none was sent, or no usage was reported
              */
             cost_usd: number | null;
             /**
@@ -1698,8 +5794,13 @@ export interface components {
             /** Effort */
             effort?: string | null;
             /**
+             * Feature
+             * @description The label your app sent for the feature or workflow, if any. Not verified
+             */
+            feature?: string | null;
+            /**
              * Importance Score
-             * @description How much the run matters (failures and costly runs more): what decides archiving and re-test sampling
+             * @description How much the run matters (failures and costly runs more): what decides archiving and trial sampling
              * @default 1
              */
             importance_score: number;
@@ -1728,16 +5829,31 @@ export interface components {
             outcome_reason: string | null;
             /**
              * Output Preview
-             * @description First 200 characters of the output
+             * @description Same for the output
              */
             output_preview: string | null;
             /**
-             * Prompt Preview
-             * @description First 200 characters of the prompt
+             * Parent Span Id
+             * @description The span_id of the call that started this one, if the app sent one
              */
-            prompt_preview: string;
+            parent_span_id?: string | null;
+            /**
+             * Price Status
+             * @description Why the run is or is not priced: PRICED, PARTLY_PRICED (a price-changing label such as a priority tier was reported that is not modelled), CALLER_COST (the cost came from the caller), NO_USAGE, or UNPRICED_* (unknown model, price not yet in force, price expired). Null = recorded before price versions existed. List prices, not an invoice
+             */
+            price_status?: string | null;
+            /**
+             * Prompt Preview
+             * @description First 240 characters of the prompt, whitespace collapsed, ending in an ellipsis when cut; null once retention cleared it
+             */
+            prompt_preview: string | null;
             /** Prompt Version */
             prompt_version: string | null;
+            /**
+             * Reasoning Tokens
+             * @description Reasoning tokens when reported separately; null = not reported
+             */
+            reasoning_tokens?: number | null;
             /**
              * Run Id
              * Format: uuid
@@ -1747,7 +5863,12 @@ export interface components {
              * Run Kind
              * @enum {string}
              */
-            run_kind: "PRODUCTION" | "SHADOW" | "RETEST";
+            run_kind: "PRODUCTION" | "RETEST";
+            /**
+             * Span Id
+             * @description This call's own id within its task, if the app sent one
+             */
+            span_id?: string | null;
             /**
              * State
              * @enum {string}
@@ -1757,6 +5878,31 @@ export interface components {
             tokens_in: number;
             /** Tokens Out */
             tokens_out: number;
+            /**
+             * Tool Call Count
+             * @description Tool calls the response made
+             */
+            tool_call_count?: number | null;
+            /**
+             * Tool Use Input Tokens
+             * @description Gemini tool-result input tokens, not priced; null = not reported
+             */
+            tool_use_input_tokens?: number | null;
+            /**
+             * Tools Tokens
+             * @description Estimated tokens of the tool definitions sent
+             */
+            tools_tokens?: number | null;
+            /**
+             * Trace Id
+             * @description Shared by every call serving the same user task
+             */
+            trace_id?: string | null;
+            /**
+             * Usage Shape
+             * @description Provider usage layout the SDK read; 'none' = no usage block, counts unknown
+             */
+            usage_shape?: string | null;
             /**
              * Weight
              * @description How much it counts in the recommendation now: e^(-age/S), S shorter once its version is replaced
@@ -1772,6 +5918,219 @@ export interface components {
              * @description Pass as ?cursor= to get the next page; null on the last page
              */
             next_cursor: string | null;
+        };
+        /** SavingsEntry */
+        SavingsEntry: {
+            /** Coverage */
+            coverage: {
+                [key: string]: number;
+            } | null;
+            /** Data Notes */
+            data_notes: string[];
+            estimated_avoided: components["schemas"]["SavingsEstimated"] | null;
+            /** From Model */
+            from_model: string;
+            /** Job */
+            job: string;
+            /** Progress */
+            progress: {
+                [key: string]: number;
+            } | null;
+            realized: components["schemas"]["SavingsRealized"] | null;
+            /** Reason */
+            reason: string | null;
+            /** Reasons */
+            reasons: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "waiting" | "not_enough_data" | "saving" | "no_clear_change" | "cost_up" | "less_correct";
+            /**
+             * Switch Date
+             * Format: date
+             */
+            switch_date: string;
+            /** To Model */
+            to_model: string;
+            /**
+             * Window
+             * @description The equal periods compared: days and the before and after date ranges
+             */
+            window: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * SavingsEstimated
+         * @description A counterfactual. Never added to anything, never shown without its assumptions.
+         */
+        SavingsEstimated: {
+            /** Assumptions */
+            assumptions: string[];
+            /** Correct Answers */
+            correct_answers: number;
+            /** High */
+            high: number | null;
+            /** Label */
+            label: string;
+            /** Low */
+            low: number | null;
+            /** Point */
+            point: number | null;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "usd" | "tokens";
+            /** What */
+            what: string;
+        };
+        /** SavingsOut */
+        SavingsOut: {
+            /**
+             * As Of
+             * Format: date
+             * @description Only completed days are used, so the answer does not change as today fills up
+             */
+            as_of: string;
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Entries */
+            entries: components["schemas"]["SavingsEntry"][];
+            /** @description The estimated counterfactuals added up. Separate from everything realized */
+            estimated_avoided_total: components["schemas"]["SavingsTotal"] | null;
+            /** Jobs Checked */
+            jobs_checked: number;
+            /** Method */
+            method: string[];
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "per_use" | "subscription" | "both";
+            /** Notes */
+            notes: string[];
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "usd" | "tokens";
+        };
+        /**
+         * SavingsRealized
+         * @description The observed change in cost per correct answer since a model change. Can be negative. Not an estimate of anything else.
+         */
+        SavingsRealized: {
+            /** After */
+            after: number | null;
+            /** Before */
+            before: number | null;
+            /**
+             * Change
+             * @description Before minus after, per correct answer. Positive = cheaper now; negative = it went up
+             */
+            change: number | null;
+            /** Checked After */
+            checked_after: number;
+            /** Checked Before */
+            checked_before: number;
+            /** Correct After */
+            correct_after: number;
+            /** Correct Before */
+            correct_before: number;
+            /** Metric */
+            metric: string;
+            /** Mix Compared */
+            mix_compared: string;
+            /** Pass Rate After */
+            pass_rate_after: number;
+            /** Pass Rate Before */
+            pass_rate_before: number;
+            /** Pass Rate Change High */
+            pass_rate_change_high: number;
+            /** Pass Rate Change Low */
+            pass_rate_change_low: number;
+            /** Price Basis */
+            price_basis: string;
+            /** Range High */
+            range_high: number | null;
+            /** Range Low */
+            range_low: number | null;
+            /** Range Note */
+            range_note: string;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "usd" | "tokens";
+            /** Unit Words */
+            unit_words: string;
+        };
+        /** SavingsTotal */
+        SavingsTotal: {
+            /** Entries */
+            entries: number;
+            /** High */
+            high: number;
+            /** Label */
+            label: string;
+            /** Low */
+            low: number;
+            /** Point */
+            point: number;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "usd" | "tokens";
+        };
+        /** ScenarioOut */
+        ScenarioOut: {
+            /**
+             * Attempts
+             * @description tasks x (1 + retry rate)
+             */
+            attempts: number;
+            /** Estimate Usd */
+            estimate_usd: number | null;
+            /** High Usd */
+            high_usd: number | null;
+            /** Low Usd */
+            low_usd: number | null;
+            /** Per Task Usd */
+            per_task_usd: number | null;
+            /** Range Note */
+            range_note: string | null;
+            /** Tasks Per Period */
+            tasks_per_period: number;
+        };
+        /** SchedulerHealth */
+        SchedulerHealth: {
+            /**
+             * Overdue
+             * @description Jobs with no success within their allowance: minutes since the last success, null if never
+             */
+            overdue: {
+                [key: string]: number | null;
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "overdue";
+        };
+        /** Share */
+        Share: {
+            /** Runs */
+            runs: number;
+            /**
+             * Share
+             * @description runs divided by its denominator; null when the denominator is zero
+             */
+            share: number | null;
         };
         /** SpendOut */
         SpendOut: {
@@ -1798,6 +6157,411 @@ export interface components {
              * @default 0
              */
             unpriced_runs: number;
+        };
+        /**
+         * SplitOut
+         * @description A total change split exactly into parts that add up to it.
+         */
+        SplitOut: {
+            /**
+             * From Calls
+             * @description More or fewer calls, at the earlier average per call
+             */
+            from_calls: number;
+            /**
+             * From Mix
+             * @description Calls moving between models, plus models that are new in this period
+             */
+            from_mix: number;
+            /**
+             * From Per Call
+             * @description A call costing or weighing more or less on a model that ran in both periods
+             */
+            from_per_call: number;
+            /** Total Change */
+            total_change: number;
+            /**
+             * What
+             * @enum {string}
+             */
+            what: "spend_usd" | "tokens";
+        };
+        /** SpreadOut */
+        SpreadOut: {
+            /** Median */
+            median: number;
+            /** P25 */
+            p25: number;
+            /** P75 */
+            p75: number;
+            /** Tasks */
+            tasks: number;
+        };
+        /**
+         * SureEnoughOut
+         * @description Stage 2 of the progress bar: checked answers per model before a switch could be recommended.
+         */
+        SureEnoughOut: {
+            /**
+             * Have
+             * @description What the thinner of the two compared models has now
+             */
+            have: number | null;
+            /**
+             * Needed
+             * @description About this many per model, if today's observed rates held; null when it cannot be told
+             */
+            needed: number | null;
+        };
+        /**
+         * TaskNodeOut
+         * @description One recorded call in a task, in display order. Totals count each call once: `own` is this call, `subtree` adds its children.
+         */
+        TaskNodeOut: {
+            /** Agent */
+            agent: string | null;
+            /** Child Count */
+            child_count: number;
+            /** Depth */
+            depth: number;
+            /**
+             * Duplicate Span
+             * @description Another call in this task has the same span id
+             */
+            duplicate_span: boolean;
+            /** Job */
+            job: string;
+            /** Latency Ms */
+            latency_ms: number | null;
+            /**
+             * Link
+             * @enum {string}
+             */
+            link: "root" | "child" | "unlinked" | "no_structure";
+            /**
+             * Missing Parent
+             * @description The parent span id that matched no recorded call
+             */
+            missing_parent: string | null;
+            /** Model */
+            model: string;
+            own: components["schemas"]["TaskTotalsOut"];
+            /**
+             * Parent Run Id
+             * @description The recorded call this one sits under; null for a root, an unlinked or an unstructured call
+             */
+            parent_run_id: string | null;
+            /** Parent Span Id */
+            parent_span_id: string | null;
+            /**
+             * Reason
+             * @description Why a call is unlinked
+             */
+            reason: string | null;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Section
+             * @enum {string}
+             */
+            section: "tree" | "unlinked" | "no_structure";
+            /** Span Id */
+            span_id: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            subtree: components["schemas"]["TaskTotalsOut"];
+            /** Tools */
+            tools: string[];
+        };
+        /**
+         * TaskProfileOut
+         * @description What the recorded calls prove about a task (measured; no AI). Fewer than 25 calls: only `calls`.
+         */
+        TaskProfileOut: {
+            /**
+             * Calls
+             * @description Production calls in the window
+             */
+            calls: number;
+            /** Enough Data */
+            enough_data: boolean;
+            /** Models */
+            models: string[];
+            /** Multi Agent */
+            multi_agent: boolean;
+            summary: components["schemas"]["TaskSummaryOut"];
+            /** Tool Source */
+            tool_source: string | null;
+            /**
+             * Typical Tokens In
+             * @description Median input tokens per call, as billed
+             */
+            typical_tokens_in: number | null;
+            /**
+             * Typical Tokens Out
+             * @description Median output tokens per call, as billed
+             */
+            typical_tokens_out: number | null;
+            /** Uses Tools */
+            uses_tools: boolean;
+            /** Window Days */
+            window_days: number;
+            /**
+             * Works Like Agent
+             * @description 'yes', 'probably' or null
+             */
+            works_like_agent: string | null;
+        };
+        /** TaskStructureOut */
+        TaskStructureOut: {
+            /** Linked Children */
+            linked_children: number;
+            /**
+             * No Structure
+             * @description Calls that sent no span ids
+             */
+            no_structure: number;
+            /** Roots */
+            roots: number;
+            /**
+             * Unlinked
+             * @description Calls whose parent was not recorded, is themselves, or forms a cycle
+             */
+            unlinked: number;
+        };
+        /** TaskSummaryConsentIn */
+        TaskSummaryConsentIn: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** TaskSummaryOut */
+        TaskSummaryOut: {
+            /**
+             * Consent
+             * @description Whether this project switched the AI summary on
+             */
+            consent: boolean;
+            /**
+             * Service
+             * @description The outside AI service sample prompts are sent to when it is on
+             */
+            service: string;
+            /**
+             * State
+             * @description 'ready', 'pending', 'off' (not switched on), 'unavailable' (no AI service configured, or a limit or failure), 'no_samples' (too little stored text) or 'deleted'
+             */
+            state: string;
+            /**
+             * Text
+             * @description Two sentences written by an AI; may be wrong
+             */
+            text?: string | null;
+        };
+        /** TaskTotalsOut */
+        TaskTotalsOut: {
+            /** Calls */
+            calls: number;
+            /**
+             * Cost Usd
+             * @description Priced calls only; null when none is priced and on a subscription project
+             */
+            cost_usd: number | null;
+            /** Tokens */
+            tokens: number;
+            /** Unpriced Calls */
+            unpriced_calls: number;
+        };
+        /** TokenPartOut */
+        TokenPartOut: {
+            /**
+             * Calls
+             * @description How many calls reported it, where that is known
+             */
+            calls: number | null;
+            /**
+             * Key
+             * @description input, cached_input, cache_write, output, reasoning or tool_use_input
+             */
+            key: string;
+            /** Label */
+            label: string;
+            /** Note */
+            note?: string | null;
+            /**
+             * State
+             * @description measured: the provider reported it. not_reported: no provider layout seen in this group can report it. unknown: calls recorded before the usage ledger, or whose usage block was missing
+             * @enum {string}
+             */
+            state: "measured" | "not_reported" | "unknown";
+            /**
+             * Tokens
+             * @description Null when not known: see state. Never a silent zero
+             */
+            tokens: number | null;
+        };
+        /** ToolCountOut */
+        ToolCountOut: {
+            /** Calls */
+            calls: number;
+            /** Name */
+            name: string;
+        };
+        /** ToolInputsDeleted */
+        ToolInputsDeleted: {
+            /**
+             * Runs Cleared
+             * @description Runs whose stored tool-call inputs were removed
+             */
+            runs_cleared: number;
+        };
+        /** ToolServersOut */
+        ToolServersOut: {
+            /** Days */
+            days: number;
+            /** Job */
+            job: string | null;
+            /**
+             * Method
+             * @description How each figure is worked out, and what is not attributed
+             */
+            method: string[];
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "per_use" | "subscription" | "both";
+            /** Notes */
+            notes: string[];
+            /** @description Tool calls that are not from an MCP server we can recognise */
+            own_tools: components["schemas"]["McpOwnToolsOut"];
+            /** Servers */
+            servers: components["schemas"]["McpServerOut"][];
+            /**
+             * Since
+             * Format: date-time
+             */
+            since: string;
+            /** Support */
+            support: components["schemas"]["McpSupportOut"][];
+            /**
+             * Tool List Size
+             * @description The share of a request's input spent on one server's tool definitions is not measurable: providers load the tool list and report one usage total
+             * @default unknown
+             * @constant
+             */
+            tool_list_size: "unknown";
+            totals: components["schemas"]["McpTotalsOut"];
+            /** Truncated */
+            truncated: boolean;
+            /** Unreadable Calls */
+            unreadable_calls: number;
+            /**
+             * Until
+             * Format: date-time
+             */
+            until: string;
+        };
+        /** ToolsUsageOut */
+        ToolsUsageOut: {
+            /**
+             * Avg Tools Tokens
+             * @description Estimated tokens the tool definitions add to every call
+             */
+            avg_tools_tokens: number;
+            /** Job */
+            job: string;
+            /**
+             * Runs
+             * @description Runs that sent tool definitions
+             */
+            runs: number;
+            /**
+             * Share Of Tokens In
+             * @description Of those runs' input tokens (cache included), 0..1
+             */
+            share_of_tokens_in: number;
+        };
+        /** TraceUsageOut */
+        TraceUsageOut: {
+            /**
+             * Agent Names
+             * @description Named agents in the trace
+             */
+            agent_names?: string[];
+            /**
+             * Agents
+             * @description Distinct agents in the trace
+             */
+            agents: number;
+            /** Calls */
+            calls: number;
+            /**
+             * Multi Agent
+             * @description More than one distinct named agent shares this trace
+             * @default false
+             */
+            multi_agent: boolean;
+            /** @description Beta: the same step repeated 5 or more times within 7 steps with no sign of progress */
+            possible_loop?: components["schemas"]["LoopOut"] | null;
+            /**
+             * Repeated Prompts
+             * @description The same prompt appears 3 or more times in the trace: a likely retry loop or runaway agent
+             */
+            repeated_prompts: boolean;
+            /**
+             * Spend Usd
+             * @description Priced runs only
+             */
+            spend_usd: number;
+            /**
+             * Tokens
+             * @description Input, output and cache tokens over every call in the trace
+             */
+            tokens: number;
+            /** Trace Id */
+            trace_id: string;
+        };
+        /**
+         * UiFlagsPatch
+         * @description Only these three true/false flags can be saved; anything else is refused.
+         */
+        UiFlagsPatch: {
+            /** First Results Seen */
+            first_results_seen?: boolean | null;
+            /** Tour Seen */
+            tour_seen?: boolean | null;
+            /** Welcome Seen */
+            welcome_seen?: boolean | null;
+        };
+        /** UsageKindsOut */
+        UsageKindsOut: {
+            /**
+             * Calls
+             * @description Recent production calls the labels were worked out from (at most 5000)
+             */
+            calls: number;
+            /** Multi Agent */
+            multi_agent: boolean;
+            /** Tool Servers */
+            tool_servers: string[];
+            /**
+             * Tool Source
+             * @description 'mcp' only for mcp__server__tool names; 'tool_list'; or null
+             */
+            tool_source: string | null;
+            /** Uses Tools */
+            uses_tools: boolean;
+            /**
+             * Works Like Agent
+             * @description 'yes', 'probably' or null
+             */
+            works_like_agent: string | null;
         };
         /**
          * UsageLimitIn
@@ -1927,6 +6691,13 @@ export interface components {
             /** Picture Url */
             picture_url: string | null;
             /**
+             * Ui Flags
+             * @description First-visit guides this person has seen
+             */
+            ui_flags?: {
+                [key: string]: boolean;
+            };
+            /**
              * User Id
              * Format: uuid
              */
@@ -1944,6 +6715,128 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** VersionUsedOut */
+        VersionUsedOut: {
+            /** Checked At */
+            checked_at: string | null;
+            /**
+             * Effective From
+             * Format: date-time
+             */
+            effective_from: string;
+            /** Effective To */
+            effective_to: string | null;
+            /** Runs */
+            runs: number;
+            /** Source Url */
+            source_url: string | null;
+            /** Version Id */
+            version_id: string;
+        };
+        /** WorkspaceOut */
+        WorkspaceOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "personal" | "company";
+            /** Member Count */
+            member_count: number;
+            /** Name */
+            name: string;
+            /**
+             * Org Id
+             * @description Null for the personal workspace
+             */
+            org_id: string | null;
+            /** Project Count */
+            project_count: number;
+            /**
+             * Role
+             * @description Always owner in your own personal workspace
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "member" | "viewer";
+        };
+        /** YouInCompany */
+        YouInCompany: {
+            /** Job Role */
+            job_role: ("engineering" | "product" | "data_science" | "operations" | "support" | "finance" | "legal" | "other") | null;
+            /**
+             * Job Roles
+             * @description The fixed list you can choose from
+             */
+            job_roles: {
+                [key: string]: string;
+            };
+            /** Notice Acknowledged */
+            notice_acknowledged: boolean;
+            /** Notice Version */
+            notice_version: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "member" | "viewer";
+        };
+        /** CostPerSuccessOut */
+        agent_memory__insights__planner__CostPerSuccessOut: {
+            /** Checked Priced Runs */
+            checked_priced_runs: number;
+            /** Checked Unpriced Runs */
+            checked_unpriced_runs: number;
+            /** Formula */
+            formula: string;
+            /** Passed */
+            passed: number;
+            /** Reason */
+            reason: string | null;
+            /** Spend Usd */
+            spend_usd: number;
+            /** Unchecked Runs */
+            unchecked_runs: number;
+            /** Value Usd */
+            value_usd: number | null;
+        };
+        /** CostPerSuccessOut */
+        agent_memory__schemas__CostPerSuccessOut: {
+            /** Checked Priced Runs */
+            checked_priced_runs: number;
+            /**
+             * Checked Unpriced Runs
+             * @description Checked calls left out because their cost is unknown
+             */
+            checked_unpriced_runs: number;
+            /** Formula */
+            formula: string;
+            /**
+             * Passed
+             * @description Passes among those same calls: the bottom of the division
+             */
+            passed: number;
+            /** Reason */
+            reason: string | null;
+            /**
+             * Spend Usd
+             * @description Cost of the priced, checked calls: the top of the division
+             */
+            spend_usd: number;
+            /**
+             * Success Definition
+             * @description What a correct answer means for this task, from how it is checked
+             */
+            success_definition: string;
+            /**
+             * Unchecked Runs
+             * @description Calls left out because they have no pass/fail result yet
+             */
+            unchecked_runs: number;
+            /**
+             * Value Usd
+             * @description Cost of one correct answer; null when it cannot be worked out (see reason)
+             */
+            value_usd: number | null;
         };
     };
     responses: never;
@@ -2031,6 +6924,7 @@ export interface operations {
         parameters: {
             query?: {
                 next?: string | null;
+                switch?: boolean;
             };
             header?: never;
             path?: never;
@@ -2092,6 +6986,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+        };
+    };
+    scheduler_health_healthz_scheduler_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchedulerHealth"];
+                };
+            };
+            /** @description A scheduled job is overdue */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchedulerHealth"];
                 };
             };
         };
@@ -2235,6 +7158,628 @@ export interface operations {
             };
         };
     };
+    get_agent_task_v1_insights_agent_task_get: {
+        parameters: {
+            query: {
+                trace_id: string;
+                repeats?: number;
+                window?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTaskOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_tasks_v1_insights_agent_tasks_get: {
+        parameters: {
+            query?: {
+                /** @description Period in days: 7, 14, 30 or 90 */
+                days?: number;
+                job?: string | null;
+                /** @description Flag a call repeated at least this many times: 3, 4, 5, 6, 8 or 10 */
+                repeats?: number;
+                /** @description within this many consecutive calls: 5, 7, 10 or 15 */
+                window?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTasksOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_insights_v1_insights_agents_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back */
+                days?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentInsightsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_changes_v1_insights_changes_get: {
+        parameters: {
+            query?: {
+                /** @description Length of each period: 7, 14 or 30 */
+                days?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_cost_receipt_v1_insights_cost_receipt_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back to count */
+                days?: number;
+                /** @description Only this job */
+                job?: string | null;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CostReceiptOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_coverage_v1_insights_coverage_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back to count */
+                days?: number;
+                /** @description Only this provider */
+                provider?: string | null;
+                /** @description Only this model */
+                model?: string | null;
+                /** @description Only this task */
+                job?: string | null;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_daily_v1_insights_daily_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back */
+                days?: number;
+                /** @description Only this job */
+                job?: string | null;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayPointOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_csv_v1_insights_export_csv_get: {
+        parameters: {
+            query?: {
+                /** @description The last N days, today included: the same period the Overview shows */
+                days?: number;
+                /** @description Only this AI task */
+                ai_task?: string | null;
+                /** @description Only this model */
+                model?: string | null;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_feature_breakdown_v1_insights_features_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back to count */
+                days?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeatureBreakdownOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_features_csv_v1_insights_features_export_csv_get: {
+        parameters: {
+            query?: {
+                /** @description The last N days */
+                days?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_planner_v1_insights_planner_get: {
+        parameters: {
+            query: {
+                /** @description The task whose recorded calls the scenario is based on */
+                job: string;
+                /** @description How many days of history to use */
+                days?: number;
+                /** @description Tasks per period to price (up to 6 scenarios) */
+                calls?: number[];
+                /** @description Extra attempts per task, typed by you */
+                retry_rate?: number;
+                input_change_pct?: number;
+                output_change_pct?: number;
+                /** @description Leave out far-out calls (visible, reversible) */
+                exclude_far_out?: boolean;
+                period?: string;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlannerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_planner_csv_v1_insights_planner_export_csv_get: {
+        parameters: {
+            query: {
+                /** @description The task whose recorded calls the scenario is based on */
+                job: string;
+                /** @description How many days of history to use */
+                days?: number;
+                /** @description Tasks per period to price (up to 6 scenarios) */
+                calls?: number[];
+                /** @description Extra attempts per task, typed by you */
+                retry_rate?: number;
+                input_change_pct?: number;
+                output_change_pct?: number;
+                /** @description Leave out far-out calls (visible, reversible) */
+                exclude_far_out?: boolean;
+                period?: string;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_projection_v1_insights_projection_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_prompt_versions_v1_insights_prompt_versions_get: {
+        parameters: {
+            query: {
+                /** @description The job to compare prompt versions for */
+                job: string;
+                /** @description How many days back */
+                days?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptVersionsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_prompt_insights_v1_insights_prompts_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back */
+                days?: number;
+                /** @description Only this job */
+                job?: string | null;
+                /** @description How many rows to return */
+                limit?: number;
+                /** @description What a row is: a task and its prompt version, a task, an agent, a prompt version, or the agent, task and version together (the template receipt) */
+                group_by?: "task_version" | "task" | "agent" | "prompt_version" | "template";
+                /** @description Also return a masked preview of the repeated start of a prompt. Off by default: prompt text is not returned unless asked for */
+                show_text?: boolean;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_savings_v1_insights_savings_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_spend_v1_insights_spend_get: {
         parameters: {
             query?: {
@@ -2258,6 +7803,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpendOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_tool_servers_v1_insights_tool_servers_get: {
+        parameters: {
+            query?: {
+                /** @description Period in days: 7, 14, 30 or 90 */
+                days?: number;
+                /** @description Only one AI task */
+                job?: string | null;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolServersOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_invite_v1_invites_accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteAccept"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceOut"];
                 };
             };
             /** @description Validation Error */
@@ -2341,6 +7957,45 @@ export interface operations {
             };
         };
     };
+    patch_job_endpoint_v1_jobs__job__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_history_v1_jobs__job__history_get: {
         parameters: {
             query?: never;
@@ -2401,6 +8056,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobInsightsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_task_profile_v1_jobs__job__profile_get: {
+        parameters: {
+            query?: {
+                /** @description How many days back */
+                days?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskProfileOut"];
                 };
             };
             /** @description Validation Error */
@@ -2526,7 +8219,82 @@ export interface operations {
             };
         };
     };
+    preview_retest_v1_jobs__job__retest_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetestPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetestPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_retest_v1_jobs__job__retest__retest_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+                retest_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_retest_v1_jobs__job__retest__retest_id__stop_post: {
         parameters: {
             query?: never;
             header?: {
@@ -2585,6 +8353,39 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RetestOut"][];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_task_summary_v1_jobs__job__summary_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -2759,6 +8560,69 @@ export interface operations {
             };
         };
     };
+    delete_my_account_v1_me_delete: {
+        parameters: {
+            query: {
+                /** @description Your email address again, so an account is never deleted by accident */
+                confirm: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_ui_flags_v1_me_ui_flags_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UiFlagsPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_models_v1_models_get: {
         parameters: {
             query?: {
@@ -2800,7 +8664,669 @@ export interface operations {
             };
         };
     };
-    list_projects_v1_projects_get: {
+    get_news_v1_news_get: {
+        parameters: {
+            query?: {
+                /** @description Only this source */
+                source?: string | null;
+                /** @description Only stories naming a model this project uses */
+                mine?: boolean;
+                /** @description Only stories naming this model (e.g. an alert's model) */
+                model?: string | null;
+                /** @description Only stories naming a model this job uses */
+                job?: string | null;
+                /** @description Only stories published at or after this time */
+                since?: string | null;
+                /** @description Only stories published at or before this time */
+                until?: string | null;
+                limit?: number;
+            };
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_news_v1_news_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsRefreshOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_notices_v1_notices_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-api-key"?: string | null;
+                authorization?: string | null;
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoticesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_organisation_v1_organisations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrgCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_organisation_v1_organisations__org_id__delete: {
+        parameters: {
+            query: {
+                /** @description The company name again */
+                confirm: string;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    audit_trail_v1_organisations__org_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_invites_v1_organisations__org_id__invites_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_invite_v1_organisations__org_id__invites_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    withdraw_invite_v1_organisations__org_id__invites__invite_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+                invite_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    leave_organisation_v1_organisations__org_id__leave_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    me_in_company_v1_organisations__org_id__me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YouInCompany"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_job_role_v1_organisations__org_id__me_job_role_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobRolePut"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YouInCompany"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_members_v1_organisations__org_id__members_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_member_v1_organisations__org_id__members__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_role_v1_organisations__org_id__members__user_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemberRolePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_notice_v1_organisations__org_id__notice_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyNoticeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_notice_v1_organisations__org_id__notice_ack_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoticeAck"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyNoticeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    overview_v1_organisations__org_id__overview_get: {
+        parameters: {
+            query?: {
+                /** @description Period in days: 7, 14, 30 or 90 */
+                days?: number;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyOverviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_overview_v1_organisations__org_id__overview_export_csv_get: {
+        parameters: {
+            query?: {
+                /** @description Period in days: 7, 14, 30 or 90 */
+                days?: number;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rollups_v1_organisations__org_id__rollups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RollupOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    permission_matrix_v1_permissions_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2815,7 +9341,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    list_projects_v1_projects_get: {
+        parameters: {
+            query?: {
+                /** @description A company id; leave out for your personal projects */
+                workspace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/json": components["schemas"]["ProjectOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -2884,6 +9444,38 @@ export interface operations {
             };
         };
     };
+    delete_project_endpoint_v1_projects__project_id__delete: {
+        parameters: {
+            query: {
+                /** @description The project id again, so a project is never deleted by accident */
+                confirm: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     patch_project_v1_projects__project_id__patch: {
         parameters: {
             query?: never;
@@ -2937,6 +9529,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectKey"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_tool_inputs_v1_projects__project_id__tool_inputs_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolInputsDeleted"];
                 };
             };
             /** @description Validation Error */
@@ -3200,6 +9823,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_task_summary_consent_v1_task_summary_consent_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-project-id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskSummaryConsentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_workspaces_v1_workspaces_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceOut"][];
                 };
             };
         };
