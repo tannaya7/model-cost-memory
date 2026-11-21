@@ -13,10 +13,15 @@ ROOT = Path(__file__).resolve().parents[1] / "src" / "agent_memory"
 OLD = re.compile(r"\bre-test(ed|ing|s)?\b", re.I)  # the hyphenated word is the one people read; plain `retest` is an internal name
 
 
+# Python 3.12 splits an f-string into pieces (FSTRING_MIDDLE is the text between the braces); 3.11, which this project also supports and CI runs,
+# reads a whole f-string as one STRING token. Both are checked, so the guard works on either.
+TEXT_TOKENS = tuple(t for t in (tokenize.STRING, getattr(tokenize, "FSTRING_MIDDLE", None)) if t is not None)
+
+
 def visible_strings(source: str):
     tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
     for i, t in enumerate(tokens):
-        if t.type not in (tokenize.STRING, tokenize.FSTRING_MIDDLE):
+        if t.type not in TEXT_TOKENS:
             continue
         j = i - 1
         while j >= 0 and tokens[j].type in (tokenize.NL, tokenize.COMMENT, tokenize.INDENT, tokenize.DEDENT):
@@ -32,7 +37,8 @@ def visible_strings(source: str):
 def test_the_guard_finds_the_old_word_in_text_and_ignores_code():
     sample = 'x = "a re-test would settle it"\ny = f"Re-tests are off for {name}"\nz = "retests"\n\ndef f():\n    """A re-test runner."""\n# a re-test\n'
     found = [s for _, s in visible_strings(sample) if OLD.search(s)]
-    assert found == ['"a re-test would settle it"', "Re-tests are off for "]
+    assert len(found) == 2  # the plain string and the f-string; not the lone docstring, the comment or the plain `retests`
+    assert "a re-test would settle it" in found[0] and "Re-tests are off for" in found[1]
 
 
 def test_no_text_the_server_sends_says_re_test():
