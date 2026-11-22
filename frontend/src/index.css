@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
+@import "@fontsource-variable/fraunces/opsz.css";
+@import "@fontsource-variable/fraunces/opsz-italic.css";
 @import "./shared/theme/theme.css";
 
 /* Expose the theme variables to Tailwind utilities (bg-surface, text-dim, ...). */
@@ -29,6 +31,8 @@
   --color-skeleton: var(--color-skeleton);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
+  --font-head: var(--font-head);
+  --font-display: var(--font-display);
   --radius-card: var(--radius);
 }
 
@@ -58,6 +62,14 @@ body {
   font-family: var(--font-sans);
   font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
+}
+
+/* Two voices: Fraunces (a warm editorial serif) for the headings of the public pages (class "editorial": landing, sign-in, welcome) and the one word a heading
+   leans on, Geist for everything else, including the whole dashboard. */
+.editorial h1,
+.editorial h2 {
+  font-family: var(--font-head);
+  letter-spacing: -0.022em;
 }
 
 ::selection {
@@ -159,3 +171,53 @@ body::after {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ------------------------------------------------------------------------------------------------ */
+/* Editorial finish. Quiet surfaces, hairlines, one serif. Motion lives in the landing film and the calm "Motion" switch;
+   nothing here glows or drifts. Rules sit in the components layer so Tailwind utilities still win over them. */
+@layer components {
+  .font-head { font-family: var(--font-head); }
+  .font-display { font-family: var(--font-display); font-weight: 400; font-optical-sizing: auto; }
+  .italic-serif { font-family: var(--font-display); font-style: italic; font-weight: 300; }
+
+  /* A panel gains a thin brand-coloured edge when it is pointed at. It does not move: panels hold charts and tables people read. */
+  .panel { transition: border-color 0.25s ease; }
+  .panel:hover { border-color: color-mix(in srgb, var(--color-accent) 34%, var(--color-rule)); }
+
+  /* The dark surface the 3D pieces sit in: flat deep midnight and a hairline. */
+  .stage-dark {
+    background: linear-gradient(180deg, #0a1a40 0%, #07102b 100%);
+    color: #e4f5fa;
+    box-shadow: inset 0 0 0 1px rgba(228, 245, 250, 0.1);
+  }
+
+  /* A pill button in the style of the landing film: paper, with a round hot-colour arrow. */
+  .pill-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.9rem;
+    border-radius: 999px;
+    background: #e4f5fa;
+    color: #07102b;
+    padding: 0.55rem 0.55rem 0.55rem 1.35rem;
+    font-weight: 500;
+    box-shadow: 0 10px 30px -12px rgba(7, 16, 43, 0.5);
+    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s ease;
+  }
+  .pill-cta:hover { transform: translateY(-2px); box-shadow: 0 16px 36px -14px rgba(7, 16, 43, 0.6); }
+  .pill-cta > .dot {
+    display: grid;
+    place-items: center;
+    height: 2.2rem;
+    width: 2.2rem;
+    border-radius: 999px;
+    background: #d3249b;
+    color: #fff;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill-cta { transition: none; }
+}
+html[data-motion="calm"] .pill-cta { transition: none; }
+html[data-motion="calm"] .pill-cta:hover { transform: none; }

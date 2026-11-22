@@ -1,6 +1,6 @@
 """Held-out check: does the engine pick the right model on prompts it never saw?
 
-  # real runs: every model must have answered the same prompts (run_corpus.py once per model)
+  # real runs: every model must have answered the same prompts (your own recorded calls, one run per model)
   python scripts/holdout_check.py --project demo --job invoice-extract --current gemini-2.5-pro
 
   # simulated answers on generated invoices, four scenarios, written to reports/holdout_check.md

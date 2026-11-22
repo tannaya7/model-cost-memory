@@ -43,11 +43,14 @@ export default function JobWorkspace() {
 
   if (jobs.data && !job) {
     return (
-      <EmptyState
-        title={`There is no AI task called “${jobName}”`}
-        hint="It may have been renamed, or it belongs to another project."
-        action={<ButtonLink to={p("/jobs")}>All AI tasks</ButtonLink>}
-      />
+      <>
+        <h1 className="sr-only">AI task not found</h1>
+        <EmptyState
+          title={`There is no AI task called “${jobName}”`}
+          hint="It may have been renamed, or it belongs to another project."
+          action={<ButtonLink to={p("/jobs")}>All AI tasks</ButtonLink>}
+        />
+      </>
     );
   }
 

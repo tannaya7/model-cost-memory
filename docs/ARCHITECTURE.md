@@ -322,7 +322,7 @@ src/agent_memory/
 ├── costing.py         exact run cost from token usage and catalog prices
 ├── versions.py        model name normalisation (a model's family and its versions)
 ├── embeddings.py      MiniLM and hashing embedders behind an LRU cache
-├── corpus.py          invoice-extraction corpus with exact known answers
+├── corpus.py          synthetic invoices with exact answers (the held-out check only; not shipped in the image)
 ├── recorder.py        RunRecorder SDK
 ├── scheduler.py       maintenance jobs: janitor, decay, consolidation, regression sweep, trials, alerts, catalog, retention, news
 ├── checks/            OutcomeChecker interface; answer key, schema, late label (test command and sandbox: later)
@@ -338,13 +338,12 @@ src/agent_memory/
 └── prompts/           the one prompt file the system owns
 migrations/            Alembic: the only way the schema changes (0001-0016)
 contract/              OpenAPI file and sample responses the web app is built against
-corpus/                the generated invoice corpus
 deploy/                Caddy, backup, restore and deploy files for the server
 frontend/              React web app: / landing, /signin, /projects, /projects/new, then /p/<project>/... for one project.
                        screens/ (Overview, Jobs, a job's workspace, Models, Activity, Settings), ui/ (design
                        system, charts), features/ (data layer and forms per feature), app/ (frame and routing)
 reports/               measured results: regression detection, silent drops, the staleness experiment
-scripts/               create_project, sync_catalog, build/run_corpus, simulate, staleness_experiment, seed_demo, ...
+scripts/               create_project, delete_project, sync_catalog, outbox_status, catalog_override (shipped in the image) and the research scripts that reproduce reports/
 db/schema.sql · tests/ · docker-compose.yml · Dockerfile · pyproject.toml
 ```
 

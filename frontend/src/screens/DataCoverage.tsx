@@ -41,6 +41,7 @@ export default function DataCoverage() {
         </p>
       </div>
 
+
       <Panel className="p-4 md:p-5">
         <form className="flex flex-wrap items-end gap-4" aria-label="Coverage filters" onSubmit={(e) => e.preventDefault()}>
           <Segmented label="Period" value={days} options={DAYS.map((d) => ({ value: String(d), label: `${d} days` }))} onChange={setDays} />

@@ -17,3 +17,6 @@ poc
 frontend/node_modules
 frontend/dist
 tests
+# research code: reproduces the published simulation results, never imported by the product
+src/agent_memory/simulation
+src/agent_memory/corpus.py

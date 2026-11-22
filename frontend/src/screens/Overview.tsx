@@ -176,6 +176,7 @@ export default function Overview() {
         </div>
       </motion.div>
 
+
       <div role="status" aria-live="polite" className="sr-only" data-testid="move-announcement">{moved}</div>
       <FirstResults floor={floorOf(byJob)} />
       {first.waiting && <WaitingForFirstCall checking={first.checking} onCheck={first.check} />}

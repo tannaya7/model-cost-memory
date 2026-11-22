@@ -12,6 +12,7 @@ import { LegacyRedirect, ProjectScope, RequireUser } from "./app/project";
 import { Skeleton } from "./ui/primitives";
 import { projectPath } from "./shared/projectPath";
 
+import { MotionRoot } from "./shared/motion/MotionRoot";
 const Landing = lazy(() => import("./screens/Landing"));
 const SignIn = lazy(() => import("./screens/SignIn"));
 const Projects = lazy(() => import("./screens/Projects"));
@@ -127,5 +128,10 @@ function ProjectSettingsRedirect() {
 }
 
 export default function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <>
+      <MotionRoot />
+      <RouterProvider router={router} />
+    </>
+  );
 }

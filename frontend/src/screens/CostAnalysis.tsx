@@ -33,6 +33,7 @@ export default function CostAnalysis() {
         <Segmented label="Period" value={days} options={DAYS.map((d) => ({ value: String(d), label: `${d} days` }))} onChange={setDays} />
       </div>
 
+
       <Reveal>
         <Panel className="p-5 md:p-6" id="receipt">
           <PanelHeader title="How the spend was worked out" hint="Currency and period, passed, failed and unchecked calls, unpriced calls and why, the dated list prices used, and your own invoice total to compare with." />

@@ -137,12 +137,13 @@ export default function SignIn() {
       </section>
 
       <section className="relative flex items-center justify-center p-6">
-        <ThemeToggle className="absolute right-5 top-5" />
+        <div className="absolute right-5 top-5"><ThemeToggle /></div>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="panel w-full max-w-sm p-8">
           <div className="mb-6 flex items-center justify-between gap-2.5 lg:hidden">
             <Link to="/" className="flex items-center gap-2.5"><IconLogo size={28} /><span className="font-semibold tracking-tight">Model &amp; Cost Memory</span></Link>
             <Link to="/" className="text-xs text-dim hover:text-ink">← Home</Link>
           </div>
+          <h1 className="sr-only lg:hidden">Sign in to Model &amp; Cost Memory</h1>
           <h2 className="text-2xl font-semibold tracking-tight">Sign in</h2>
           <p className="mt-1 text-sm text-dim">See which models your AI features should use, and what that saves.</p>
           {switching && me.data && (

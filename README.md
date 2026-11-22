@@ -147,25 +147,8 @@ background, adds well under 5 ms, and never raises into your application. `provi
 (`openai`, `gemini`, `groq`, `together_ai`, ... as the price list names them): the same open-weight model can cost
 several times more on one provider than another, so naming it gets each run that provider's price.
 
-Try it with the built-in corpus of invoices with known answers, on a free hosted model:
-
-```bash
-python scripts/build_corpus.py
-python scripts/run_corpus.py --model <a Gemini model name> --limit 50 \
-    --base-url https://generativelanguage.googleapis.com/v1beta/openai/ --api-key-env GEMINI_API_KEY
-```
-
-Pick a model your key's free tier offers that is also in the price catalog (`GET /v1/models?q=gemini`), so each
-run is priced at its real list price. The script names the provider from `--base-url`, so Gemma through the
-Gemini API is priced at Gemini's $0, not another provider's rate. Groq works the same way with
-`--base-url https://api.groq.com/openai/v1`.
-
-Or fill a demo project with 90 days of simulated history (recommendations that change, a regression alert,
-spend), and let anyone read it without signing in:
-
-```bash
-python scripts/seed_demo.py --database-url "$DATABASE_URL"     # then set DEMO_PROJECT_ID=demo
-```
+To see your first results, record real calls for one AI task (a verdict needs about 25 recent checked calls). Nothing
+is pre-loaded: a new project is empty until your own application sends calls.
 
 Trials run on the customer's own provider key, asked for in the web app the first time a trial needs it
 and stored encrypted with `SECRET_KEY`. Every trial has a budget, and every project a monthly cap (default

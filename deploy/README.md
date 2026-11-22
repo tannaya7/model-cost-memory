@@ -20,8 +20,7 @@ Laptops need none of this: development uses a free hosted Neon database. Docker 
    URI `https://<DOMAIN>/auth/google/callback` and set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Leave
    `DEV_LOGIN` and `ALLOW_PRIVATE_URLS` false: with `PUBLIC_URL` on https the API and the scheduler refuse to start
    if either is on, or if `SECRET_KEY` is missing or shorter than 32 characters. Optional: `SUMMARY_API_KEY` (or
-   `GEMINI_API_KEY`) for two-sentence recommendation summaries on Gemini's free tier, `DEMO_PROJECT_ID` for a public read-only demo (fill it with
-   `python scripts/seed_demo.py`), and the abuse limits (`RATE_LIMIT_*`, `RUNS_PER_DAY_PER_PROJECT`, `STREAMS_*`),
+   `GEMINI_API_KEY`) for two-sentence recommendation summaries on Gemini's free tier, `DEMO_PROJECT_ID` (leave empty: no public demo), and the abuse limits (`RATE_LIMIT_*`, `RUNS_PER_DAY_PER_PROJECT`, `STREAMS_*`),
    whose defaults suit one small server.
 6. **Build the web app** so `frontend/dist` is present: `npm ci && npm run build` in `frontend/`.
 7. **First deploy:** `./deploy/deploy.sh`. It builds, runs `alembic upgrade head`, starts everything and checks `/healthz`.

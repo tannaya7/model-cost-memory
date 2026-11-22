@@ -107,6 +107,8 @@
   --grain: 0;
 
   --font-sans: "Geist Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-head: "Fraunces Variable", Georgia, "Times New Roman", serif;
+  --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
   --font-mono: "Geist Mono Variable", ui-monospace, Consolas, monospace;
 
   --radius: 1rem;

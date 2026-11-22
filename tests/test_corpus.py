@@ -2,21 +2,9 @@
 
 import re
 from decimal import Decimal
-from types import SimpleNamespace
-
-import httpx
 
 from agent_memory.checks import Outcome, build_checker
-from agent_memory.corpus import (
-    DIFFICULTIES,
-    JOB_FIELDS,
-    Invoice,
-    from_jsonl,
-    generate_invoices,
-    replay,
-    to_jsonl,
-)
-from agent_memory.recorder import Sender
+from agent_memory.corpus import DIFFICULTIES, JOB_FIELDS, generate_invoices
 
 
 def test_the_same_seed_gives_the_same_corpus():
@@ -57,51 +45,3 @@ def test_the_answer_key_checker_accepts_the_expected_answer_and_rejects_a_wrong_
     assert checker.check(right, inv.expected).outcome is Outcome.PASS
     wrong = right.replace(inv.expected["invoice_number"], "INV-0000")
     assert checker.check(wrong, inv.expected).outcome is Outcome.FAIL
-
-
-def test_jsonl_round_trip():
-    invoices = generate_invoices(6)
-    assert from_jsonl(to_jsonl(invoices)) == invoices
-    assert all(isinstance(i, Invoice) for i in from_jsonl(to_jsonl(invoices)))
-
-
-def test_replay_records_every_call_with_its_expected_answer():
-    posted = []
-
-    def server(request: httpx.Request) -> httpx.Response:
-        posted.append(request.content)
-        return httpx.Response(202, json={})
-
-    def fake_model(prompt: str):
-        return SimpleNamespace(
-            model="local-model-1",
-            usage=SimpleNamespace(prompt_tokens=100, completion_tokens=20,
-                                  prompt_tokens_details=SimpleNamespace(cached_tokens=0)),
-            choices=[SimpleNamespace(message=SimpleNamespace(content='{"total": 1}'))],
-        )
-
-    sender = Sender("http://api.test", "key", transport=httpx.MockTransport(server), backoff=0.0)
-    assert replay(generate_invoices(5), fake_model, model="local-model", sender=sender) == 5
-    assert sender.flush(3) and sender.sent == 5
-    import json
-
-    body = json.loads(posted[0])
-    assert body["job"] == "invoice-extract" and body["model"] == "local-model"
-    assert body["expected"]["invoice_number"].startswith("INV-") and body["prompt_version"] == "v1"
-    sender.close()
-
-
-def test_ensure_job_creates_it_once_and_tolerates_an_existing_one():
-    from agent_memory.corpus import JOB_DEFINITION, ensure_job
-
-    seen = []
-
-    def server(request: httpx.Request) -> httpx.Response:
-        seen.append((request.method, request.url.path, request.headers["X-API-Key"]))
-        return httpx.Response(201 if len(seen) == 1 else 409, json={})
-
-    transport = httpx.MockTransport(server)
-    assert ensure_job("http://api.test", "k", transport=transport) is True
-    assert ensure_job("http://api.test", "k", transport=transport) is False
-    assert seen[0] == ("POST", "/v1/jobs", "k")
-    assert JOB_DEFINITION["check_kind"] == "ANSWER_KEY" and JOB_DEFINITION["check_config"]["fields"] == JOB_FIELDS

@@ -21,6 +21,12 @@ import { IconAlert, IconArrowRight, IconBolt, IconCheck, IconDollar, IconFlask, 
 import { ButtonLink, cx } from "../ui/primitives";
 import { projectPath } from "../shared/projectPath";
 import { ThemeToggle } from "../ui/ThemeToggle";
+import { MotionToggle } from "../ui/MotionToggle";
+import { Cinema } from "./landing/Cinema";
+import { useMotion } from "../shared/motion/useMotion";
+import { Scene3D } from "../shared/three/Scene3D";
+import { canUseWebGL } from "../shared/motion/webgl";
+import { useMediaQuery } from "../shared/motion/useMediaQuery";
 
 /* ----------------------------------------------------------------------------------------------- */
 /* Small pieces                                                                                     */
@@ -382,7 +388,28 @@ function MapCard({ x, y }: { x?: MotionValue<number>; y?: MotionValue<number> })
   );
 }
 
+/** The three things the picture shows, in words. Real text, so nobody depends on the picture to understand it. */
+function PipelineCaptions({ className }: { className?: string }) {
+  const items = [
+    ["1", "Your app calls the AI provider exactly as before. We are never in this path."],
+    ["2", "A copy is checked in the background: passed or failed, failures included."],
+    ["3", "The evidence is remembered. Evidence about replaced models fades."],
+  ];
+  return (
+    <ol className={cx("grid gap-2 sm:grid-cols-3", className)}>
+      {items.map(([n, t]) => (
+        <li key={n} className="flex gap-2 rounded-[12px] border border-white/10 bg-white/[0.06] p-2.5 text-[11px] leading-snug text-[#d4ecf3] backdrop-blur-sm">
+          <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-accent-2 text-[10px] font-bold text-white">{n}</span>
+          <span>{t}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function Stage() {
+  const use3d = canUseWebGL();
+  const wide = useMediaQuery("(min-width: 1024px)"); // only one 3D scene is ever drawn: the one for this screen size
   const ref = useRef<HTMLDivElement>(null);
   const reduce = Boolean(useReducedMotion());
   const mx = useMotionValue(0);
@@ -423,15 +450,28 @@ function Stage() {
           my.set(0);
         }}
       >
-        <motion.div
-          className="absolute -inset-10"
-          style={{ rotateX: tiltX, rotateY: tiltY, WebkitMaskImage: fade, maskImage: fade }}
-          initial={{ opacity: 0, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <Scene reduce={reduce} />
-        </motion.div>
+        {use3d ? (
+          <motion.div
+            className="stage-dark absolute inset-0 overflow-hidden rounded-[32px]"
+            style={{ rotateX: tiltX, rotateY: tiltY }}
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {wide && <Scene3D at={0.5} className="absolute inset-0" fallback={<Scene reduce={reduce} />} />}
+            <PipelineCaptions className="absolute inset-x-4 top-4" />
+          </motion.div>
+        ) : (
+          <motion.div
+            className="absolute -inset-10"
+            style={{ rotateX: tiltX, rotateY: tiltY, WebkitMaskImage: fade, maskImage: fade }}
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <Scene reduce={reduce} />
+          </motion.div>
+        )}
         <FloatCard x={ax} y={ay} delay={1.6} className="absolute -left-6 top-[30%] w-56"><VerdictCard /></FloatCard>
         <FloatCard x={bx} y={by} delay={1.9} className="absolute -right-8 top-[50%] w-60"><DropCard /></FloatCard>
         <FloatCard x={cx2} y={cy2} delay={2.2} className="absolute -right-2 bottom-0 w-64"><RetestCard progress={progress} /></FloatCard>
@@ -439,9 +479,18 @@ function Stage() {
 
       {/* Phones and tablets: the scene as a banner, then the cards stacked */}
       <div className="flex flex-col gap-3 lg:hidden">
-        <div className="relative h-[360px] overflow-hidden rounded-[24px] border border-rule bg-[var(--scene-floor)] sm:h-[440px]">
-          <Scene reduce={reduce} />
-        </div>
+        {use3d ? (
+          <>
+            <div className="stage-dark relative h-[360px] overflow-hidden rounded-[24px] sm:h-[440px]">
+              {!wide && <Scene3D at={0.5} className="absolute inset-0" fallback={<Scene reduce={reduce} />} />}
+            </div>
+            <PipelineCaptions className="[&_li]:border-rule [&_li]:bg-surface/70 [&_li]:text-dim" />
+          </>
+        ) : (
+          <div className="relative h-[360px] overflow-hidden rounded-[24px] border border-rule bg-[var(--scene-floor)] sm:h-[440px]">
+            <Scene reduce={reduce} />
+          </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-3">
           <FloatCard delay={0.8}><VerdictCard /></FloatCard>
           <FloatCard delay={1.0}><DropCard /></FloatCard>
@@ -502,31 +551,29 @@ const FEATURES = [
   { icon: IconShield, title: "Your data has an end", text: "Prompts and answers are deleted after the retention you choose; the figures stay. Delete a project and everything in it goes." },
 ];
 
-function Nav({ demo, signedIn }: { demo: boolean; signedIn: boolean }) {
+function Nav({ demo, signedIn, tone }: { demo: boolean; signedIn: boolean; tone: "ink" | "light" }) {
   const { scrollY } = useScroll();
   const [solid, setSolid] = useState(false);
   useEffect(() => scrollY.on("change", (v) => setSolid(v > 24)), [scrollY]);
+  const light = tone === "light";
+  const link = light ? "text-[#e4f5fa]/85 hover:text-white" : "text-dim hover:text-ink";
   return (
-    <header className={cx("fixed inset-x-0 top-0 z-40 transition-colors duration-300", solid ? "border-b border-rule bg-bg/80 backdrop-blur-xl" : "border-b border-transparent")}>
-      <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between gap-4 px-4 md:px-6">
-        <Link to="/" className="flex items-center gap-2.5">
-          <IconLogo size={28} />
-          <span className="text-[15px] font-semibold tracking-tight">Model &amp; Cost Memory</span>
-        </Link>
-        <nav className="hidden items-center gap-7 text-sm text-dim md:flex" aria-label="Page sections">
-          <a href="#how" className="hover:text-ink">How it works</a>
-          <a href="#what" className="hover:text-ink">What you get</a>
-          <a href="#numbers" className="hover:text-ink">Results</a>
-          <a href="#setup" className="hover:text-ink">Set up</a>
+    <header className={cx("fixed inset-x-0 top-0 z-40 transition-colors duration-300", light ? "border-b border-transparent bg-gradient-to-b from-[#07102b]/80 to-transparent" : solid ? "border-b border-rule bg-bg/80 backdrop-blur-xl" : "border-b border-transparent")}>
+      <div className="mx-auto grid h-16 max-w-[1500px] grid-cols-[1fr_auto_1fr] items-center gap-4 px-5 md:px-10">
+        <nav className={cx("hidden items-center gap-7 text-sm md:flex", link)} aria-label="Page sections">
+          <a href="#numbers">Results</a>
+          <a href="#what">What you get</a>
+          <a href="#setup">Set up</a>
         </nav>
-        <div className="flex items-center gap-2">
-          <ThemeToggle className="mr-1" />
-          {demo && <ButtonLink to={projectPath("demo")} variant="ghost" size="sm" className="hidden sm:inline-flex">Live demo</ButtonLink>}
-          {signedIn ? (
-            <ButtonLink to="/projects" variant="primary" size="sm">Open your projects</ButtonLink>
-          ) : (
-            <ButtonLink to="/signin" variant="primary" size="sm">Sign in</ButtonLink>
-          )}
+        <Link to="/" className={cx("col-start-2 flex items-center gap-2 font-display text-[19px] tracking-tight", light ? "text-[#e4f5fa]" : "text-ink")} aria-label="Model & Cost Memory">
+          <IconLogo size={24} />
+          <span className="hidden sm:inline">Model &amp; Cost Memory</span>
+        </Link>
+        <div className="col-start-3 flex items-center justify-end gap-2.5">
+          <MotionToggle tone={light ? "light" : "ink"} className="hidden sm:inline-flex" />
+          <ThemeToggle />
+          {demo && <ButtonLink to={projectPath("demo")} variant="ghost" size="sm" className="hidden lg:inline-flex">Live demo</ButtonLink>}
+          <Link to={signedIn ? "/projects" : "/signin"} className={cx("text-sm font-medium", link)}>{signedIn ? "Open your projects" : "Sign in"}</Link>
         </div>
       </div>
     </header>
@@ -541,13 +588,18 @@ export default function Landing() {
   // The landing page is always the front door: nothing saved in the browser redirects away from it.
   const signedIn = Boolean(me.data);
   const demo = Boolean(config.data?.demo_project_id);
+  const { calm } = useMotion();
+  const cinematic = canUseWebGL() && !calm;
+  const [dark, setDark] = useState(true);
 
   return (
-    <div className="min-h-screen overflow-x-hidden">
-      <Nav demo={demo} signedIn={signedIn} />
+    <div className="editorial min-h-screen overflow-x-clip">
+      <Nav demo={demo} signedIn={signedIn} tone={cinematic && dark ? "light" : "ink"} />
 
       <main>
-      {/* Hero */}
+      {cinematic && <Cinema signedIn={signedIn} onTone={setDark} />}
+      {/* The classic opening: used where the film cannot run (no WebGL, or calm motion) */}
+      {!cinematic && (
       <section className="relative flex min-h-[100svh] items-center pt-16">
         <motion.div aria-hidden style={{ y: glowY }} className="pointer-events-none absolute -left-40 top-0 h-[640px] w-[640px] rounded-full bg-accent/20 blur-3xl" />
         <div aria-hidden className="pointer-events-none absolute -right-48 top-24 h-[520px] w-[520px] rounded-full bg-accent-2/10 blur-3xl" />
@@ -557,8 +609,8 @@ export default function Landing() {
               <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ok opacity-60 motion-reduce:animate-none" /><span className="relative inline-flex h-2 w-2 rounded-full bg-ok" /></span>
               Long-term memory for the AI features you run
             </motion.p>
-            <motion.h1 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05, duration: 0.7 }} className="mt-5 text-[34px] font-semibold leading-[1.04] tracking-tight md:text-[52px]">
-              Stop paying for a bigger model than the work needs.
+            <motion.h1 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05, duration: 0.7 }} className="mt-5 text-[36px] font-semibold leading-[1.02] tracking-tight md:text-[60px]">
+              Stop paying for a <span className="italic-serif">bigger model</span> than the work needs.
             </motion.h1>
             <motion.p initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, duration: 0.7 }} className="mt-5 max-w-xl text-[17px] leading-relaxed text-dim">
               Record every AI call. Each answer is checked, every model's real record on your work is remembered,
@@ -578,6 +630,7 @@ export default function Landing() {
           <Stage />
         </div>
       </section>
+      )}
 
       <Marquee />
 
@@ -592,7 +645,7 @@ export default function Landing() {
             {FIGURES.map((f, i) => (
               <Reveal key={f.label} delay={i * 0.08} className="h-full">
                 <div className="panel h-full p-6">
-                  <p className="text-[44px] font-semibold leading-none tracking-tight"><span className="text-gradient"><Figure value={f.value} suffix={f.suffix} /></span></p>
+                  <p className="font-display text-[48px] leading-none tracking-tight"><span className="text-gradient"><Figure value={f.value} suffix={f.suffix} /></span></p>
                   <p className="mt-3 text-sm font-semibold text-ink">{f.label}</p>
                   <p className="mt-1 text-xs text-muted">{f.note}</p>
                 </div>
@@ -646,7 +699,7 @@ export default function Landing() {
           <div className="mt-10 grid gap-4 md:grid-cols-2">
             {FEATURES.map(({ icon: Icon, title, text }, i) => (
               <Reveal key={title} delay={i * 0.08}>
-                <motion.div whileHover={{ y: -4 }} className="panel group flex h-full gap-5 p-6 transition-colors hover:border-rule-strong">
+                <motion.div whileHover={{ y: -3 }} className="panel group flex h-full gap-5 p-6 transition-colors hover:border-rule-strong">
                   <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[12px] bg-accent-soft text-accent transition-transform group-hover:scale-110"><Icon size={20} /></span>
                   <span>
                     <span className="block text-[17px] font-semibold">{title}</span>

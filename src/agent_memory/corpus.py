@@ -1,4 +1,4 @@
-"""The first corpus: invoice extraction with known answers.
+"""Synthetic invoices with known answers, for the held-out check (scripts/holdout_check.py).
 
 Every invoice is generated from its answer, so the expected values are exact and free: nothing is
 hand-labelled and no model is involved. The documents come in three difficulty levels, so a small
@@ -15,29 +15,15 @@ it acceptable to send them to free-tier model providers.
 
 from __future__ import annotations
 
-import json
 import random
-from collections.abc import Callable, Iterable
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-import httpx
-
-from .recorder import RunRecorder, Sender
-
 JOB_NAME = "invoice-extract"
 JOB_FIELDS = ["vendor", "invoice_number", "date", "total"]
 DIFFICULTIES = ("easy", "medium", "hard")
-
-JOB_DEFINITION = {
-    "name": JOB_NAME,
-    "description": "Extract vendor, invoice number, date and total from an invoice",
-    "check_kind": "ANSWER_KEY",
-    "check_config": {"fields": JOB_FIELDS},
-    "retest_consent": True,
-}
 
 PROMPT = (
     "Extract the vendor name, the invoice number, the invoice date (as YYYY-MM-DD) and the total amount "
@@ -124,48 +110,3 @@ def generate_invoices(n: int, seed: int = 7) -> list[Invoice]:
         expected = {"vendor": vendor, "invoice_number": number, "date": when.isoformat(), "total": float(total)}
         invoices.append(Invoice(id=f"inv-{seed}-{i:04d}", difficulty=difficulty, text=text, expected=expected))
     return invoices
-
-
-def to_jsonl(invoices: Iterable[Invoice]) -> str:
-    return "".join(json.dumps(asdict(inv), ensure_ascii=False, sort_keys=True) + "\n" for inv in invoices)
-
-
-def from_jsonl(text: str) -> list[Invoice]:
-    return [Invoice(**json.loads(line)) for line in text.splitlines() if line.strip()]
-
-
-def replay(
-    invoices: Iterable[Invoice],
-    complete: Callable[[str], Any],
-    *,
-    model: str,
-    sender: Sender | None = None,
-    job: str = JOB_NAME,
-    prompt_version: str | None = "v1",
-    provider: str | None = None,
-) -> int:
-    """Send each invoice to a model and record every call through the SDK.
-
-    `complete(prompt)` makes the model call and returns the provider response (any OpenAI- or
-    Anthropic-shaped object). The call happens inside the recorder, exactly as an application's would,
-    so latency is measured around it. Returns the number of runs recorded.
-    """
-    count = 0
-    for invoice in invoices:
-        with RunRecorder(job=job, prompt_version=prompt_version, provider=provider, sender=sender) as rec:
-            response = complete(invoice.prompt)
-            rec.capture(response, prompt=invoice.prompt, model=model, expected=invoice.expected)
-        count += 1
-    return count
-
-
-def ensure_job(api_url: str, api_key: str, *, transport: httpx.BaseTransport | None = None) -> bool:
-    """Create the invoice-extract job if it does not exist yet. True if created, False if it existed."""
-    with httpx.Client(base_url=api_url.rstrip("/"), headers={"X-API-Key": api_key}, transport=transport, timeout=10) as api:
-        response = api.post("/v1/jobs", json=JOB_DEFINITION)
-    if response.status_code == 201:
-        return True
-    if response.status_code == 409:
-        return False
-    response.raise_for_status()
-    return False
